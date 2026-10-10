@@ -25,7 +25,6 @@ REMOVED_ORDER_FIELDS = (
     "return_payment_method_id",
     "cancel_reason",
     "return_items",
-    "return_payment_method_id",
 )
 
 
