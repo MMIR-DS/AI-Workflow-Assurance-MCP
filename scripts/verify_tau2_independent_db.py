@@ -68,6 +68,34 @@ def _hash(value: Any) -> str:
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
+def other_database_entities_unchanged(
+    snapshot_before: dict[str, Any],
+    snapshot_after: dict[str, Any],
+    target_order_id: str,
+) -> bool:
+    """Return False for missing entities, added/deleted orders, or collateral mutations."""
+    expected_roots = {"orders", "products", "users"}
+    if set(snapshot_before) != expected_roots or set(snapshot_after) != expected_roots:
+        return False
+    before_orders = snapshot_before.get("orders")
+    after_orders = snapshot_after.get("orders")
+    if not isinstance(before_orders, dict) or not isinstance(after_orders, dict):
+        return False
+    if target_order_id not in before_orders or target_order_id not in after_orders:
+        return False
+    before_unrelated_orders = {
+        key: value for key, value in before_orders.items() if key != target_order_id
+    }
+    after_unrelated_orders = {
+        key: value for key, value in after_orders.items() if key != target_order_id
+    }
+    return bool(
+        snapshot_before["products"] == snapshot_after["products"]
+        and snapshot_before["users"] == snapshot_after["users"]
+        and before_unrelated_orders == after_unrelated_orders
+    )
+
+
 def evaluate_snapshot_evidence(
     *,
     recorded_before: dict[str, Any],
@@ -259,18 +287,8 @@ def main() -> int:
 
     database_snapshot_after = db.model_dump(mode="json", exclude_none=False)
     db_after = database_snapshot_after["orders"][order_id]
-    unaffected_orders_before = {
-        key: value for key, value in database_snapshot_before["orders"].items()
-        if key != order_id
-    }
-    unaffected_orders_after = {
-        key: value for key, value in database_snapshot_after["orders"].items()
-        if key != order_id
-    }
-    other_database_entities_unchanged = bool(
-        database_snapshot_before["products"] == database_snapshot_after["products"]
-        and database_snapshot_before["users"] == database_snapshot_after["users"]
-        and unaffected_orders_before == unaffected_orders_after
+    no_collateral_mutations = other_database_entities_unchanged(
+        database_snapshot_before, database_snapshot_after, order_id
     )
     product_payloads = database_snapshot_before["products"]
     evaluated = evaluate_snapshot_evidence(
@@ -283,7 +301,7 @@ def main() -> int:
         valid_payment_method_ids=payment_ids,
         source_commit_matches_trace=source_commit_matches,
         write_execution_succeeded=write_execution_succeeded,
-        other_database_entities_unchanged=other_database_entities_unchanged,
+        other_database_entities_unchanged=no_collateral_mutations,
     )
     # Built-in negative control: corrupt a copy of the recorded response and ensure the
     # database comparison would reject it. This does not mutate the trace on disk.
@@ -312,7 +330,7 @@ def main() -> int:
             "after": db_after,
             "full_database_before_sha256": _hash(database_snapshot_before),
             "full_database_after_sha256": _hash(database_snapshot_after),
-            "other_database_entities_unchanged": other_database_entities_unchanged,
+            "other_database_entities_unchanged": no_collateral_mutations,
             "recorded_before": recorded_before,
             "recorded_after": recorded_after,
             "write_count_in_trace": write_count,
