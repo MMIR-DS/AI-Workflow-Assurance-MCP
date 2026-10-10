@@ -16,6 +16,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Expand embedded legacy tests for source review
+        if: matrix.python-version == '3.10'
+        run: |
+          python - <<'PY'
+          import base64
+          import re
+          import zlib
+          from pathlib import Path
+
+          text = Path("tests/test_core.py").read_text(encoding="utf-8")
+          match = re.search(
+              r'base64\\.b64decode\\(\\s*"""(.*?)"""\\.encode\\("ascii"\\)\\s*\\)',
+              text,
+              re.DOTALL,
+          )
+          if not match:
+              raise SystemExit("Could not locate embedded source payload")
+          decoded = zlib.decompress(base64.b64decode(match.group(1))).decode("utf-8")
+          Path("tmp-legacy-test-core-expanded.py").write_text(decoded, encoding="utf-8")
+          print(f"Expanded source bytes: {len(decoded.encode('utf-8'))}")
+          print("\\n".join(decoded.splitlines()[:8]))
+          PY
+      - name: Upload expanded legacy test source
+        if: matrix.python-version == '3.10'
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-test-core-expanded
+          path: tmp-legacy-test-core-expanded.py
+          retention-days: 1
       - name: Install project and test dependencies
         run: python -m pip install -e ".[dev]"
       - name: Run tests
