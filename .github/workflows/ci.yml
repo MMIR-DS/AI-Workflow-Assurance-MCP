@@ -29,4 +29,11 @@ jobs:
           python -m pip install --no-deps --target "$RUNNER_TEMP/awa-wheel-install" dist/*.whl
           PYTHONPATH="$RUNNER_TEMP/awa-wheel-install" "$RUNNER_TEMP/awa-wheel-install/bin/ai-workflow-assurance" --help
       - name: Run source-code mutation smoke test
-        run: python scripts/run_source_mutation_smoke.py
+        run: python scripts/run_source_mutation_smoke.py --output "artifacts/mutation-report-python-${{ matrix.python-version }}.json"
+      - name: Upload source mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-mutation-report-python-${{ matrix.python-version }}
+          path: artifacts/mutation-report-python-${{ matrix.python-version }}.json
+          if-no-files-found: ignore
