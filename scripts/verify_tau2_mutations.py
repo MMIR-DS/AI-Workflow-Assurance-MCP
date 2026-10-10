@@ -7,7 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scripts.adapt_tau2_results import evaluate_trace
+try:
+    from .adapt_tau2_results import evaluate_trace
+except ImportError:  # Direct script execution puts the scripts/ directory on sys.path.
+    from adapt_tau2_results import evaluate_trace
 
 MUTATION_EXPECTATIONS = {
     "missing_confirmation": "confirmation_policy_respected",
