@@ -178,7 +178,7 @@ def main() -> int:
     args = parser.parse_args()
 
     report = run_mutation_smoke()
-    serialized = json.dumps(report, indent=2, ensure_ascii=True) + "\\n"
+    serialized = json.dumps(report, indent=2, ensure_ascii=True) + "\n"
     print(serialized, end="")
     if args.output:
         output_path = Path(args.output)
