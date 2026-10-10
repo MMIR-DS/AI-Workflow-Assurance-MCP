@@ -84,3 +84,101 @@ def test_missing_tool_evidence_fails_closed() -> None:
     assert case["actual"]["price_difference_reconciles"] is False
     assert release["decision"] == "NO_GO"
     assert report["summary"]["critical_failures"] >= 1
+
+def _independent_db_test_inputs() -> tuple[dict, dict, dict, dict, dict, set[str], bool]:
+    from scripts.verify_tau2_independent_db import evaluate_snapshot_evidence
+
+    results, _ = _load_inputs()
+    sim = results["simulations"][0]
+    messages = sim["messages"]
+    calls = [
+        call
+        for message in messages
+        if message.get("role") == "assistant"
+        for call in (message.get("tool_calls") or [])
+        if isinstance(call, dict)
+    ]
+    exchange = next(call for call in calls if call["name"] == "exchange_delivered_order_items")
+    responses = {
+        str(message.get("id")): message
+        for message in messages
+        if message.get("role") == "tool" and message.get("id") is not None
+    }
+    order_read = next(call for call in calls if call["name"] == "get_order_details")
+    before = json.loads(responses[order_read["id"]]["content"])
+    after = json.loads(responses[exchange["id"]]["content"])
+    products = {
+        "1656367028": json.loads(responses["keyboard-product-1"]["content"]),
+        "4896585277": json.loads(responses["thermostat-product-1"]["content"]),
+    }
+    payment_ids = {
+        item["payment_method_id"]
+        for item in before["payment_history"]
+        if item.get("transaction_type") == "payment"
+    }
+    return before, after, exchange["arguments"], products, payment_ids, True, bool(
+        results["info"]["git_commit"]
+    )
+
+
+def test_independent_db_snapshot_contract_passes_on_recorded_baseline() -> None:
+    from scripts.verify_tau2_independent_db import evaluate_snapshot_evidence
+
+    before, after, args, products, payment_ids, _, source_match = _independent_db_test_inputs()
+    report = evaluate_snapshot_evidence(
+        recorded_before=before,
+        recorded_after=after,
+        db_before=before,
+        db_after=after,
+        args=args,
+        products=products,
+        valid_payment_method_ids=payment_ids,
+        source_commit_matches_trace=source_match,
+        write_execution_succeeded=True,
+    )
+    assert report["decision"] == "GO"
+    assert report["checks"]["pre_state_matches_recorded_order_read"] is True
+    assert report["checks"]["independent_db_state_matches_recorded_exchange_response"] is True
+    assert report["checks"]["live_payment_profile_and_original_transaction_match"] is True
+    assert report["checks"]["database_price_recalculation_matches_post_state"] is True
+
+
+def test_independent_db_snapshot_contract_rejects_tampered_post_state() -> None:
+    from scripts.verify_tau2_independent_db import evaluate_snapshot_evidence
+
+    before, after, args, products, payment_ids, _, source_match = _independent_db_test_inputs()
+    tampered_after = json.loads(json.dumps(after))
+    tampered_after["address"]["city"] = "Mutation Test City"
+    report = evaluate_snapshot_evidence(
+        recorded_before=before,
+        recorded_after=tampered_after,
+        db_before=before,
+        db_after=after,
+        args=args,
+        products=products,
+        valid_payment_method_ids=payment_ids,
+        source_commit_matches_trace=source_match,
+        write_execution_succeeded=True,
+    )
+    assert report["decision"] == "NO_GO"
+    assert report["checks"]["independent_db_state_matches_recorded_exchange_response"] is False
+
+
+def test_independent_db_snapshot_contract_fails_closed_on_source_drift() -> None:
+    from scripts.verify_tau2_independent_db import evaluate_snapshot_evidence
+
+    before, after, args, products, payment_ids, _, _ = _independent_db_test_inputs()
+    report = evaluate_snapshot_evidence(
+        recorded_before=before,
+        recorded_after=after,
+        db_before=before,
+        db_after=after,
+        args=args,
+        products=products,
+        valid_payment_method_ids=payment_ids,
+        source_commit_matches_trace=False,
+        write_execution_succeeded=True,
+    )
+    assert report["decision"] == "NO_GO"
+    assert report["checks"]["source_code_commit_matches_trace"] is False
+
