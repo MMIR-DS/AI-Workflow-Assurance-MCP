@@ -1,0 +1,131 @@
+# ruff: noqa: I001
+# Delayed MCP imports are required after pytest.importorskip.
+"""End-to-end MCP stdio tests; skipped when the optional SDK is unavailable."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import sys
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("mcp", reason="MCP SDK is installed by the project's dev extra and CI")
+
+from mcp import ClientSession, StdioServerParameters  # noqa: E402
+from mcp.client.stdio import stdio_client  # noqa: E402
+
+from ai_workflow_assurance_mcp import __version__  # noqa: E402
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = {
+    "id": "protocol-test",
+    "name": "Protocol integration test",
+    "version": "1",
+    "criteria": [
+        {"id": "decision_matches", "operator": "equals", "actual_path": "decision", "expected_path": "decision", "severity": "critical"}
+    ],
+    "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+}
+CASES = [
+    {
+        "case_id": "case-1",
+        "expected": {"decision": "approve"},
+        "actual": {"decision": "approve"},
+        "human_review_observed": False,
+        "cost_usd": 0.01,
+        "latency_ms": 100,
+    }
+]
+
+
+def _is_error(result: object) -> bool:
+    return bool(getattr(result, "is_error", getattr(result, "isError", False)))
+
+
+def _content_text(result: object) -> str:
+    parts = getattr(result, "content", []) or []
+    return "\n".join(str(getattr(part, "text", "")) for part in parts)
+
+
+def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
+    async def run() -> None:
+        env = os.environ.copy()
+        source_path = str(ROOT / "src")
+        env["PYTHONPATH"] = source_path + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "ai_workflow_assurance_mcp.server"],
+            env=env,
+        )
+        async with stdio_client(params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                initialized = await session.initialize()
+                server_info = getattr(initialized, "serverInfo", None) or getattr(initialized, "server_info", None)
+                assert server_info is not None
+                assert server_info.version == __version__
+                listed = await session.list_tools()
+                names = {tool.name for tool in listed.tools}
+                assert names == {
+                    "validate_workflow_spec",
+                    "run_eval_suite",
+                    "compare_eval_runs",
+                    "explain_failures",
+                    "generate_release_report",
+                }
+
+                spec_json = json.dumps(SPEC)
+                cases_json = json.dumps(CASES)
+                results = [
+                    await session.call_tool("validate_workflow_spec", {"workflow_spec_json": spec_json}),
+                    await session.call_tool("run_eval_suite", {"workflow_spec_json": spec_json, "cases_json": cases_json}),
+                    await session.call_tool(
+                        "compare_eval_runs",
+                        {"workflow_spec_json": spec_json, "baseline_cases_json": cases_json, "candidate_cases_json": cases_json},
+                    ),
+                    await session.call_tool(
+                        "explain_failures",
+                        {"workflow_spec_json": spec_json, "cases_json": cases_json, "max_items": 10},
+                    ),
+                    await session.call_tool("generate_release_report", {"workflow_spec_json": spec_json, "cases_json": cases_json}),
+                ]
+                assert all(not _is_error(result) for result in results), [_content_text(result) for result in results]
+                release_payload = json.loads(_content_text(results[4]))
+                assert "failed_case_count" in release_payload
+                assert len(release_payload["failed_case_ids_preview"]) <= 20
+                default_comparison = json.loads(_content_text(results[2]))["comparison"]
+                assert default_comparison["case_details_omitted"] is True
+                assert "case_changes" not in default_comparison
+                # Large case-level responses are opt-in so normal LLM context stays bounded.
+                default_eval = json.loads(_content_text(results[1]))
+                assert default_eval["case_results_omitted"] is True
+                detailed_eval = await session.call_tool(
+                    "run_eval_suite",
+                    {"workflow_spec_json": spec_json, "cases_json": cases_json, "summary_only": False},
+                )
+                assert not _is_error(detailed_eval)
+                assert "case_results" in json.loads(_content_text(detailed_eval))
+                detailed_compare = await session.call_tool(
+                    "compare_eval_runs",
+                    {"workflow_spec_json": spec_json, "baseline_cases_json": cases_json, "candidate_cases_json": cases_json, "include_case_details": True},
+                )
+                assert not _is_error(detailed_compare)
+                assert "case_changes" in json.loads(_content_text(detailed_compare))["comparison"]
+
+                invalid = await session.call_tool(
+                    "run_eval_suite",
+                    {"workflow_spec_json": spec_json, "cases_json": "not valid JSON"},
+                )
+                assert _is_error(invalid)
+                assert "cases_json" in _content_text(invalid)
+
+                invalid_spec = await session.call_tool(
+                    "validate_workflow_spec", {"workflow_spec_json": "not valid JSON"}
+                )
+                assert not _is_error(invalid_spec)
+                assert "valid" in _content_text(invalid_spec).lower()
+
+    asyncio.run(run())
