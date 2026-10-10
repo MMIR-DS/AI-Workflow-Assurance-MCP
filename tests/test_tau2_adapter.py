@@ -138,7 +138,7 @@ def test_independent_db_snapshot_contract_passes_on_recorded_baseline() -> None:
     assert report["decision"] == "GO"
     assert report["checks"]["pre_state_matches_recorded_order_read"] is True
     assert report["checks"]["independent_db_state_matches_recorded_exchange_response"] is True
-    assert report["checks"]["live_payment_profile_and_original_transaction_match"] is True
+    assert report["checks"]["replay_db_payment_profile_and_original_transaction_match"] is True
     assert report["checks"]["database_price_recalculation_matches_post_state"] is True
 
 
