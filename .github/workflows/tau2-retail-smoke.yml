@@ -1,6 +1,10 @@
 name: Standalone tau2 retail smoke benchmark (not yet AWA-integrated)
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/tau2-retail-smoke.yml"
   workflow_dispatch:
     inputs:
       model:
@@ -24,6 +28,7 @@ concurrency:
 
 jobs:
   smoke:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[run-tau2-smoke]')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
