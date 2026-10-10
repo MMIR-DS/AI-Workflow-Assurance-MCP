@@ -20,7 +20,7 @@ In **Settings → Secrets and variables → Actions**, confirm that the reposito
 
 - CI will run the v0.1.2 tests and Ruff lint on Python 3.10–3.13 for pushes and pull requests.
 - The model-backed evaluation is manual-only under **Actions → tau2 retail smoke benchmark (AWA v0.1.2 baseline) → Run workflow**, to avoid surprise API charges.
-- Default run: one retail task (`0`), one trial, one concurrent run, max 80 steps, and OpenRouter model `openrouter/google/gemini-3.8-flash`.
+- Default run: one retail task (`0`), one trial, one concurrent run, max 80 steps, and OpenRouter model `openrouter/google/gemini-2.5-flash`.
 - Logs and the benchmark simulation output will be preserved as a workflow artifact.
 
 The benchmark uses a simulated public retail environment, not real customer production data. The AWA test suite and tau2 run remain separate until a reviewed adapter converts the raw trace and final state into AWA's normalized observation contract; do not claim AWA caught a defect/regression until that adapter and evidence case are reviewed.
