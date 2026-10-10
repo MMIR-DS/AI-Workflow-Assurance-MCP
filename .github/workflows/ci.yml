@@ -21,22 +21,16 @@ jobs:
         run: |
           python - <<'PY'
           import base64
-          import re
           import zlib
           from pathlib import Path
 
           text = Path("tests/test_core.py").read_text(encoding="utf-8")
-          match = re.search(
-              r'base64\\.b64decode\\(\\s*"""(.*?)"""\\.encode\\("ascii"\\)\\s*\\)',
-              text,
-              re.DOTALL,
-          )
-          if not match:
-              raise SystemExit("Could not locate embedded source payload")
-          decoded = zlib.decompress(base64.b64decode(match.group(1))).decode("utf-8")
+          start = text.index('"""', text.index("base64.b64decode(")) + 3
+          end = text.index('""".encode("ascii")', start)
+          decoded = zlib.decompress(base64.b64decode(text[start:end])).decode("utf-8")
           Path("tmp-legacy-test-core-expanded.py").write_text(decoded, encoding="utf-8")
           print(f"Expanded source bytes: {len(decoded.encode('utf-8'))}")
-          print("\\n".join(decoded.splitlines()[:8]))
+          print("\n".join(decoded.splitlines()[:8]))
           PY
       - name: Upload expanded legacy test source
         if: matrix.python-version == '3.10'
