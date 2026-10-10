@@ -1,4 +1,4 @@
-name: Replay saved tau2 trace through AWA (no model calls)
+name: Replay saved tau2 trace through AWA — independent six-mutation suite (no model calls)
 
 on:
   push:
