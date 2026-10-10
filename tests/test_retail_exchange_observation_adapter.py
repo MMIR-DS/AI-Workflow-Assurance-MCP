@@ -227,7 +227,7 @@ def test_adapter_rejects_timezone_naive_collection_timestamp() -> None:
 
 def test_adapter_rejects_stale_evidence_when_freshness_policy_is_configured() -> None:
     observation, spec = _load()
-    evaluation_time = datetime(2026, 10, 10, 10, 10, tzinfo=timezone.utc)
+    evaluation_time = datetime(2026, 10, 10, 12, 10, tzinfo=timezone.utc)
 
     with pytest.raises(ValueError, match="Evidence is stale"):
         evaluate_observation(
@@ -246,7 +246,7 @@ def test_adapter_reports_freshness_policy_as_unconfigured_by_default() -> None:
 
 def test_adapter_passes_freshness_policy_when_evidence_is_recent() -> None:
     observation, spec = _load()
-    evaluation_time = datetime(2026, 10, 10, 10, 1, tzinfo=timezone.utc)
+    evaluation_time = datetime(2026, 10, 10, 12, 1, tzinfo=timezone.utc)
 
     _, metadata, _, _ = evaluate_observation(
         observation, spec, evaluation_time=evaluation_time, max_evidence_age_seconds=300
@@ -255,3 +255,10 @@ def test_adapter_passes_freshness_policy_when_evidence_is_recent() -> None:
     assert metadata["freshness_validation"] == {
         "status": "passed", "max_evidence_age_seconds": 300
     }
+
+
+def test_adapter_rejects_non_finite_freshness_limit() -> None:
+    observation, _ = _load()
+
+    with pytest.raises(ValueError, match="non-negative number"):
+        normalize_observation(observation, max_evidence_age_seconds=float("nan"))
