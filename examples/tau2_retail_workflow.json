@@ -1,23 +1,125 @@
 {
   "id": "tau3-retail-multi-item-exchange",
   "name": "Retail multi-item exchange acceptance checks",
-  "version": "0.1.0",
-  "description": "Business-acceptance checks for a retail agent exchanging multiple items in a delivered order. This is a simulated public workflow. A trajectory adapter normalizes evidence from the action trace and tau2's final-state oracle.",
+  "version": "0.2.0",
+  "description": "Task-0-specific checks derived from recorded retail tool outputs. The release gate does not use tau2 reward, db_match, or action_checks. The post-state is the exchange tool's returned state, not an independent database reread.",
   "criteria": [
-    {"id": "identity_policy_respected", "operator": "equals", "actual_path": "identity_policy_respected", "expected_path": "identity_policy_respected", "severity": "critical"},
-    {"id": "status_verification_policy_respected", "operator": "equals", "actual_path": "status_verification_policy_respected", "expected_path": "status_verification_policy_respected", "severity": "critical"},
-    {"id": "confirmation_policy_respected", "operator": "equals", "actual_path": "confirmation_policy_respected", "expected_path": "confirmation_policy_respected", "severity": "critical"},
-    {"id": "exchange_eligibility_policy_respected", "operator": "equals", "actual_path": "exchange_eligibility_policy_respected", "expected_path": "exchange_eligibility_policy_respected", "severity": "critical"},
-    {"id": "same_product_variant_policy_respected", "operator": "equals", "actual_path": "same_product_variant_policy_respected", "expected_path": "same_product_variant_policy_respected", "severity": "critical"},
-    {"id": "payment_policy_respected", "operator": "equals", "actual_path": "payment_policy_respected", "expected_path": "payment_policy_respected", "severity": "high"},
-    {"id": "multi_item_scope_respected", "operator": "equals", "actual_path": "multi_item_scope_respected", "expected_path": "multi_item_scope_respected", "severity": "high"},
-    {"id": "final_state_matches_expected", "operator": "equals", "actual_path": "final_state_matches_expected", "expected_path": "final_state_matches_expected", "severity": "critical"},
-    {"id": "notification_claim_matches_contract", "operator": "equals", "actual_path": "notification_claim_matches_contract", "expected_path": "notification_claim_matches_contract", "severity": "medium"},
-    {"id": "no_unrelated_state_mutation", "operator": "equals", "actual_path": "no_unrelated_state_mutation", "expected_path": "no_unrelated_state_mutation", "severity": "critical"},
-    {"id": "no_unrequested_new_order", "operator": "equals", "actual_path": "no_unrequested_new_order", "expected_path": "no_unrequested_new_order", "severity": "high"},
-    {"id": "escalation_policy_respected", "operator": "equals", "actual_path": "escalation_policy_respected", "expected_path": "escalation_policy_respected", "severity": "high"},
-    {"id": "policy_violation_count", "operator": "equals", "actual_path": "policy_violation_count", "expected_path": "policy_violation_count", "severity": "critical"},
-    {"id": "final_order_status_matches_contract", "operator": "equals", "actual_path": "final_order_status", "expected_path": "final_order_status", "severity": "high"}
+    {
+      "id": "identity_policy_respected",
+      "operator": "equals",
+      "actual_path": "identity_policy_respected",
+      "expected_path": "identity_policy_respected",
+      "severity": "critical"
+    },
+    {
+      "id": "status_verification_policy_respected",
+      "operator": "equals",
+      "actual_path": "status_verification_policy_respected",
+      "expected_path": "status_verification_policy_respected",
+      "severity": "critical"
+    },
+    {
+      "id": "confirmation_policy_respected",
+      "operator": "equals",
+      "actual_path": "confirmation_policy_respected",
+      "expected_path": "confirmation_policy_respected",
+      "severity": "critical"
+    },
+    {
+      "id": "exchange_eligibility_policy_respected",
+      "operator": "equals",
+      "actual_path": "exchange_eligibility_policy_respected",
+      "expected_path": "exchange_eligibility_policy_respected",
+      "severity": "critical"
+    },
+    {
+      "id": "selected_variants_match_product_and_request",
+      "operator": "equals",
+      "actual_path": "selected_variants_match_product_and_request",
+      "expected_path": "selected_variants_match_product_and_request",
+      "severity": "critical"
+    },
+    {
+      "id": "payment_policy_respected",
+      "operator": "equals",
+      "actual_path": "payment_policy_respected",
+      "expected_path": "payment_policy_respected",
+      "severity": "high"
+    },
+    {
+      "id": "multi_item_scope_respected",
+      "operator": "equals",
+      "actual_path": "multi_item_scope_respected",
+      "expected_path": "multi_item_scope_respected",
+      "severity": "high"
+    },
+    {
+      "id": "final_state_matches_expected",
+      "operator": "equals",
+      "actual_path": "final_state_matches_expected",
+      "expected_path": "final_state_matches_expected",
+      "severity": "critical"
+    },
+    {
+      "id": "no_unrelated_state_mutation",
+      "operator": "equals",
+      "actual_path": "no_unrelated_state_mutation",
+      "expected_path": "no_unrelated_state_mutation",
+      "severity": "critical"
+    },
+    {
+      "id": "price_difference_reconciles",
+      "operator": "equals",
+      "actual_path": "price_difference_reconciles",
+      "expected_path": "price_difference_reconciles",
+      "severity": "high"
+    },
+    {
+      "id": "notification_claim_matches_contract",
+      "operator": "equals",
+      "actual_path": "notification_claim_matches_contract",
+      "expected_path": "notification_claim_matches_contract",
+      "severity": "medium"
+    },
+    {
+      "id": "no_unrequested_new_order",
+      "operator": "equals",
+      "actual_path": "no_unrequested_new_order",
+      "expected_path": "no_unrequested_new_order",
+      "severity": "high"
+    },
+    {
+      "id": "escalation_policy_respected",
+      "operator": "equals",
+      "actual_path": "escalation_policy_respected",
+      "expected_path": "escalation_policy_respected",
+      "severity": "high"
+    },
+    {
+      "id": "one_expected_write_only",
+      "operator": "equals",
+      "actual_path": "one_expected_write_only",
+      "expected_path": "one_expected_write_only",
+      "severity": "critical"
+    },
+    {
+      "id": "policy_violation_count",
+      "operator": "equals",
+      "actual_path": "policy_violation_count",
+      "expected_value": 0,
+      "severity": "critical"
+    },
+    {
+      "id": "final_order_status_matches_contract",
+      "operator": "equals",
+      "actual_path": "final_order_status",
+      "expected_value": "exchange requested",
+      "severity": "high"
+    }
   ],
-  "thresholds": {"min_pass_rate": 0.95, "max_critical_failures": 0, "max_high_failures": 0}
+  "thresholds": {
+    "min_pass_rate": 0.95,
+    "max_critical_failures": 0,
+    "max_high_failures": 0
+  }
 }
