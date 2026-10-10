@@ -54,6 +54,10 @@ The adapter derives the same 16 fields used by the current retail acceptance spe
 
 Money is parsed with decimal arithmetic and rounded to cents. Unknown/missing evidence fails the relevant check rather than being treated as a pass. The release spec blocks on critical and high failures.
 
+## Threat model
+
+See [the retail exchange adapter threat model](THREAT_MODEL_RETAIL_EXCHANGE.md) for assets, trust boundaries, current mitigations, residual risks, and production prerequisites.
+
 ## Trust boundary and limitations
 
 1. **Evidence quality is the main risk.** AWA can only check what the source adapter supplies. If the adapter invents or mislabels events, this report cannot detect that on its own.
