@@ -55,6 +55,17 @@ pytest
 ruff check src tests scripts
 ```
 
+## Deterministic assurance mutation harness
+
+Run the local, no-model harness and its focused regression tests:
+
+```bash
+python scripts/run_assurance_mutation_harness.py
+python -m unittest tests.test_mutation_harness
+```
+
+The harness checks one valid control and five seeded observation faults, including a missing required path and boolean/numeric type confusion. It reports fault detection, control false rejections, and repeatability. This is **input-fault detection**, not source-code mutation testing or a production reliability estimate; see [scope and interpretation](docs/AWA_MUTATION_HARNESS.md).
+
 ## Public retail workflow pack
 
 A separate public pack abstracts the simulated **τ³-bench / tau2-bench** retail multi-item exchange policy into an AWA workflow spec and scenario matrix. That pack does not ship agent trajectories; normalize real traces before evaluation.
