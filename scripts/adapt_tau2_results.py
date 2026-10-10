@@ -66,7 +66,8 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     multi_item_complete = len(exchanges) == 1 and len(args.get("item_ids", [])) == 2 and len(args.get("new_item_ids", [])) == 2 and exchange_matches
     payment_confirmed = bool(args.get("payment_method_id") and args["payment_method_id"] in pre_mutation_user_text)
     final_text = "\n".join(str(m.get("content") or "") for m in messages if m.get("role") == "assistant" and m.get("content"))
-    notified = bool(exchanges and db_match and "email" in final_text.lower() and any(s in final_text.lower() for s in ("exchange request has been submitted", "exchange is complete", "exchange has been processed")))
+    # This checks the assistant's user-facing claim only; it cannot prove that an email was sent.
+    notification_claim = bool(exchanges and "email" in final_text.lower() and any(s in final_text.lower() for s in ("exchange request has been submitted", "exchange is complete", "exchange has been processed")))
     no_new_order = "create_order" not in names
     no_transfer = not any("transfer_to_human" in str(name) or "transfer_to_agent" in str(name) for name in names)
     only_expected_write = all(c["name"] == "exchange_delivered_order_items" for c in writes)
@@ -80,7 +81,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "payment_policy_respected": bool(payment_confirmed and exchange_matches),
         "multi_item_scope_respected": multi_item_complete,
         "final_state_matches_expected": db_match,
-        "notification_policy_respected": notified,
+        "notification_claim_matches_contract": notification_claim,
         "no_unrelated_state_mutation": bool(db_match and only_expected_write),
         "no_unrequested_new_order": no_new_order,
         "escalation_policy_respected": no_transfer,
@@ -92,7 +93,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "confirmation_policy_respected": True, "exchange_eligibility_policy_respected": True,
         "same_product_variant_policy_respected": True, "payment_policy_respected": True,
         "multi_item_scope_respected": True, "final_state_matches_expected": True,
-        "notification_policy_respected": True, "no_unrelated_state_mutation": True,
+        "notification_claim_matches_contract": True, "no_unrelated_state_mutation": True,
         "no_unrequested_new_order": True, "escalation_policy_respected": True,
         "policy_violation_count": 0, "final_order_status": "exchange requested",
     }
@@ -124,7 +125,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "tau2_action_check_count": len(action_checks), "tau2_git_commit": info.get("git_commit"),
         "model": (info.get("agent_info") or {}).get("llm"),
         "oracle_basis": [
-            "Identity, order-status, confirmation and notification checks are derived from the recorded message/tool trace.",
+            "Identity, order-status and confirmation checks are derived from the trace; notification_claim_matches_contract checks assistant text only and does not prove provider-side email delivery.",
             "Final-state and unrelated-mutation checks use tau2's db_match oracle; no independent database diff was available.",
             "Variant/payment checks also reference tau2 expected action checks and the task's expected exchange action.",
             "Expected values are a manually reviewed oracle for public retail task 0 only; do not reuse unchanged for other tasks.",

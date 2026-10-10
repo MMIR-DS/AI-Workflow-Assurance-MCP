@@ -18,10 +18,10 @@ The last cost is a sum of per-call usage metadata in the saved trace, not an inv
 
 ## What is genuinely checked by the adapter
 
-The adapter derives authentication order, order-status read-before-write, user confirmation, the exchange action arguments, notification text, absence of a new-order/transfer tool call, and elapsed time from the recorded trace. It fingerprints and evaluates the normalized expected/actual pair with AWA.
+The adapter derives authentication order, order-status read-before-write, user confirmation, exchange action arguments, the assistant's notification claim, absence of a new-order/transfer tool call, and elapsed time from the recorded trace. The notification criterion checks only the assistant's text; it does not verify that an email was delivered by a provider. AWA fingerprints and evaluates the normalized expected/actual pair.
 
 ## Important limitation
 
 This first GO result is **not independent proof of all business rules**. The adapter uses tau2's `db_match` oracle for final-state/unrelated-mutation checks, and tau2's expected action checks plus task-0 expected action for variant/payment matching. A full independent database diff was not present in the exported trace. The expected values are specific to task 0 and must not be reused unchanged for other tasks.
 
-This is evidence that the integration path runs end-to-end on one known-good case. The next validation must include deliberately mutated/negative cases to prove AWA reliably returns `NO_GO` when a critical policy violation is introduced, without relying solely on tau2's reward.
+This demonstrates the integration path on one known-good case, and the raw-trace mutation check now removes the customer's explicit confirmation while leaving tau2's reward/database/action oracle unchanged. AWA then returns `NO_GO`; see [the mutation test result](AWA_MUTATION_TEST_RESULT_2026-10-10.md). This is evidence for that specific missing-confirmation invariant, not general proof of policy coverage across workflows.

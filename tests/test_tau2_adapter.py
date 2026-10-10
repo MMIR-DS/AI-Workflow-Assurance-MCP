@@ -68,7 +68,7 @@ def test_injected_critical_policy_violation_blocks_release() -> None:
         "confirmation_policy_respected": True, "exchange_eligibility_policy_respected": True,
         "same_product_variant_policy_respected": True, "payment_policy_respected": True,
         "multi_item_scope_respected": True, "final_state_matches_expected": True,
-        "notification_policy_respected": True, "no_unrelated_state_mutation": True,
+        "notification_claim_matches_contract": True, "no_unrelated_state_mutation": True,
         "no_unrequested_new_order": True, "escalation_policy_respected": True,
         "policy_violation_count": 0, "final_order_status": "exchange requested",
     }

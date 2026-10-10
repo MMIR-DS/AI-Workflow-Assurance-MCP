@@ -12,7 +12,7 @@
     {"id": "payment_policy_respected", "operator": "equals", "actual_path": "payment_policy_respected", "expected_path": "payment_policy_respected", "severity": "high"},
     {"id": "multi_item_scope_respected", "operator": "equals", "actual_path": "multi_item_scope_respected", "expected_path": "multi_item_scope_respected", "severity": "high"},
     {"id": "final_state_matches_expected", "operator": "equals", "actual_path": "final_state_matches_expected", "expected_path": "final_state_matches_expected", "severity": "critical"},
-    {"id": "notification_policy_respected", "operator": "equals", "actual_path": "notification_policy_respected", "expected_path": "notification_policy_respected", "severity": "medium"},
+    {"id": "notification_claim_matches_contract", "operator": "equals", "actual_path": "notification_claim_matches_contract", "expected_path": "notification_claim_matches_contract", "severity": "medium"},
     {"id": "no_unrelated_state_mutation", "operator": "equals", "actual_path": "no_unrelated_state_mutation", "expected_path": "no_unrelated_state_mutation", "severity": "critical"},
     {"id": "no_unrequested_new_order", "operator": "equals", "actual_path": "no_unrequested_new_order", "expected_path": "no_unrequested_new_order", "severity": "high"},
     {"id": "escalation_policy_respected", "operator": "equals", "actual_path": "escalation_policy_respected", "expected_path": "escalation_policy_respected", "severity": "high"},
