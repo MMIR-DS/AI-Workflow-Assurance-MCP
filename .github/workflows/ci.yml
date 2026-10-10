@@ -24,10 +24,12 @@ jobs:
         run: ruff check src tests scripts
       - name: Build wheel
         run: python -m pip wheel . --no-deps --wheel-dir dist
-      - name: Smoke-test built wheel outside the source tree
+      - name: Smoke-test built wheel in a clean environment
         run: |
-          python -m pip install --no-deps --target "$RUNNER_TEMP/awa-wheel-install" dist/*.whl
-          PYTHONPATH="$RUNNER_TEMP/awa-wheel-install" "$RUNNER_TEMP/awa-wheel-install/bin/ai-workflow-assurance" --help
+          python -m venv "$RUNNER_TEMP/awa-wheel-venv"
+          "$RUNNER_TEMP/awa-wheel-venv/bin/python" -m pip install dist/*.whl
+          "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" --help
+          "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" validate-spec --spec examples/invoice_matching/workflow.json
       - name: Run source-code mutation smoke test
         run: python scripts/run_source_mutation_smoke.py --output "artifacts/mutation-report-python-${{ matrix.python-version }}.json"
       - name: Upload source mutation report
