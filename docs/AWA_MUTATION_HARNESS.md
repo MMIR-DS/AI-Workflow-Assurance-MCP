@@ -34,10 +34,14 @@ A separate, deliberately small source-code mutation check is also included. It c
 python scripts/run_source_mutation_smoke.py
 ```
 
-The current smoke set includes:
+The current smoke set contains six hand-selected mutants:
 - Removing strict boolean-versus-integer equality handling.
 - Relaxing the JSON nesting-depth boundary by one level.
+- Making the minimum pass-rate threshold exclusive instead of inclusive.
+- Inverting evaluation-report consistency validation.
+- Disabling the expected-label drift guard for baseline/candidate comparisons.
+- Disabling critical-regression precedence in comparison trends.
 
 The baseline tests must pass before mutations are applied. A mutant counts as **killed** only when its targeted test fails; a surviving mutant or invalid mutation anchor fails the command and CI. The temporary copy is discarded afterward, so the production source is not edited by the run.
 
-This is focused source-code mutation testing, but it is **not** a comprehensive mutation score for the project: only two hand-selected mutations are included. Expand the set as meaningful regression tests are added, or adopt a general mutation-testing tool for broader operator coverage.
+This is focused source-code mutation testing, but it is **not** a comprehensive mutation score for the project: only six hand-selected mutations are included. Expand the set as meaningful regression tests are added, or adopt a general mutation-testing tool for broader operator coverage.
