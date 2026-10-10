@@ -1,6 +1,10 @@
 name: Replay saved tau2 trace through AWA (no model calls)
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/awa-replay-existing-tau2.yml"
   workflow_dispatch:
 
 permissions:
@@ -9,6 +13,7 @@ permissions:
 
 jobs:
   replay:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[replay-tau2-artifact]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -32,7 +37,7 @@ jobs:
           set -e
           TRACE_FILE="$(find saved-tau2 -type f -path '*/tau2-standalone-retail-task0/results.json' -print -quit 2>/dev/null)"
           if [ -z "$TRACE_FILE" ]; then
-            echo "::warning::Archived run artifact is unavailable (status=$download_status); falling back to committed minimized fixture."
+            echo "::warning::Archived result unavailable (status=$download_status); using committed minimized fixture."
             TRACE_FILE="saved-tau2/tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json"
             mkdir -p "$(dirname "$TRACE_FILE")"
             cp tests/fixtures/tau2_task0_trace_minimal.json "$TRACE_FILE"
@@ -53,95 +58,40 @@ jobs:
           PY
           echo "TRACE_FILE=$TRACE_FILE" >> "$GITHUB_ENV"
           echo "TRACE_SOURCE=$TRACE_SOURCE" >> "$GITHUB_ENV"
-      - name: Generate AWA case, evaluation, and release reports
+      - name: Generate baseline AWA reports from recorded tool outputs
         run: |
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
             --results "$TRACE_FILE" \
             --spec examples/tau2_retail_workflow.json \
-            --output-dir awa-replay-output
-      - name: Verify generated release decision
+            --output-dir awa-baseline
+      - name: Run six independent raw-evidence mutation checks (no model calls)
         run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          report = json.loads(Path("awa-replay-output/awa_release_report.json").read_text(encoding="utf-8"))
-          summary = json.loads(Path("awa-replay-output/awa_eval_report.json").read_text(encoding="utf-8"))["summary"]
-          print(json.dumps({"decision": report["decision"], "blocking_checks": report["blocking_checks"], "summary": summary}, indent=2))
-          if report["decision"] != "GO":
-              raise SystemExit("Pinned known-good tau2 trace did not produce AWA GO.")
-          PY
-      - name: Mutate raw trace by removing the customer's explicit confirmation
-        run: |
-          mkdir -p mutated-tau2
-          python - "$TRACE_FILE" mutated-tau2/results.json <<'PY'
-          import json
-          import sys
-          from pathlib import Path
-
-          source = Path(sys.argv[1])
-          target = Path(sys.argv[2])
-          results = json.loads(source.read_text(encoding="utf-8"))
-          removed = 0
-          for simulation in results.get("simulations", []):
-              messages = simulation.get("messages", [])
-              kept = [
-                  message for message in messages
-                  if not (
-                      message.get("role") == "user"
-                      and "yes, that's exactly right" in str(message.get("content", "")).lower()
-                  )
-              ]
-              removed += len(messages) - len(kept)
-              simulation["messages"] = kept
-          if removed == 0:
-              raise SystemExit("Could not find the expected explicit-confirmation message to mutate.")
-          target.write_text(json.dumps(results, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-          print(f"Removed {removed} confirmation message(s). tau2 reward/db oracle intentionally left unchanged.")
-          PY
-      - name: Require AWA NO_GO on mutated raw trace while tau2 oracle remains green
-        shell: bash
-        run: |
-          set +e
-          PYTHONPATH=src python scripts/adapt_tau2_results.py \
-            --results mutated-tau2/results.json \
+          PYTHONPATH=src python scripts/verify_tau2_mutations.py \
+            --results "$TRACE_FILE" \
             --spec examples/tau2_retail_workflow.json \
-            --output-dir awa-mutation-output
-          adapter_exit=$?
-          set -e
-          if [ "$adapter_exit" -ne 2 ]; then
-            echo "::error::Expected adapter exit code 2 for NO_GO; received $adapter_exit"
-            exit 1
-          fi
+            --output-dir awa-mutation-suite
+      - name: Enforce baseline GO and all mutated NO_GO outcomes
+        run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
-
-          release = json.loads(Path("awa-mutation-output/awa_release_report.json").read_text(encoding="utf-8"))
-          report = json.loads(Path("awa-mutation-output/awa_eval_report.json").read_text(encoding="utf-8"))
-          metadata = json.loads(Path("awa-mutation-output/adapter_metadata.json").read_text(encoding="utf-8"))
-          assert release["decision"] == "NO_GO", release
-          assert report["summary"]["critical_failures"] >= 1, report["summary"]
-          assert metadata[0]["tau2_reward"] == 1.0, metadata
-          assert metadata[0]["tau2_db_match"] is True, metadata
-          assert metadata[0]["tau2_action_checks_all_match"] is True, metadata
-          print(json.dumps({
-              "mutated_decision": release["decision"],
-              "blocking_checks": release["blocking_checks"],
-              "critical_failures": report["summary"]["critical_failures"],
-              "tau2_reward_unchanged": metadata[0]["tau2_reward"],
-              "tau2_db_match_unchanged": metadata[0]["tau2_db_match"],
-              "tau2_action_checks_all_match_unchanged": metadata[0]["tau2_action_checks_all_match"],
-          }, indent=2))
+          baseline = json.loads(Path("awa-baseline/awa_release_report.json").read_text(encoding="utf-8"))
+          summary = json.loads(Path("awa-mutation-suite/mutation_summary.json").read_text(encoding="utf-8"))
+          assert baseline["decision"] == "GO", baseline
+          assert summary["all_mutations_no_go"] is True, summary
+          assert summary["tau2_oracle_unchanged_for_all_mutations"] is True, summary
+          assert summary["mutation_count"] == 6, summary
+          print(json.dumps({"trace_source": os.environ.get("TRACE_SOURCE"), "baseline": baseline["decision"], **summary}, indent=2))
           PY
-      - name: Upload raw trace and AWA evidence
+      - name: Upload trace and AWA mutation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: awa-replay-existing-tau2-trace
+          name: awa-independent-trace-mutation-suite
           path: |
             saved-tau2/**
-            awa-replay-output/**
-            mutated-tau2/**
-            awa-mutation-output/**
+            awa-baseline/**
+            awa-mutation-suite/**
           if-no-files-found: warn
           retention-days: 14
