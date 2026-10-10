@@ -1,6 +1,7 @@
 {
   "schema_version": "1.0",
   "run_id": "retail-exchange-demo-001",
+  "collected_at": "2026-10-10T10:00:00Z",
   "observed_at": "2026-10-10T12:00:00Z",
   "source_system": "synthetic-reference-adapter",
   "requested_exchange": {
@@ -200,25 +201,33 @@
       "type": "identity_verified",
       "order_id": "ORD-1001",
       "user_id": "USER-7",
-      "source_event_id": "evt-auth-1"
+      "source_event_id": "evt-auth-1",
+      "collector_sequence": 1,
+      "occurred_at": "2026-10-10T09:59:56Z"
     },
     {
       "type": "order_read",
       "order_id": "ORD-1001",
-      "source_event_id": "evt-order-read-1"
+      "source_event_id": "evt-order-read-1",
+      "collector_sequence": 2,
+      "occurred_at": "2026-10-10T09:59:57Z"
     },
     {
       "type": "customer_confirmed",
       "order_id": "ORD-1001",
       "confirmation_id": "confirm-1",
-      "source_event_id": "evt-confirm-1"
+      "source_event_id": "evt-confirm-1",
+      "collector_sequence": 3,
+      "occurred_at": "2026-10-10T09:59:58Z"
     },
     {
       "type": "write",
       "operation": "exchange_order_items",
       "order_id": "ORD-1001",
       "succeeded": true,
-      "source_event_id": "evt-write-1"
+      "source_event_id": "evt-write-1",
+      "collector_sequence": 4,
+      "occurred_at": "2026-10-10T09:59:59Z"
     }
   ],
   "new_order_ids_before": [
