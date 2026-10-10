@@ -5,7 +5,7 @@ This repository is being prepared for a reproducible **v0.1.2** baseline.
 ## Current repository state
 
 - The initial repository commit and this README exist.
-- `.github/workflows/tau2-retail-smoke.yml` has been added as a **manual-only** OpenRouter-backed smoke run against the public `sierra-research/tau2-bench` retail task 0.
+- `.github/workflows/tau2-retail-smoke.yml` has been added as a **manual-only** OpenRouter-backed smoke run against the public `sierra-research/tau2-bench` retail task 0. Its display name explicitly marks it as standalone and not yet AWA-integrated.
 - **The AWA v0.1.2 source package and its tests have not yet been committed to this repository.** The smoke workflow only runs tau2-bench; it does not call AWA or prove AWA detects a workflow violation.
 - The complete starter bundle is available in the related ChatGPT conversation as `AI_Workflow_Assurance_v0.1.2_GitHub_Starter.zip`. It contains the v0.1.2 source archive, public simulated retail workflow pack, CI workflow, documentation, and a PowerShell helper for a safe Git push.
 
