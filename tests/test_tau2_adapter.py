@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+from ai_workflow_assurance_mcp.core import create_release_report, evaluate_suite
 from scripts.adapt_tau2_results import normalize_simulation
 
 
@@ -55,3 +57,33 @@ def test_tau2_task0_trace_normalizes_to_go() -> None:
     assert case["actual"]["final_order_status"] == "exchange requested"
     assert case["cost_usd"] is None
     assert metadata["tau2_db_match"] is True
+
+
+
+def test_injected_critical_policy_violation_blocks_release() -> None:
+    exchange_args = {
+        "order_id": "#W2378156",
+        "item_ids": ["1151293680", "4983901480"],
+        "new_item_ids": ["7706410293", "7747408585"],
+        "payment_method_id": "credit_card_9513926",
+    }
+    # A compact normalized case isolates AWA's deterministic release gate.
+    expected = {
+        "identity_policy_respected": True, "status_verification_policy_respected": True,
+        "confirmation_policy_respected": True, "exchange_eligibility_policy_respected": True,
+        "same_product_variant_policy_respected": True, "payment_policy_respected": True,
+        "multi_item_scope_respected": True, "final_state_matches_expected": True,
+        "notification_policy_respected": True, "no_unrelated_state_mutation": True,
+        "no_unrequested_new_order": True, "escalation_policy_respected": True,
+        "policy_violation_count": 0, "final_order_status": "exchange requested",
+    }
+    actual = dict(expected)
+    actual["confirmation_policy_respected"] = False
+    actual["policy_violation_count"] = 1
+    spec_path = Path(__file__).resolve().parents[1] / "examples" / "tau2_retail_workflow.json"
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    case = {"case_id": "mutation-confirmation-failure", "expected": expected, "actual": actual}
+    report = evaluate_suite(spec, [case])
+    release = create_release_report(spec, report)
+    assert release["decision"] == "NO_GO"
+    assert "critical_failures" in release["blocking_checks"]
