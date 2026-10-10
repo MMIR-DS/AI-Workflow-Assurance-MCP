@@ -210,7 +210,8 @@
     {
       "type": "customer_confirmed",
       "order_id": "ORD-1001",
-      "confirmation_id": "confirm-1"
+      "confirmation_id": "confirm-1",
+      "source_event_id": "evt-confirm-1"
     },
     {
       "type": "write",
