@@ -22,7 +22,7 @@ The bundled fixture should produce `GO`. The process exits with code `0` for `GO
 
 ## Contract: `retail-exchange-observation-v1`
 
-The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_id`. The requested order ID and payment-method ID must be non-empty strings; old/new item IDs must be non-empty lists of non-empty strings. Every event must carry a non-empty `source_event_id`, and event IDs must be unique within the observation. The confirmation evidence and its event must carry the same non-empty confirmation ID.
+The input is one JSON object with `schema_version: "1.0"`, a non-empty `run_id`, and a timezone-aware ISO-8601 `collected_at` timestamp. When `--max-evidence-age-seconds` is configured, the adapter rejects bundles older than the configured limit (and timestamps more than 30 seconds in the future). This freshness check uses the bundle collection time; it does not prove that upstream source snapshots were fresh when collected. The requested order ID and payment-method ID must be non-empty strings; old/new item IDs must be non-empty lists of non-empty strings. Every event must carry a non-empty `source_event_id`, and event IDs must be unique within the observation. Each event also requires a positive integer `collector_sequence`, strictly increasing in the array order, plus a timezone-aware ISO-8601 `occurred_at` timestamp. The collector sequence preserves the collector’s observed ordering; it is not proof of source authenticity. The confirmation evidence and its event must carry the same non-empty confirmation ID.
 
 | Field | Required shape | Source-of-truth expectation |
 |---|---|---|
@@ -32,7 +32,7 @@ The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_i
 | `order_before` | Order object with the exact supported fields shown in the fixture | Independent read before mutation |
 | `order_after` | Same field set as `order_before` | Independent read after mutation; do not substitute the write tool's return value when independent verification is available |
 | `catalog_products` | Product ID map containing variants, item IDs, availability, prices, options | Catalog/inventory source captured for the evaluation |
-| `events[]` | Ordered event objects | Timestamped or sequence-preserving audit events, normalized in chronological order |
+| `events[]` | Ordered event objects with unique `source_event_id`, positive increasing `collector_sequence`, and timezone-aware `occurred_at` | Collector-preserved event order; timestamps are retained for audit, but source clock integrity is not verified |
 | `new_order_ids_before/after` | Arrays of order IDs | Order index snapshots to detect unintended order creation |
 | `notification_evidence` | Optional `assistant_claimed_sent` and `provider_delivery_status` | Provider receipt/status if the assistant claims a notification was sent |
 
@@ -44,7 +44,7 @@ The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_i
 - `write`: `operation`, `order_id`, `succeeded`. The expected successful write is `exchange_order_items`; any extra write is rejected.
 - `escalation`: treated as an escalation-policy event by this initial contract.
 
-The adapter currently assumes the event list is already in source order. A production source adapter should preserve source sequence numbers or normalize timestamps with a documented tie-break rule. Do not infer event ordering from assistant narrative text.
+The adapter rejects non-increasing collector sequence values instead of silently sorting events. A production source adapter should preserve native source sequence/version data where available, retain source timestamps, and document how cross-system ordering is reconciled. The normalized collector sequence is useful for detecting accidental reordering but can be forged by an untrusted collector. Do not infer event ordering from assistant narrative text. Configure `--max-evidence-age-seconds` for deployments that require a freshness bound; without that flag, metadata reports freshness as `not_configured`.
 
 **Trust boundary:** these checks validate the internal consistency of the supplied bundle; they do not cryptographically prove who produced it or whether the source system was truthful. A production integration should authenticate the collector, authorize each source, preserve immutable source event IDs and sequence/timestamp metadata, and verify signed receipts or source attestations where available. A self-reported `source_system` label or a hash alone is not proof of authenticity.
 
@@ -75,3 +75,18 @@ The test suite covers a passing fixture and negative controls for unavailable va
 python -m pytest tests/test_retail_exchange_observation_adapter.py
 ruff check scripts/adapt_retail_exchange_observation.py tests/test_retail_exchange_observation_adapter.py
 ```
+
+
+## Freshness and ordering checks
+
+The adapter requires a timezone-aware `collected_at` bundle timestamp and strictly increasing positive `collector_sequence` values for the event array. When a freshness limit is supplied, it compares `collected_at` with the evaluator current UTC time and fails closed if the bundle is too old. Library callers may inject an aware `evaluation_time` to make freshness tests deterministic. The CLI option is:
+
+```bash
+python scripts/adapt_retail_exchange_observation.py \
+  --observation path/to/observation.json \
+  --spec examples/tau2_retail_workflow.json \
+  --output-dir artifacts/evaluation \
+  --max-evidence-age-seconds 300
+```
+
+A production deployment should set a limit appropriate to its workflow and separately enforce freshness of each upstream snapshot. The current bundle timestamp is caller-supplied, so this check is a consistency guard—not an authenticated clock or a source-freshness guarantee.
