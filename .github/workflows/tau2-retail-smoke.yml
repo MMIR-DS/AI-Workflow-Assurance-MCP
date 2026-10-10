@@ -1,10 +1,6 @@
 name: tau2 retail smoke benchmark (AWA v0.1.2 baseline)
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/tau2-retail-smoke.yml"
   workflow_dispatch:
     inputs:
       model:
