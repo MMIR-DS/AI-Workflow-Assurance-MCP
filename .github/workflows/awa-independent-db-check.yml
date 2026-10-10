@@ -6,6 +6,8 @@ on:
     paths:
       - "scripts/verify_tau2_independent_db.py"
       - "scripts/adapt_tau2_db_evidence.py"
+      - "scripts/redact_tau2_db_report.py"
+      - "tests/test_tau2_db_report_redaction.py"
       - "tests/test_tau2_evidence_manifest.py"
       - "docs/TAU2_SOURCE_EVIDENCE_MANIFEST.md"
       - "tests/test_tau2_adapter.py"
@@ -126,14 +128,32 @@ jobs:
               "production_ready": manifest["production_ready"],
           }, indent=2))
           PY
+      - name: Redact customer and payment details before artifact upload
+        run: |
+          python scripts/redact_tau2_db_report.py \
+            --input awa-independent-db-report.json \
+            --output awa-independent-db-report-public.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("awa-independent-db-report-public.json").read_text(encoding="utf-8"))
+          evidence = report["database_evidence"]
+          assert report["artifact_redaction"]["applied"] is True, report
+          assert evidence["redaction"]["raw_order_snapshots_included"] is False, report
+          for key in ("before", "after", "recorded_before", "recorded_after"):
+              snapshot = evidence[key]
+              for forbidden in ("address", "user_id", "fulfillments", "payment_history", "exchange_payment_method_id", "return_payment_method_id"):
+                  assert forbidden not in snapshot, {"snapshot": key, "field": forbidden}
+          assert "write_execution_error" not in evidence, report
+          print("Public evidence report redaction checks passed.")
+          PY
       - name: Upload independent database evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: awa-independent-retail-db-evidence
           path: |
-            awa-independent-db-report.json
+            awa-independent-db-report-public.json
             awa-source-evidence-manifest.json
-            saved-tau2/**
           if-no-files-found: warn
           retention-days: 14

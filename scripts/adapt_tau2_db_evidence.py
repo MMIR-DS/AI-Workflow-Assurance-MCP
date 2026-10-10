@@ -26,6 +26,19 @@ REQUIRED_CHECKS = {
 }
 
 
+def _safe_order_projection(order: dict[str, Any]) -> dict[str, Any]:
+    """Expose only order fields useful for audit; omit customer/payment details."""
+    allowed = ("order_id", "status", "exchange_items", "exchange_new_items", "exchange_price_difference")
+    projection = {key: order[key] for key in allowed if key in order}
+    items = order.get("items", [])
+    if isinstance(items, list):
+        projection["items"] = [
+            {key: item[key] for key in ("item_id", "product_id", "price", "options") if key in item}
+            for item in items if isinstance(item, dict)
+        ]
+    return projection
+
+
 def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
     """Validate and normalize a verifier report without changing its evidence."""
     if not isinstance(report, dict):
@@ -122,13 +135,13 @@ def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
             "checked_out_commit": checked_out_commit,
             "source_commit_match": commit_match,
             "database_reader": database_reader,
-            "database_path": source.get("database_path"),
+            "database_path": "[redacted local path]",
             "source_authenticity": "not_verified",
             "cryptographic_signature_validation": "not_implemented",
         },
         "database_evidence": {
-            "before": before,
-            "after": after,
+            "before": _safe_order_projection(before),
+            "after": _safe_order_projection(after),
             "full_database_before_sha256": hashes["before"],
             "full_database_after_sha256": hashes["after"],
             "other_database_entities_unchanged": evidence.get("other_database_entities_unchanged") is True,
@@ -138,6 +151,10 @@ def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
         },
         "checks": checks,
         "summary": summary,
+        "data_minimization": {
+            "raw_order_snapshots_included": False,
+            "redacted_fields": ["address", "user_id", "fulfillments", "payment_history", "exchange_payment_method_id", "return_payment_method_id", "cancel_reason"],
+        },
         "limitations": [
             "This manifest packages a deterministic replay against a pinned simulator; it is not a snapshot of the original model run's live in-memory database.",
             "The replay report and its source data are not cryptographically authenticated by this adapter.",

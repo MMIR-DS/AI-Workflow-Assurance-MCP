@@ -121,6 +121,27 @@ def test_manifest_rejects_tamper_probe_mismatch() -> None:
         build_evidence_manifest(report)
 
 
+def test_manifest_omits_sensitive_fields_from_order_snapshots() -> None:
+    report = _valid_report()
+    report["database_evidence"]["before"].update({
+        "address": {"city": "Sensitive City"},
+        "user_id": "user-private",
+        "payment_history": [{"payment_method_id": "card-private"}],
+        "fulfillments": [{"tracking_id": ["tracking-private"]}],
+        "exchange_payment_method_id": "card-private",
+        "items": [{"item_id": "item-1", "product_id": "product-1", "price": 10, "internal_note": "private"}],
+    })
+    manifest = build_evidence_manifest(report)
+    snapshot = manifest["database_evidence"]["before"]
+    assert "address" not in snapshot
+    assert "user_id" not in snapshot
+    assert "payment_history" not in snapshot
+    assert "fulfillments" not in snapshot
+    assert "exchange_payment_method_id" not in snapshot
+    assert snapshot["items"] == [{"item_id": "item-1", "product_id": "product-1", "price": 10}]
+    assert manifest["data_minimization"]["raw_order_snapshots_included"] is False
+
+
 def test_manifest_rejects_collateral_mutation_metadata_mismatch() -> None:
     report = _valid_report()
     report["database_evidence"]["other_database_entities_unchanged"] = False
