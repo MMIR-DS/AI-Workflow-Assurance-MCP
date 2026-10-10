@@ -2,9 +2,9 @@
 
 Deterministic acceptance checks for AI workflow runs, exposed as an MCP server and a local CLI.
 
-**Version:** 0.1.3
+**Version:** 0.1.4
 
-This repository contains the source for **AI Workflow Assurance MCP v0.1.3**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
+This repository contains the source for **AI Workflow Assurance MCP v0.1.4**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
 
 ## What it does
 

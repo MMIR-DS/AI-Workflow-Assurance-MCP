@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4
+
+- Reject release-report generation when the supplied workflow specification differs from the specification fingerprint in the evaluation report.
+- Expand source-code mutation smoke coverage to seven selected fault classes, with environment-stamped JSON reports uploaded by CI for Python 3.10–3.13.
+- Build and smoke-test the wheel outside the source tree in CI.
+- Expand CLI acceptance tests and add a clean-checkout release acceptance checklist.
+
+
 ## 0.1.3
 
 - Enforce the documented JSON nesting cap of 64 containers (the previous check allowed one extra level).
