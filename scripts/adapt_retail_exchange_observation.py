@@ -124,7 +124,7 @@ def normalize_observation(
         for sequence in sequences
     ):
         raise ValueError("Every event must have a positive integer collector_sequence.")
-    if any(current <= previous for previous, current in zip(sequences, sequences[1:], strict=True)):
+    if any(current <= previous for previous, current in zip(sequences[:-1], sequences[1:], strict=True)):
         raise ValueError("collector_sequence values must be strictly increasing in event order.")
     for index, event in enumerate(events):
         _parse_timestamp(event.get("occurred_at"), f"events[{index}].occurred_at")
