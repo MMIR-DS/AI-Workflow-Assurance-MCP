@@ -36,7 +36,7 @@ MUTANTS: list[dict[str, str]] = [
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_json_nesting_depth_is_limited_for_text_and_python_inputs",
     },
     {
-        "id": "inclusive_pass_rate_boundary",
+        "id": "release_threshold_gate",
         "description": "Make the minimum pass-rate threshold exclusive instead of inclusive.",
         "source": "passed = observed >= limit if comparator == \">=\" else observed <= limit",
         "replacement": "passed = observed > limit if comparator == \">=\" else observed <= limit",
