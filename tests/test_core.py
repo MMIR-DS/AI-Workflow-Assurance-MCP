@@ -276,6 +276,14 @@ class WorkflowAssuranceTests(unittest.TestCase):
         self.assertIn("avg_cost_usd_per_case", release["blocking_checks"])
         self.assertIn("max_case_latency_ms", release["blocking_checks"])
 
+ 
+    def test_release_rejects_spec_drift_from_evaluation_report(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        changed_spec = json.loads(json.dumps(SPEC))
+        changed_spec["thresholds"]["min_pass_rate"] = 0.1
+        with self.assertRaisesRegex(AssuranceInputError, "does not match the specification"):
+            create_release_report(changed_spec, report)
+
     def test_forged_summary_inconsistent_with_case_results_is_rejected(self):
         report = evaluate_suite(SPEC, BASE_CASES)
         forged = json.loads(json.dumps(report))
