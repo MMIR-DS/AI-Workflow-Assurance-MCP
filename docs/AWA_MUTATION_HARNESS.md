@@ -32,6 +32,8 @@ A separate, deliberately small source-code mutation check is also included. It c
 
 ```bash
 python scripts/run_source_mutation_smoke.py
+# Optional: persist an environment-stamped JSON report
+python scripts/run_source_mutation_smoke.py --output artifacts/mutation-report.json
 ```
 
 The current smoke set contains seven hand-selected mutants:
@@ -43,6 +45,6 @@ The current smoke set contains seven hand-selected mutants:
 - Disabling critical-regression precedence in comparison trends.
 - Disabling the guard against using a release policy different from the evaluated specification.
 
-The baseline tests must pass before mutations are applied. A mutant counts as **killed** only when its targeted test fails; a surviving mutant or invalid mutation anchor fails the command and CI. The temporary copy is discarded afterward, so the production source is not edited by the run.
+The JSON report includes the Python/platform and GitHub run metadata when available. CI uploads one report artifact per Python version. The baseline tests must pass before mutations are applied. A mutant counts as **killed** only when its targeted test fails; a surviving mutant or invalid mutation anchor fails the command and CI. The temporary copy is discarded afterward, so the production source is not edited by the run.
 
 This is focused source-code mutation testing, but it is **not** a comprehensive mutation score for the project: only seven hand-selected mutations are included. Expand the set as meaningful regression tests are added, or adopt a general mutation-testing tool for broader operator coverage.
