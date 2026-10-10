@@ -5,6 +5,9 @@ on:
   push:
     paths:
       - "scripts/verify_tau2_independent_db.py"
+      - "scripts/adapt_tau2_db_evidence.py"
+      - "tests/test_tau2_evidence_manifest.py"
+      - "docs/TAU2_SOURCE_EVIDENCE_MANIFEST.md"
       - "tests/test_tau2_adapter.py"
       - "tests/fixtures/tau2_task0_trace_minimal.json"
       - ".github/workflows/awa-independent-db-check.yml"
@@ -100,6 +103,28 @@ jobs:
               "checks": report["checks"]
           }, indent=2))
           PY
+      - name: Package replay report as source evidence manifest
+        run: |
+          python scripts/adapt_tau2_db_evidence.py \
+            --report awa-independent-db-report.json \
+            --output awa-source-evidence-manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("awa-source-evidence-manifest.json").read_text(encoding="utf-8"))
+          assert manifest["decision"] == "GO", manifest
+          assert manifest["production_ready"] is False, manifest
+          assert manifest["assurance_scope"] == "pinned_simulator_replay_evidence_only", manifest
+          assert manifest["source_provenance"]["source_commit_match"] is True, manifest
+          assert manifest["database_evidence"]["tool_return_value_used_for_decision"] is False, manifest
+          assert all(manifest["checks"].values()), manifest
+          print(json.dumps({
+              "manifest_type": manifest["manifest_type"],
+              "decision": manifest["decision"],
+              "summary": manifest["summary"],
+              "production_ready": manifest["production_ready"],
+          }, indent=2))
+          PY
       - name: Upload independent database evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -107,6 +132,7 @@ jobs:
           name: awa-independent-retail-db-evidence
           path: |
             awa-independent-db-report.json
+            awa-source-evidence-manifest.json
             saved-tau2/**
           if-no-files-found: warn
           retention-days: 14
