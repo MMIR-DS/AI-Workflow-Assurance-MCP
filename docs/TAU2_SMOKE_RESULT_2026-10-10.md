@@ -12,7 +12,7 @@
 - Action checks: **5/5 matched**
 - Termination: `user_stop`
 - Simulation duration: approximately 17.8 seconds
-- Agent/user cost reported by tau2: `0.0`, but this is **not a reliable billing estimate** because LiteLLM emitted “model isn't mapped yet” warnings for this OpenRouter model. Check the OpenRouter activity/credits page for actual billing.
+- Agent/user aggregate cost reported by tau2: `0.0`, which is **not reliable** because LiteLLM emitted “model isn't mapped yet” warnings for this OpenRouter model. Summing per-message provider usage metadata in the saved trace gives approximately **$0.01660 USD**. Treat this as an estimate and reconcile with OpenRouter's activity/billing page.
 
 The first attempt was rejected by OpenRouter because the default request asked for up to 65,535 output tokens while the available credit balance only covered a smaller request. The retry capped agent and user requests at 2,048 tokens and completed the task.
 
