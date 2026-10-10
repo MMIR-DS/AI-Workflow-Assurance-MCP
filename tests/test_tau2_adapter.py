@@ -134,6 +134,7 @@ def test_independent_db_snapshot_contract_passes_on_recorded_baseline() -> None:
         valid_payment_method_ids=payment_ids,
         source_commit_matches_trace=source_match,
         write_execution_succeeded=True,
+        other_database_entities_unchanged=True,
     )
     assert report["decision"] == "GO"
     assert report["checks"]["pre_state_matches_recorded_order_read"] is True
@@ -158,6 +159,7 @@ def test_independent_db_snapshot_contract_rejects_tampered_post_state() -> None:
         valid_payment_method_ids=payment_ids,
         source_commit_matches_trace=source_match,
         write_execution_succeeded=True,
+        other_database_entities_unchanged=True,
     )
     assert report["decision"] == "NO_GO"
     assert report["checks"]["independent_db_state_matches_recorded_exchange_response"] is False
@@ -177,7 +179,28 @@ def test_independent_db_snapshot_contract_fails_closed_on_source_drift() -> None
         valid_payment_method_ids=payment_ids,
         source_commit_matches_trace=False,
         write_execution_succeeded=True,
+        other_database_entities_unchanged=True,
     )
     assert report["decision"] == "NO_GO"
     assert report["checks"]["source_code_commit_matches_trace"] is False
 
+
+
+def test_independent_db_snapshot_contract_rejects_unrelated_entity_mutation() -> None:
+    from scripts.verify_tau2_independent_db import evaluate_snapshot_evidence
+
+    before, after, args, products, payment_ids, _, source_match = _independent_db_test_inputs()
+    report = evaluate_snapshot_evidence(
+        recorded_before=before,
+        recorded_after=after,
+        db_before=before,
+        db_after=after,
+        args=args,
+        products=products,
+        valid_payment_method_ids=payment_ids,
+        source_commit_matches_trace=source_match,
+        write_execution_succeeded=True,
+        other_database_entities_unchanged=False,
+    )
+    assert report["decision"] == "NO_GO"
+    assert report["checks"]["no_other_database_entities_mutated"] is False
