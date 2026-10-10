@@ -40,12 +40,18 @@ The GitHub Actions replay loaded the archived task-0 result and created six alte
 
 All six checks passed. The replay did not invoke the model again and therefore made no additional OpenRouter model calls.
 
+## Independent database-state replay added after the trace review
+
+A companion verifier now exists at `scripts/verify_tau2_independent_db.py`, with a no-model workflow at `.github/workflows/awa-independent-db-check.yml`. It checks out the benchmark commit recorded in the trace, loads a fresh RetailDB, verifies the initial database order against the recorded `get_order_details` response, and replays only the recorded exchange write. The write method's return value is discarded; the verifier reads the order directly from `RetailDB.orders`, compares the entire state to the saved exchange response, checks the selected payment method against the loaded user's payment profile and original transaction, and recomputes the price difference. A negative control corrupts a copy of the recorded post-state and requires the comparison to detect it.
+
+The companion workflow does not call an agent or user LLM. Its result should be treated as a deterministic replay against the pinned benchmark data, not as a snapshot taken from the exact process that performed the original model run. The implementation is in the repository; do not describe the replay as passed unless the corresponding GitHub Actions run completes successfully.
+
 ## Evidence boundaries
 
 This is meaningfully more independent of tau2's *scoring oracle*, but it is not a fully external audit of the simulator:
 
-- The “after” state is the object returned by the exchange tool compared against the earlier order read. A second independent database query is not present in the saved trace.
-- Payment checking establishes consistency with the original order's payment transaction and the exchange response. It does not query the user's live payment profile separately.
+- In the original trace alone, the “after” state is the object returned by the exchange tool; there is no independent database snapshot. The companion replay checks the database state in a separate clean run, not the already-mutated in-memory database from the original model run.
+- The companion replay checks the selected payment method against the profile loaded in that replay's RetailDB. It cannot prove the original run used a live profile that differed from the pinned simulator data.
 - The notification criterion checks the assistant's message wording, not whether an email provider actually delivered an email.
 - The option checks and manually defined expected outcomes are specific to this one public retail task. Six controlled mutations on one task are not a statistical reliability study or proof of general coverage.
 
