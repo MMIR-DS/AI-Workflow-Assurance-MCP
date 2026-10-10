@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/workflows/ci.yml)
 
-Deterministic acceptance checks for AI workflow runs, exposed as an MCP server and a local CLI.
+Deterministic evaluation logic for AI workflow observations, exposed as an MCP server and a local CLI. Reports include run-specific metadata.
 
-**Version:** 0.1.4
+**Version:** 0.1.5
 
-This repository contains the source for **AI Workflow Assurance MCP v0.1.4**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
+This repository contains the source for **AI Workflow Assurance MCP v0.1.5**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
 
 ## What it does
 
@@ -18,7 +18,7 @@ Given a workflow specification (criteria + thresholds) and normalized expected/a
 - compares baseline vs candidate runs
 - produces a threshold-based release decision (`GO` / `HOLD` / `NO_GO`)
 
-It does **not** run agents, call model APIs, or manage environments. An adapter must convert traces and final state into the observation contract.
+Determinism applies to evaluation results and decision logic for identical inputs; `run_id` and `executed_at` intentionally vary between reports. It does **not** run agents, call model APIs, or manage environments. An adapter must convert traces and final state into the observation contract.
 
 ## Install
 
@@ -38,6 +38,8 @@ ai-workflow-assurance evaluate --spec path/to/workflow.json --cases path/to/case
 ai-workflow-assurance explain --spec path/to/workflow.json --cases path/to/cases.json
 ai-workflow-assurance compare --spec path/to/workflow.json --baseline base.json --candidate cand.json
 ai-workflow-assurance release --spec path/to/workflow.json --cases path/to/cases.json
+# Optional: return exit code 1 when the decision is HOLD or NO_GO
+ai-workflow-assurance release --spec path/to/workflow.json --cases path/to/cases.json --fail-on-non-go
 ```
 
 ## MCP server
@@ -66,7 +68,7 @@ python scripts/run_assurance_mutation_harness.py
 python -m unittest tests.test_mutation_harness
 ```
 
-Run the focused source-code mutation smoke test (seven hand-selected mutants; not comprehensive mutation testing):
+Run the focused source-code mutation smoke test (eight hand-selected mutants; not comprehensive mutation testing):
 
 ```bash
 python scripts/run_source_mutation_smoke.py
