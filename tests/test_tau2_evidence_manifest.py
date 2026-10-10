@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import copy
-
 import pytest
 
 from scripts.adapt_tau2_db_evidence import REQUIRED_CHECKS, build_evidence_manifest
