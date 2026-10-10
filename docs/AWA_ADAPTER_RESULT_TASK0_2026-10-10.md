@@ -1,27 +1,57 @@
 # AWA Adapter Result — Retail Task 0 — 2026-10-10
 
-## Outcome
+## Revised evaluation method
 
-The saved tau2 result was passed through `scripts/adapt_tau2_results.py` and the repository's AWA evaluator.
+The adapter now derives its release decision from recorded tool payloads. The tau2 `reward`, `db_check.db_match`, and `action_checks` values are retained only as comparison metadata and do not determine AWA acceptance.
+
+- The initial order state is parsed from the pre-mutation `get_order_details` tool response.
+- Product IDs, selected variant options, availability, and current catalog prices are parsed from the `get_product_details` tool responses.
+- The selected old/new item pairs are checked against the original order and the corresponding product variants.
+- The selected payment method is compared with the original order's payment transaction and the exchange tool's returned state.
+- The exchange result is compared field-by-field with the initial order response. Only the documented exchange fields are allowed to change; address, item history, fulfillments, payment history and unrelated fields must remain equal.
+- The price difference is independently recalculated as selected new catalog prices minus historical prices of the replaced order items, rounded to cents.
+
+The tool payloads yield **-$16.63**; the exchange response records **-$16.63**, so the price reconciliation passes.
+
+## Result on the saved task-0 trace
 
 - AWA release decision: **GO**
-- Acceptance criteria passed: **14/14** (pass rate 1.0)
+- AWA criteria passed: **16/16**
 - Critical failures: **0**
-- High failures: **0**
-- tau2 reward: **1.0**
-- tau2 final-state oracle: matched
-- tau2 expected action checks: **5/5 matched**
-- End-to-end simulation duration: approximately **17.79 seconds**
-- Sum of per-message provider usage cost metadata: approximately **$0.01660 USD**
+- High-severity failures: **0**
+- Saved tau2 reward (metadata only): **1.0**
+- Saved tau2 `db_match` (metadata only): `true`
+- Saved tau2 action checks (metadata only): **5/5**
+- Model run duration: approximately **17.79 seconds**
+- Estimated provider usage metadata from the original trace: approximately **$0.01660 USD**; verify against OpenRouter billing if the exact charge matters.
 
-The last cost is a sum of per-call usage metadata in the saved trace, not an invoice. tau2's aggregate cost field reported zero because LiteLLM did not have pricing metadata mapped for this OpenRouter model. Reconcile with OpenRouter's activity/billing view for the final billed amount.
+A unit test also forces tau2's reward, `db_match` and action checks to false while keeping the observed tool payloads unchanged. AWA still returns GO, demonstrating that the release decision is not derived from those tau2 oracle fields.
 
-## What is genuinely checked by the adapter
+## Six no-model-call mutation checks
 
-The adapter derives authentication order, order-status read-before-write, user confirmation, exchange action arguments, the assistant's notification claim, absence of a new-order/transfer tool call, and elapsed time from the recorded trace. The notification criterion checks only the assistant's text; it does not verify that an email was delivered by a provider. AWA fingerprints and evaluates the normalized expected/actual pair.
+The GitHub Actions replay loaded the archived task-0 result and created six altered copies of the recorded trace/tool responses. Each mutation was required to produce `NO_GO` while the saved tau2 reward, database-match and action-check metadata remained unchanged:
 
-## Important limitation
+1. Remove explicit customer confirmation.
+2. Mark the selected keyboard variant unavailable.
+3. Alter the city in the exchange tool's returned order object.
+4. Change the recorded exchange price difference from -$16.63 to -$15.00.
+5. Change the exchange call's payment method to an unobserved ID.
+6. Break the selected thermostat product's product-family mapping.
 
-This first GO result is **not independent proof of all business rules**. The adapter uses tau2's `db_match` oracle for final-state/unrelated-mutation checks, and tau2's expected action checks plus task-0 expected action for variant/payment matching. A full independent database diff was not present in the exported trace. The expected values are specific to task 0 and must not be reused unchanged for other tasks.
+All six checks passed. The replay did not invoke the model again and therefore made no additional OpenRouter model calls.
 
-This demonstrates the integration path on one known-good case, and the raw-trace mutation check now removes the customer's explicit confirmation while leaving tau2's reward/database/action oracle unchanged. AWA then returns `NO_GO`; see [the mutation test result](AWA_MUTATION_TEST_RESULT_2026-10-10.md). This is evidence for that specific missing-confirmation invariant, not general proof of policy coverage across workflows.
+## Evidence boundaries
+
+This is meaningfully more independent of tau2's *scoring oracle*, but it is not a fully external audit of the simulator:
+
+- The “after” state is the object returned by the exchange tool compared against the earlier order read. A second independent database query is not present in the saved trace.
+- Payment checking establishes consistency with the original order's payment transaction and the exchange response. It does not query the user's live payment profile separately.
+- The notification criterion checks the assistant's message wording, not whether an email provider actually delivered an email.
+- The option checks and manually defined expected outcomes are specific to this one public retail task. Six controlled mutations on one task are not a statistical reliability study or proof of general coverage.
+
+## Reproducibility
+
+- Saved tau2 model run: https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343
+- Successful no-model six-mutation replay: https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38059062409
+- CI across Python 3.10–3.13: https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38059062398
+- Mutation replay workflow: [`.github/workflows/awa-replay-existing-tau2.yml`](../.github/workflows/awa-replay-existing-tau2.yml)
