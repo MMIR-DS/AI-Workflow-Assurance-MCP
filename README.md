@@ -92,6 +92,10 @@ On the saved 2026-10-10 task-0 run, AWA returned `GO` with **16/16 checks passin
 
 See the [original tau2 run](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343), [successful six-mutation replay](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38059062409), [CI for Python 3.10–3.13](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38059062398), [adapter report](docs/AWA_ADAPTER_RESULT_TASK0_2026-10-10.md), and [mutation-test report](docs/AWA_MUTATION_TEST_RESULT_2026-10-10.md). Per-call usage metadata from the original trace totals approximately $0.01660; verify the final charge in OpenRouter's billing/activity view. The replay workflow is manual-only, reuses a saved result or committed fixture, makes no fresh model calls, and is currently left manual-only after the verified run.
 
+## Release acceptance
+
+Before tagging a release, follow the [clean-checkout release acceptance checklist](docs/RELEASE_ACCEPTANCE.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
