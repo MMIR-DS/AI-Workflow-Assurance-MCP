@@ -82,13 +82,21 @@ jobs:
             --timeout 480 \
             --save-to tau2-standalone-retail-task0 \
             2>&1 | tee ../tau2-benchmark.log
+      - name: Generate AWA case, evaluation, and release reports
+        if: success()
+        run: |
+          PYTHONPATH=src python scripts/adapt_tau2_results.py \
+            --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
+            --spec examples/tau2_retail_workflow.json \
+            --output-dir awa-adapter-output
       - name: Preserve trace, result, and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tau2-standalone-retail-smoke
+          name: tau2-awa-retail-assurance
           path: |
             tau2-bench/data/simulations/**
+            awa-adapter-output/**
             tau2-benchmark.log
           if-no-files-found: warn
           retention-days: 14
