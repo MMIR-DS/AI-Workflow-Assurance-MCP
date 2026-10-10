@@ -283,6 +283,8 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
         "schema_version": "1.0",
         "run_id": run_id,
         "evidence_contract": "retail-exchange-observation-v1",
+        "assurance_scope": "structural_and_policy_consistency_only",
+        "production_ready": False,
         "evidence_integrity": {
             "structural_validation": "passed",
             "source_authenticity": "not_verified",
@@ -345,6 +347,8 @@ def main() -> int:
         )
     print(json.dumps({
         "run_id": observation.get("run_id"),
+        "assurance_scope": metadata["assurance_scope"],
+        "production_ready": metadata["production_ready"],
         "pass_rate": report["summary"]["pass_rate"],
         "decision": release["decision"],
         "blocking_checks": release["blocking_checks"],
