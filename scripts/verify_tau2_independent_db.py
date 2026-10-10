@@ -79,6 +79,7 @@ def evaluate_snapshot_evidence(
     valid_payment_method_ids: set[str],
     source_commit_matches_trace: bool,
     write_execution_succeeded: bool,
+    other_database_entities_unchanged: bool,
 ) -> dict[str, Any]:
     """Pure comparison logic, separately testable without installing tau2-bench."""
     order_id = str(args.get("order_id", ""))
@@ -139,6 +140,7 @@ def evaluate_snapshot_evidence(
         "source_code_commit_matches_trace": bool(source_commit_matches_trace),
         "pre_state_matches_recorded_order_read": db_before == recorded_before,
         "write_execution_succeeded": bool(write_execution_succeeded),
+        "no_other_database_entities_mutated": bool(other_database_entities_unchanged),
         "independent_db_state_matches_recorded_exchange_response": db_after == recorded_after,
         "replay_db_payment_profile_and_original_transaction_match": profile_and_original_payment,
         "unrelated_order_fields_unchanged_in_database": unrelated_fields_unchanged,
@@ -155,8 +157,8 @@ def evaluate_snapshot_evidence(
             "passed_checks": sum(checks.values()),
             "total_checks": len(checks),
             "computed_price_difference": str(computed_delta) if computed_delta is not None else None,
-            "database_before_sha256": _hash(db_before),
-            "database_after_sha256": _hash(db_after),
+            "database_before_sha256": _hash(database_snapshot_before),
+            "database_after_sha256": _hash(database_snapshot_after),
             "recorded_before_sha256": _hash(recorded_before),
             "recorded_after_sha256": _hash(recorded_after),
         },
@@ -233,7 +235,8 @@ def main() -> int:
     tools = RetailTools(db)
 
     # This is a direct state read from RetailDB, not get_order_details' recorded response.
-    db_before = db.orders[order_id].model_dump(mode="json", exclude_none=False)
+    database_snapshot_before = db.model_dump(mode="json", exclude_none=False)
+    db_before = database_snapshot_before["orders"][order_id]
     source_commit_matches = bool(recorded_commit and recorded_commit == args_cli.source_commit)
     payment_ids: set[str] = set()
     user_id = str(db_before.get("user_id", ""))
@@ -254,11 +257,22 @@ def main() -> int:
         except Exception as exc:  # a failed replay must be represented as NO_GO
             execution_error = f"{type(exc).__name__}: {exc}"
 
-    db_after = db.orders[order_id].model_dump(mode="json", exclude_none=False)
-    product_payloads = {
-        str(product_id): product.model_dump(mode="json", exclude_none=False)
-        for product_id, product in db.products.items()
+    database_snapshot_after = db.model_dump(mode="json", exclude_none=False)
+    db_after = database_snapshot_after["orders"][order_id]
+    unaffected_orders_before = {
+        key: value for key, value in database_snapshot_before["orders"].items()
+        if key != order_id
     }
+    unaffected_orders_after = {
+        key: value for key, value in database_snapshot_after["orders"].items()
+        if key != order_id
+    }
+    other_database_entities_unchanged = bool(
+        database_snapshot_before["products"] == database_snapshot_after["products"]
+        and database_snapshot_before["users"] == database_snapshot_after["users"]
+        and unaffected_orders_before == unaffected_orders_after
+    )
+    product_payloads = database_snapshot_before["products"]
     evaluated = evaluate_snapshot_evidence(
         recorded_before=recorded_before,
         recorded_after=recorded_after,
@@ -269,6 +283,7 @@ def main() -> int:
         valid_payment_method_ids=payment_ids,
         source_commit_matches_trace=source_commit_matches,
         write_execution_succeeded=write_execution_succeeded,
+        other_database_entities_unchanged=other_database_entities_unchanged,
     )
     # Built-in negative control: corrupt a copy of the recorded response and ensure the
     # database comparison would reject it. This does not mutate the trace on disk.
@@ -295,6 +310,9 @@ def main() -> int:
         "database_evidence": {
             "before": db_before,
             "after": db_after,
+            "full_database_before_sha256": _hash(database_snapshot_before),
+            "full_database_after_sha256": _hash(database_snapshot_after),
+            "other_database_entities_unchanged": other_database_entities_unchanged,
             "recorded_before": recorded_before,
             "recorded_after": recorded_after,
             "write_count_in_trace": write_count,
