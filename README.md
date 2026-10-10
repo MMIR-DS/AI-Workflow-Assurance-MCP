@@ -1,25 +1,78 @@
-# AI Workflow Assurance MCP — bootstrap status
+# AI Workflow Assurance MCP
 
-This repository is being prepared for a reproducible **v0.1.2** baseline.
+Deterministic acceptance checks for AI workflow runs, exposed as an MCP server and a local CLI.
 
-## Current repository state
+**Version:** 0.1.3
 
-- The initial repository commit and this README exist.
-- `.github/workflows/tau2-retail-smoke.yml` has been added as a **manual-only** OpenRouter-backed smoke run against the public `sierra-research/tau2-bench` retail task 0. Its display name explicitly marks it as standalone and not yet AWA-integrated.
-- **The AWA v0.1.2 source package and its tests have not yet been committed to this repository.** The smoke workflow only runs tau2-bench; it does not call AWA or prove AWA detects a workflow violation.
-- The complete starter bundle is available in the related ChatGPT conversation as `AI_Workflow_Assurance_v0.1.2_GitHub_Starter.zip`. It contains the v0.1.2 source archive, public simulated retail workflow pack, CI workflow, documentation, and a PowerShell helper for a safe Git push.
+This repository contains the source for **AI Workflow Assurance MCP v0.1.3**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
 
-## What is needed to complete the baseline
+## What it does
 
-Transfer the starter bundle's source and `.github/workflows/ci.yml` into the repository. Once the source is present, CI should install the package and run pytest and Ruff across supported Python versions. Only after that should we adapt tau2 traces and final state into AWA's normalized observation contract.
+Given a workflow specification (criteria + thresholds) and normalized expected/actual observations, AWA:
 
-## OpenRouter and cost controls
+- validates the specification
+- evaluates cases deterministically
+- groups failures by criterion/severity
+- compares baseline vs candidate runs
+- produces a threshold-based release decision (`GO` / `HOLD` / `NO_GO`)
 
-Create a repository secret named `OPENROUTER_API_KEY` under **Settings → Secrets and variables → Actions**. The benchmark workflow is manual-only and defaults to one retail task, one trial, one concurrent run, and a low step cap. Model calls may incur charges, so verify your OpenRouter spending limit before launching it.
+It does **not** run agents, call model APIs, or manage environments. An adapter must convert traces and final state into the observation contract.
 
-Go to **Actions → tau2 retail smoke benchmark (AWA v0.1.2 baseline) → Run workflow** to run the model-backed smoke test. It produces a downloadable artifact containing logs and simulation outputs. Do not treat a model-run result as evidence that AWA passed or failed until the AWA adapter and assurance report are integrated and reviewed.
+## Install
 
-## Pinned source checksums
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+```
 
-- Full v0.1.2 source release ZIP: `8e8c3f31461857557bf4ea794e0266d00bd36c85056f8ca6e86b638a0b49567a`
-- Public retail workflow pack ZIP: `34e08942fba2da825b42b5a91394425a1fc5dbd348093bf40374478677de4af8`
+Requires Python 3.10+.
+
+## CLI
+
+```bash
+ai-workflow-assurance validate-spec --spec path/to/workflow.json
+ai-workflow-assurance evaluate --spec path/to/workflow.json --cases path/to/cases.json
+ai-workflow-assurance explain --spec path/to/workflow.json --cases path/to/cases.json
+ai-workflow-assurance compare --spec path/to/workflow.json --baseline base.json --candidate cand.json
+ai-workflow-assurance release --spec path/to/workflow.json --cases path/to/cases.json
+```
+
+## MCP server
+
+```bash
+ai-workflow-assurance-mcp
+# or
+python -m ai_workflow_assurance_mcp.server
+```
+
+Tools: `validate_workflow_spec`, `run_eval_suite`, `compare_eval_runs`, `explain_failures`, `generate_release_report`.
+
+## Tests
+
+```bash
+pytest
+ruff check src tests scripts
+```
+
+## Public retail workflow pack
+
+A separate public pack abstracts the simulated **τ³-bench / tau2-bench** retail multi-item exchange policy into an AWA workflow spec and scenario matrix. That pack does not ship agent trajectories; normalize real traces before evaluation.
+
+Pinned pack checksum (when using the published ZIP):
+
+`34e08942fba2da825b42b5a91394425a1fc5dbd348093bf40374478677de4af8`
+
+## Optional: standalone tau2 smoke (not AWA)
+
+`.github/workflows/tau2-retail-smoke.yml` is a **manual-only** OpenRouter-backed run against public `sierra-research/tau2-bench` retail task 0. It does **not** invoke AWA until an adapter and assurance report are integrated.
+
+Requires repository secret `OPENROUTER_API_KEY`. Model calls may incur charges.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Security
+
+See [SECURITY.md](SECURITY.md). Local/tool-boundary use only; do not treat v0.1.x as multi-tenant SaaS hardening.
