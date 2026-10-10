@@ -22,7 +22,7 @@ The bundled fixture should produce `GO`. The process exits with code `0` for `GO
 
 ## Contract: `retail-exchange-observation-v1`
 
-The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_id`.
+The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_id`. The requested order ID and payment-method ID must be non-empty strings; old/new item IDs must be non-empty lists of non-empty strings. Every event must carry a non-empty `source_event_id`, and event IDs must be unique within the observation. The confirmation evidence and its event must carry the same non-empty confirmation ID.
 
 | Field | Required shape | Source-of-truth expectation |
 |---|---|---|
@@ -45,6 +45,8 @@ The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_i
 - `escalation`: treated as an escalation-policy event by this initial contract.
 
 The adapter currently assumes the event list is already in source order. A production source adapter should preserve source sequence numbers or normalize timestamps with a documented tie-break rule. Do not infer event ordering from assistant narrative text.
+
+**Trust boundary:** these checks validate the internal consistency of the supplied bundle; they do not cryptographically prove who produced it or whether the source system was truthful. A production integration should authenticate the collector, authorize each source, preserve immutable source event IDs and sequence/timestamp metadata, and verify signed receipts or source attestations where available. A self-reported `source_system` label or a hash alone is not proof of authenticity.
 
 ## Decisions derived by the adapter
 
