@@ -79,6 +79,7 @@ jobs:
             --max-concurrency 1 \
             --max-steps "$MAX_STEPS" \
             --max-errors 4 \
+            --max-retries 0 \
             --timeout 480 \
             --save-to tau2-standalone-retail-task0 \
             2>&1 | tee ../tau2-benchmark.log
