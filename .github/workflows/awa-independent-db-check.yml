@@ -36,6 +36,9 @@ jobs:
       - name: Install pinned tau2-bench runtime
         working-directory: tau2-bench
         run: uv sync --extra dev
+      - name: Install missing optional import used by tau2 package initialization
+        working-directory: tau2-bench
+        run: uv pip install --python .venv/bin/python websockets
       - name: Load archived trace (fixture fallback; no model runs)
         env:
           GH_TOKEN: ${{ github.token }}
