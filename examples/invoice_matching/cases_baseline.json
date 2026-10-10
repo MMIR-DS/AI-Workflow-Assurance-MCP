@@ -1,0 +1,34 @@
+[
+  {
+    "case_id": "clean-match-001",
+    "expected": {"decision": "approve", "requires_human_review": false, "amount_variance": 0.0},
+    "actual": {"decision": "approve", "requires_human_review": false, "amount_variance": 0.0, "rationale": "PO, receipt, and invoice totals match."},
+    "human_review_observed": false,
+    "cost_usd": 0.025,
+    "latency_ms": 980
+  },
+  {
+    "case_id": "quantity-mismatch-002",
+    "expected": {"decision": "review", "requires_human_review": true, "amount_variance": 120.0},
+    "actual": {"decision": "approve", "requires_human_review": false, "amount_variance": 120.0, "rationale": "Invoice total accepted."},
+    "human_review_observed": false,
+    "cost_usd": 0.031,
+    "latency_ms": 1100
+  },
+  {
+    "case_id": "currency-unclear-003",
+    "expected": {"decision": "review", "requires_human_review": true, "amount_variance": 0.0},
+    "actual": {"decision": "review", "requires_human_review": true, "amount_variance": 0.0, "rationale": "Currency metadata is ambiguous."},
+    "human_review_observed": true,
+    "cost_usd": 0.028,
+    "latency_ms": 1450
+  },
+  {
+    "case_id": "duplicate-invoice-004",
+    "expected": {"decision": "review", "requires_human_review": true, "amount_variance": 0.0},
+    "actual": {"decision": "review", "requires_human_review": true, "amount_variance": 0.0, "rationale": "Potential duplicate detected."},
+    "human_review_observed": true,
+    "cost_usd": 0.034,
+    "latency_ms": 1700
+  }
+]
