@@ -30,6 +30,17 @@ jobs:
           "$RUNNER_TEMP/awa-wheel-venv/bin/python" -m pip install dist/*.whl
           "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" --help
           "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" validate-spec --spec examples/invoice_matching/workflow.json
+      - name: Verify release gate accepts GO and rejects non-GO
+        run: |
+          CLI="$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance"
+          SPEC="examples/invoice_matching/workflow.json"
+          "$CLI" release --spec "$SPEC" --cases examples/invoice_matching/cases_candidate.json --output "$RUNNER_TEMP/awa-go.json" --fail-on-non-go
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-go.json').read_text()); assert p['decision'] == 'GO', p['decision']"
+          if "$CLI" release --spec "$SPEC" --cases examples/invoice_matching/cases_baseline.json --output "$RUNNER_TEMP/awa-non-go.json" --fail-on-non-go; then
+            echo "Expected the intentionally failing baseline to block the release."
+            exit 1
+          fi
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-non-go.json').read_text()); assert p['decision'] != 'GO', p['decision']"
       - name: Run source-code mutation smoke test
         run: python scripts/run_source_mutation_smoke.py --output "artifacts/mutation-report-python-${{ matrix.python-version }}.json"
       - name: Upload source mutation report
