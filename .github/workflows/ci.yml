@@ -41,6 +41,10 @@ jobs:
             exit 1
           fi
           python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-non-go.json').read_text()); assert p['decision'] != 'GO', p['decision']"
+      - name: Smoke-test retail exchange evidence adapter
+        run: |
+          python scripts/adapt_retail_exchange_observation.py --observation examples/retail_exchange_observation_v1.json --spec examples/tau2_retail_workflow.json --output-dir "$RUNNER_TEMP/retail-exchange-demo"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/retail-exchange-demo/awa_release_report.json').read_text()); assert p['decision'] == 'GO', p['decision']"
       - name: Run source-code mutation smoke test
         run: python scripts/run_source_mutation_smoke.py --output "artifacts/mutation-report-python-${{ matrix.python-version }}.json"
       - name: Upload source mutation report

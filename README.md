@@ -22,7 +22,7 @@ Determinism applies to evaluation results and decision logic for identical input
 
 ## Quick demo
 
-Try the [reproducible invoice-matching demo](docs/QUICK_DEMO.md). It compares a passing synthetic candidate with a deliberately failing baseline and demonstrates how `--fail-on-non-go` can block a CI release gate without making model calls.
+Try the [reproducible invoice-matching demo](docs/QUICK_DEMO.md). It compares a passing synthetic candidate with a deliberately failing baseline and demonstrates how `--fail-on-non-go` can block a CI release gate without making model calls. For a business-workflow example, see the [retail exchange evidence contract and adapter](docs/RETAIL_EXCHANGE_ADAPTER_CONTRACT.md); its bundled observation is synthetic and the contract requires a trusted source adapter for live use. Review the [retail adapter threat model](docs/THREAT_MODEL_RETAIL_EXCHANGE.md) before designing a live integration.
 
 ## Install
 

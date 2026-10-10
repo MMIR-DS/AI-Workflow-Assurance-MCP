@@ -1,0 +1,245 @@
+{
+  "schema_version": "1.0",
+  "run_id": "retail-exchange-demo-001",
+  "collected_at": "2026-10-10T12:00:00Z",
+  "observed_at": "2026-10-10T12:00:00Z",
+  "source_system": "synthetic-reference-adapter",
+  "requested_exchange": {
+    "order_id": "ORD-1001",
+    "old_item_ids": [
+      "ITEM-11",
+      "ITEM-21"
+    ],
+    "new_item_ids": [
+      "ITEM-12",
+      "ITEM-22"
+    ],
+    "payment_method_id": "PAY-1",
+    "requested_options": {
+      "ITEM-12": {
+        "color": "blue",
+        "size": "large"
+      },
+      "ITEM-22": {
+        "color": "white",
+        "compatibility": "Google Home"
+      }
+    }
+  },
+  "identity_evidence": {
+    "verified_user_id": "USER-7",
+    "source_event_id": "evt-auth-1"
+  },
+  "confirmation_evidence": {
+    "confirmed": true,
+    "order_id": "ORD-1001",
+    "old_item_ids": [
+      "ITEM-11",
+      "ITEM-21"
+    ],
+    "new_item_ids": [
+      "ITEM-12",
+      "ITEM-22"
+    ],
+    "payment_method_id": "PAY-1",
+    "confirmation_id": "confirm-1"
+  },
+  "order_before": {
+    "order_id": "ORD-1001",
+    "user_id": "USER-7",
+    "address": {
+      "city": "Example City"
+    },
+    "items": [
+      {
+        "item_id": "ITEM-11",
+        "product_id": "PROD-1",
+        "price": 50,
+        "options": {
+          "color": "black",
+          "size": "large"
+        }
+      },
+      {
+        "item_id": "ITEM-21",
+        "product_id": "PROD-2",
+        "price": 25,
+        "options": {
+          "color": "black",
+          "compatibility": "Apple HomeKit"
+        }
+      }
+    ],
+    "status": "delivered",
+    "fulfillments": [
+      {
+        "shipment_id": "SHIP-1",
+        "status": "delivered"
+      }
+    ],
+    "payment_history": [
+      {
+        "transaction_type": "payment",
+        "payment_method_id": "PAY-1",
+        "amount": 75
+      }
+    ],
+    "cancel_reason": null,
+    "exchange_items": null,
+    "exchange_new_items": null,
+    "exchange_payment_method_id": null,
+    "exchange_price_difference": null,
+    "return_items": null,
+    "return_payment_method_id": null
+  },
+  "order_after": {
+    "order_id": "ORD-1001",
+    "user_id": "USER-7",
+    "address": {
+      "city": "Example City"
+    },
+    "items": [
+      {
+        "item_id": "ITEM-11",
+        "product_id": "PROD-1",
+        "price": 50,
+        "options": {
+          "color": "black",
+          "size": "large"
+        }
+      },
+      {
+        "item_id": "ITEM-21",
+        "product_id": "PROD-2",
+        "price": 25,
+        "options": {
+          "color": "black",
+          "compatibility": "Apple HomeKit"
+        }
+      }
+    ],
+    "status": "exchange requested",
+    "fulfillments": [
+      {
+        "shipment_id": "SHIP-1",
+        "status": "delivered"
+      }
+    ],
+    "payment_history": [
+      {
+        "transaction_type": "payment",
+        "payment_method_id": "PAY-1",
+        "amount": 75
+      }
+    ],
+    "cancel_reason": null,
+    "exchange_items": [
+      "ITEM-11",
+      "ITEM-21"
+    ],
+    "exchange_new_items": [
+      "ITEM-12",
+      "ITEM-22"
+    ],
+    "exchange_payment_method_id": "PAY-1",
+    "exchange_price_difference": 5,
+    "return_items": null,
+    "return_payment_method_id": null
+  },
+  "catalog_products": {
+    "PROD-1": {
+      "product_id": "PROD-1",
+      "name": "Example jacket",
+      "variants": {
+        "ITEM-11": {
+          "item_id": "ITEM-11",
+          "available": true,
+          "price": 50,
+          "options": {
+            "color": "black",
+            "size": "large"
+          }
+        },
+        "ITEM-12": {
+          "item_id": "ITEM-12",
+          "available": true,
+          "price": 60,
+          "options": {
+            "color": "blue",
+            "size": "large"
+          }
+        }
+      }
+    },
+    "PROD-2": {
+      "product_id": "PROD-2",
+      "name": "Example smart device",
+      "variants": {
+        "ITEM-21": {
+          "item_id": "ITEM-21",
+          "available": true,
+          "price": 25,
+          "options": {
+            "color": "black",
+            "compatibility": "Apple HomeKit"
+          }
+        },
+        "ITEM-22": {
+          "item_id": "ITEM-22",
+          "available": true,
+          "price": 20,
+          "options": {
+            "color": "white",
+            "compatibility": "Google Home"
+          }
+        }
+      }
+    }
+  },
+  "events": [
+    {
+      "type": "identity_verified",
+      "order_id": "ORD-1001",
+      "user_id": "USER-7",
+      "source_event_id": "evt-auth-1",
+      "collector_sequence": 1,
+      "occurred_at": "2026-10-10T11:59:56Z"
+    },
+    {
+      "type": "order_read",
+      "order_id": "ORD-1001",
+      "source_event_id": "evt-order-read-1",
+      "collector_sequence": 2,
+      "occurred_at": "2026-10-10T11:59:57Z"
+    },
+    {
+      "type": "customer_confirmed",
+      "order_id": "ORD-1001",
+      "confirmation_id": "confirm-1",
+      "source_event_id": "evt-confirm-1",
+      "collector_sequence": 3,
+      "occurred_at": "2026-10-10T11:59:58Z"
+    },
+    {
+      "type": "write",
+      "operation": "exchange_order_items",
+      "order_id": "ORD-1001",
+      "succeeded": true,
+      "source_event_id": "evt-write-1",
+      "collector_sequence": 4,
+      "occurred_at": "2026-10-10T11:59:59Z"
+    }
+  ],
+  "new_order_ids_before": [
+    "ORD-1001",
+    "ORD-1002"
+  ],
+  "new_order_ids_after": [
+    "ORD-1001",
+    "ORD-1002"
+  ],
+  "notification_evidence": {
+    "assistant_claimed_sent": false,
+    "provider_delivery_status": "not_sent"
+  }
+}
