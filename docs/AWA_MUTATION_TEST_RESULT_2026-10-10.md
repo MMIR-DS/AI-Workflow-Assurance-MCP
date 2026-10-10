@@ -39,6 +39,8 @@ The adapter's notification criterion is named `notification_claim_matches_contra
 
 ## Reproducibility
 
-- No-model-call replay run: https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38056666076
+- Latest no-model-call replay after the notification-claim criterion rename: https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38056978899
+- Full CI after restoring the manual-only replay trigger: https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38057016739
+- Downloadable evidence bundle includes the raw and mutated trace, both AWA reports, adapter metadata, and SHA-256 manifest.
 - Saved tau2 run: https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343
 - The replay workflow can use the retained run artifact or fall back to `tests/fixtures/tau2_task0_trace_minimal.json`.
