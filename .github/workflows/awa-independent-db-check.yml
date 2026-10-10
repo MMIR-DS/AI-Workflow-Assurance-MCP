@@ -27,7 +27,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: Check out tau2-bench at the trace's recorded source commit
+      - name: Check out tau2-bench at the pinned baseline commit
         uses: actions/checkout@v4
         with:
           repository: sierra-research/tau2-bench
