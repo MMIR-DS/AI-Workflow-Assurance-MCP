@@ -22,3 +22,5 @@ jobs:
         run: python -m pytest
       - name: Lint
         run: ruff check src tests scripts
+      - name: Run source-code mutation smoke test
+        run: python scripts/run_source_mutation_smoke.py
