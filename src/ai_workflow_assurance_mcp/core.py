@@ -5,6 +5,7 @@ import base64
 import zlib
 from pathlib import Path
 
+
 def _load() -> bytes:
     here = Path(__file__).resolve().parent
     payload_dir = here / "_payload"
