@@ -63,9 +63,9 @@ Pinned pack checksum (when using the published ZIP):
 
 `34e08942fba2da825b42b5a91394425a1fc5dbd348093bf40374478677de4af8`
 
-## Optional: standalone tau2 smoke (not AWA)
+## Optional: tau2 + AWA prototype benchmark
 
-`.github/workflows/tau2-retail-smoke.yml` is a **manual-only** OpenRouter-backed run against public `sierra-research/tau2-bench` retail task 0. It does **not** invoke AWA until an adapter and assurance report are integrated.
+`.github/workflows/tau2-retail-smoke.yml` is a **manual-only** OpenRouter-backed run against public `sierra-research/tau2-bench` retail task 0. After tau2 completes, `scripts/adapt_tau2_results.py` creates normalized cases, an AWA evaluation report, and an AWA release report. The adapter records which checks rely on tau2's own oracle; it does not independently diff the complete initial/final database.
 
 Requires repository secret `OPENROUTER_API_KEY`. The workflow caps output at 2,048 tokens per model request and is manual-only to avoid surprise runs. Model calls may incur charges.
 
