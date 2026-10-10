@@ -105,12 +105,17 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost >= 0:
             costs.append(float(cost))
     duration = sim.get("duration")
+    # Missing observations are omitted rather than represented as null: AWA's
+    # case contract accepts a metric only when it was actually observed.
     case = {
         "case_id": f"retail-task-{sim.get('task_id')}-trial-{sim.get('trial', 0)}",
-        "expected": expected, "actual": actual, "human_review_observed": not no_transfer,
-        "cost_usd": sum(costs) if costs else None,
-        "latency_ms": round(duration * 1000) if isinstance(duration, (int, float)) else None,
+        "expected": expected,
+        "actual": actual,
     }
+    if costs:
+        case["cost_usd"] = sum(costs)
+    if isinstance(duration, (int, float)):
+        case["latency_ms"] = round(duration * 1000)
     info = results.get("info") or {}
     metadata = {
         "task_id": str(sim.get("task_id")), "trial": sim.get("trial"),
