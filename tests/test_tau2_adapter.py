@@ -61,12 +61,6 @@ def test_tau2_task0_trace_normalizes_to_go() -> None:
 
 
 def test_injected_critical_policy_violation_blocks_release() -> None:
-    exchange_args = {
-        "order_id": "#W2378156",
-        "item_ids": ["1151293680", "4983901480"],
-        "new_item_ids": ["7706410293", "7747408585"],
-        "payment_method_id": "credit_card_9513926",
-    }
     # A compact normalized case isolates AWA's deterministic release gate.
     expected = {
         "identity_policy_respected": True, "status_verification_policy_respected": True,
