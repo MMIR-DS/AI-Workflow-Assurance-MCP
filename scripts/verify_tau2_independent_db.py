@@ -140,7 +140,7 @@ def evaluate_snapshot_evidence(
         "pre_state_matches_recorded_order_read": db_before == recorded_before,
         "write_execution_succeeded": bool(write_execution_succeeded),
         "independent_db_state_matches_recorded_exchange_response": db_after == recorded_after,
-        "live_payment_profile_and_original_transaction_match": profile_and_original_payment,
+        "replay_db_payment_profile_and_original_transaction_match": profile_and_original_payment,
         "unrelated_order_fields_unchanged_in_database": unrelated_fields_unchanged,
         "database_price_recalculation_matches_post_state": bool(
             computed_delta is not None
