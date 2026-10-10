@@ -11,8 +11,8 @@ class AssuranceMutationHarnessTests(unittest.TestCase):
     def test_control_passes_and_all_seeded_faults_are_detected(self) -> None:
         report = run_harness()
         self.assertTrue(report["control"]["passed"], report)
-        self.assertEqual(report["seeded_faults"]["total"], 3)
-        self.assertEqual(report["seeded_faults"]["detected"], 3)
+        self.assertEqual(report["seeded_faults"]["total"], 5)
+        self.assertEqual(report["seeded_faults"]["detected"], 5)
         self.assertEqual(report["seeded_faults"]["missed"], 0)
         self.assertEqual(report["seeded_faults"]["detection_rate"], 1.0)
         self.assertEqual(report["false_rejection_count"], 0)
