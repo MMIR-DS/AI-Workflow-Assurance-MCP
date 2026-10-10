@@ -82,8 +82,11 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
     if not isinstance(requested_options, dict):
         raise ValueError("requested_exchange.requested_options must be a JSON object when provided.")
     requested_new_ids = set(map(str, new_ids))
-    if any(str(item_id) not in requested_new_ids for item_id in requested_options):
+    option_item_ids = set(map(str, requested_options))
+    if any(item_id not in requested_new_ids for item_id in option_item_ids):
         raise ValueError("requested_options may only contain requested new_item_ids.")
+    if requested_options and option_item_ids != requested_new_ids:
+        raise ValueError("When provided, requested_options must cover every requested new_item_id.")
     if any(not isinstance(options, dict) for options in requested_options.values()):
         raise ValueError("Each requested_options entry must be a JSON object.")
 
@@ -102,15 +105,17 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
     ]
 
     identity_event_id = (
-        str(events[identity_events[0]].get("source_event_id", ""))
-        if len(identity_events) == 1 else ""
+        events[identity_events[0]].get("source_event_id")
+        if len(identity_events) == 1 else None
     )
+    evidence_event_id = identity.get("source_event_id")
     identity_ok = bool(
         len(identity_events) == 1
         and str(events[identity_events[0]].get("user_id", "")) == str(before.get("user_id", ""))
         and str(identity.get("verified_user_id", "")) == str(before.get("user_id", ""))
-        and identity_event_id
-        and identity_event_id == str(identity.get("source_event_id", ""))
+        and isinstance(identity_event_id, str) and identity_event_id.strip()
+        and isinstance(evidence_event_id, str) and evidence_event_id.strip()
+        and identity_event_id == evidence_event_id
         and read_events and identity_events[0] < read_events[0]
     )
     status_ok = bool(
