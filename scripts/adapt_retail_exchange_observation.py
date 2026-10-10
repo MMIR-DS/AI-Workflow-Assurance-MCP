@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -132,7 +132,7 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
     )
     computed_delta = Decimal("0.00")
     all_prices_valid = catalog_ok
-    for old_id, new_id in zip(old_ids, new_ids):
+    for old_id, new_id in zip(old_ids, new_ids, strict=False):
         old = before_by_id.get(str(old_id))
         product = catalog.get(str(old.get("product_id"))) if isinstance(old, dict) else None
         variants = product.get("variants") if isinstance(product, dict) else None
