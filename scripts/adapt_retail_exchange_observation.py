@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections import Counter
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -86,6 +87,7 @@ def normalize_observation(
         if (
             isinstance(max_evidence_age_seconds, bool)
             or not isinstance(max_evidence_age_seconds, (int, float))
+            or not math.isfinite(max_evidence_age_seconds)
             or max_evidence_age_seconds < 0
         ):
             raise ValueError("max_evidence_age_seconds must be a non-negative number.")
