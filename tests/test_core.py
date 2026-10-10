@@ -443,5 +443,27 @@ class WorkflowAssuranceTests(unittest.TestCase):
         self.assertTrue(any("Additional validation errors omitted" in message for message in errors))
 
 
+    def test_paths_reject_more_than_maximum_components(self):
+        from ai_workflow_assurance_mcp.core import MAX_PATH_PARTS
+
+        spec = json.loads(json.dumps(SPEC))
+        spec["criteria"][0]["actual_path"] = ".".join(["x"] * (MAX_PATH_PARTS + 1))
+        self.assertTrue(any("actual_path" in error for error in validate_spec(spec)))
+
+    def test_repeated_evaluation_has_stable_decision_relevant_results(self):
+        first = evaluate_suite(SPEC, BASE_CASES)
+        second = evaluate_suite(SPEC, BASE_CASES)
+        self.assertEqual(first["summary"], second["summary"])
+        self.assertEqual(first["case_results"], second["case_results"])
+        self.assertNotEqual(first["run_id"], second["run_id"])
+        self.assertIn("executed_at", first)
+        self.assertIn("executed_at", second)
+
+    def test_unknown_threshold_summary_names_unsupported_keys(self):
+        from ai_workflow_assurance_mcp.core import summarize_unknown_thresholds
+
+        self.assertEqual(summarize_unknown_thresholds({"min_pass_rate": 0.9, "max_custom_metric": 5}), ["max_custom_metric"])
+
+
 if __name__ == "__main__":
     unittest.main()
