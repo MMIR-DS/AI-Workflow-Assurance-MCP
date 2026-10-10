@@ -81,12 +81,19 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
     payment_id = str(request.get("payment_method_id", ""))
     requested_options = request.get("requested_options", {})
     if not isinstance(requested_options, dict):
-        requested_options = {}
+        raise ValueError("requested_exchange.requested_options must be a JSON object when provided.")
+    requested_new_ids = set(map(str, new_ids))
+    if any(str(item_id) not in requested_new_ids for item_id in requested_options):
+        raise ValueError("requested_options may only contain requested new_item_ids.")
+    if any(not isinstance(options, dict) for options in requested_options.values()):
+        raise ValueError("Each requested_options entry must be a JSON object.")
 
     identity_events = _event_indices(events, "identity_verified", order_id)
     read_events = _event_indices(events, "order_read", order_id)
     confirmation_events = _event_indices(events, "customer_confirmed", order_id)
-    write_events = [e for e in events if e.get("type") == "write" and e.get("operation") in WRITE_OPERATIONS]
+    # Count every write event, including unsupported operations, so an unexpected
+    # mutation cannot disappear merely because its operation name is unknown.
+    write_events = [e for e in events if e.get("type") == "write"]
     exchange_writes = [e for e in write_events if e.get("operation") == "exchange_order_items" and str(e.get("order_id", "")) == order_id]
     exchange_write_indices = [
         i for i, event in enumerate(events)
@@ -95,11 +102,16 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
         and str(event.get("order_id", "")) == order_id
     ]
 
+    identity_event_id = (
+        str(events[identity_events[0]].get("source_event_id", ""))
+        if len(identity_events) == 1 else ""
+    )
     identity_ok = bool(
         len(identity_events) == 1
-        and identity_events[0] < len(events)
         and str(events[identity_events[0]].get("user_id", "")) == str(before.get("user_id", ""))
         and str(identity.get("verified_user_id", "")) == str(before.get("user_id", ""))
+        and identity_event_id
+        and identity_event_id == str(identity.get("source_event_id", ""))
         and read_events and identity_events[0] < read_events[0]
     )
     status_ok = bool(
