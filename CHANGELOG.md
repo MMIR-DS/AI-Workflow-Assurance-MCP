@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- Clarify deterministic evaluation results versus run-specific report metadata.
+- Add an opt-in CLI release gate that exits non-zero for `HOLD` and `NO_GO` decisions.
+- Bound dotted-path traversal to 32 components and expose unknown threshold names in `validate-spec` output.
+- Expand the focused source-mutation smoke set to eight selected mutations, including the CLI release gate.
+- Verify the built wheel in a clean virtual environment with runtime dependencies installed.
+
 ## 0.1.4
 
 - Reject release-report generation when the supplied workflow specification differs from the specification fingerprint in the evaluation report.
