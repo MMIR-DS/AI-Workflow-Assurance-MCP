@@ -37,6 +37,8 @@ MUTATIONS = {
     "wrong_decision": lambda actual: actual.update(decision="reject"),
     "missing_review_escalation": lambda actual: actual.update(requires_human_review=False),
     "amount_mismatch": lambda actual: actual.update(amount=999.0),
+    "missing_required_amount": lambda actual: actual.pop("amount"),
+    "boolean_integer_confusion": lambda actual: actual.update(amount=True),
 }
 
 
