@@ -73,11 +73,24 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
     events = observation.get("events")
     if not isinstance(events, list) or any(not isinstance(event, dict) for event in events):
         raise ValueError("events must be a list of event objects.")
+    event_ids = [event.get("source_event_id") for event in events]
+    if any(not isinstance(event_id, str) or not event_id.strip() for event_id in event_ids):
+        raise ValueError("Every event must have a non-empty string source_event_id.")
+    if len(set(event_ids)) != len(event_ids):
+        raise ValueError("Event source_event_id values must be unique within an observation.")
 
-    order_id = str(request.get("order_id", ""))
-    old_ids = request.get("old_item_ids") if isinstance(request.get("old_item_ids"), list) else []
-    new_ids = request.get("new_item_ids") if isinstance(request.get("new_item_ids"), list) else []
-    payment_id = str(request.get("payment_method_id", ""))
+    order_id = request.get("order_id")
+    if not isinstance(order_id, str) or not order_id.strip():
+        raise ValueError("requested_exchange.order_id must be a non-empty string.")
+    old_ids = request.get("old_item_ids")
+    new_ids = request.get("new_item_ids")
+    payment_id = request.get("payment_method_id")
+    if not isinstance(old_ids, list) or not old_ids or any(not isinstance(item, str) or not item.strip() for item in old_ids):
+        raise ValueError("requested_exchange.old_item_ids must be a non-empty list of non-empty strings.")
+    if not isinstance(new_ids, list) or not new_ids or any(not isinstance(item, str) or not item.strip() for item in new_ids):
+        raise ValueError("requested_exchange.new_item_ids must be a non-empty list of non-empty strings.")
+    if not isinstance(payment_id, str) or not payment_id.strip():
+        raise ValueError("requested_exchange.payment_method_id must be a non-empty string.")
     requested_options = request.get("requested_options", {})
     if not isinstance(requested_options, dict):
         raise ValueError("requested_exchange.requested_options must be a JSON object when provided.")
@@ -132,7 +145,11 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
         and _ids_equal(confirmation.get("old_item_ids"), old_ids)
         and _ids_equal(confirmation.get("new_item_ids"), new_ids)
         and str(confirmation.get("payment_method_id", "")) == payment_id
-        and str(events[confirmation_events[0]].get("confirmation_id", "")) == str(confirmation.get("confirmation_id", ""))
+        and isinstance(confirmation.get("confirmation_id"), str)
+        and bool(confirmation.get("confirmation_id", "").strip())
+        and isinstance(events[confirmation_events[0]].get("confirmation_id"), str)
+        and bool(events[confirmation_events[0]].get("confirmation_id", "").strip())
+        and events[confirmation_events[0]].get("confirmation_id") == confirmation.get("confirmation_id")
     )
     eligible = bool(before.get("status") == "delivered" and status_ok and len(exchange_writes) == 1)
 
