@@ -67,6 +67,9 @@ def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("source.trace_commit must be a non-empty string.")
     if not isinstance(checked_out_commit, str) or not checked_out_commit.strip():
         raise ValueError("source.checked_out_commit must be a non-empty string.")
+    database_reader = source.get("database_reader")
+    if not isinstance(database_reader, str) or not database_reader.strip():
+        raise ValueError("source.database_reader must be a non-empty string.")
     commit_match = checks["source_code_commit_matches_trace"]
     if commit_match != (trace_commit == checked_out_commit):
         raise ValueError("source commit metadata does not reconcile with source_code_commit_matches_trace.")
@@ -79,6 +82,17 @@ def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("database_evidence.before does not match report.order_id.")
     if str(after.get("order_id", "")) != str(report.get("order_id", "")):
         raise ValueError("database_evidence.after does not match report.order_id.")
+
+    collateral_check = evidence.get("other_database_entities_unchanged")
+    if not isinstance(collateral_check, bool):
+        raise ValueError("database_evidence.other_database_entities_unchanged must be a boolean.")
+    if collateral_check is not checks["no_other_database_entities_mutated"]:
+        raise ValueError("collateral-mutation metadata does not reconcile with its check.")
+    write_count = evidence.get("write_count_in_trace")
+    if isinstance(write_count, bool) or not isinstance(write_count, int) or write_count < 0:
+        raise ValueError("database_evidence.write_count_in_trace must be a non-negative integer.")
+    if decision == "GO" and write_count != 1:
+        raise ValueError("a GO report must contain exactly one write in the trace.")
 
     hashes = {
         "before": evidence.get("full_database_before_sha256"),
@@ -105,7 +119,7 @@ def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
             "trace_commit": trace_commit,
             "checked_out_commit": checked_out_commit,
             "source_commit_match": commit_match,
-            "database_reader": source.get("database_reader"),
+            "database_reader": database_reader,
             "database_path": source.get("database_path"),
             "source_authenticity": "not_verified",
             "cryptographic_signature_validation": "not_implemented",
