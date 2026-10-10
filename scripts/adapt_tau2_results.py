@@ -21,6 +21,7 @@ EXPECTED_ORDER_KEYS = {
     "exchange_payment_method_id", "exchange_price_difference", "return_items",
     "return_payment_method_id",
 }
+ORDER_KEYS = EXPECTED_ORDER_KEYS
 MUTABLE_FIELDS = {
     "status", "exchange_items", "exchange_new_items",
     "exchange_payment_method_id", "exchange_price_difference",
