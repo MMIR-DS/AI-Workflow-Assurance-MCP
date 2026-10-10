@@ -1,10 +1,6 @@
 name: Replay saved tau2 trace through AWA (no model calls)
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/awa-replay-existing-tau2.yml"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +9,6 @@ permissions:
 
 jobs:
   replay:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[replay-tau2-artifact]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
