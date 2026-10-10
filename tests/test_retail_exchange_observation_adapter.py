@@ -43,6 +43,8 @@ def test_valid_evidence_bundle_passes_release_gate() -> None:
         ("extra_write", "one_expected_write_only"),
         ("claimed_email_without_receipt", "notification_claim_matches_contract"),
         ("new_order_added", "no_unrequested_new_order"),
+        ("identity_event_mismatch", "identity_policy_respected"),
+        ("unknown_write_operation", "one_expected_write_only"),
     ],
 )
 def test_evidence_mutations_fail_closed(mutation: str, expected_check: str) -> None:
@@ -72,6 +74,13 @@ def test_evidence_mutations_fail_closed(mutation: str, expected_check: str) -> N
         }
     elif mutation == "new_order_added":
         observation["new_order_ids_after"].append("ORD-1003")
+    elif mutation == "identity_event_mismatch":
+        observation["events"][0]["source_event_id"] = "evt-auth-other"
+    elif mutation == "unknown_write_operation":
+        observation["events"].append({
+            "type": "write", "operation": "unexpected_mutation",
+            "order_id": "ORD-1001", "succeeded": True,
+        })
 
     case, _, report, release = evaluate_observation(observation, spec)
     assert case["actual"][expected_check] is False
