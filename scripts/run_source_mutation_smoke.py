@@ -59,10 +59,10 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "critical_regression_precedence",
         "description": "Disable critical-regression precedence in the overall comparison trend.",
-        "source": "if critical_regression_ids:",
-        "replacement": "if False and critical_regression_ids:",
+        "source": "if after_critical > before_critical:",
+        "replacement": "if after_critical < before_critical:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_critical_regression_takes_precedence_over_pass_rate_improvement",
-    },,
+    },
     {
         "id": "release_spec_drift_guard",
         "description": "Disable the check that release policy matches the evaluated workflow specification.",
@@ -157,7 +157,7 @@ def run_mutation_smoke() -> dict[str, Any]:
         "external_services": 0,
         "mutants": results,
         "limitations": [
-            "Only two hand-selected source mutations are tested.",
+            "Only seven hand-selected source mutations are tested.",
             "The mutation score applies only to this small selected set, not to all possible defects.",
             "This smoke test complements but does not replace broader mutation-testing tools and code review.",
         ],
