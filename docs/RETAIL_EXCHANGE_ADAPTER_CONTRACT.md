@@ -38,7 +38,7 @@ The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_i
 
 ### Event types
 
-- `identity_verified`: `order_id`, `user_id`; must precede the order read.
+- `identity_verified`: `order_id`, `user_id`, and a non-empty `source_event_id`; the event ID must exactly match `identity_evidence.source_event_id` and must precede the order read.
 - `order_read`: `order_id`; must precede the exchange write.
 - `customer_confirmed`: `order_id`, `confirmation_id`; must precede the exchange write and match the confirmation evidence.
 - `write`: `operation`, `order_id`, `succeeded`. The expected successful write is `exchange_order_items`; any extra write is rejected.
@@ -63,7 +63,7 @@ Money is parsed with decimal arithmetic and rounded to cents. Unknown/missing ev
 
 ## Validation
 
-The test suite covers a passing fixture and negative controls for unavailable variants, price mismatch, payment mismatch, unrelated state mutation, late confirmation, extra writes, unsupported notification claims, unintended order creation, unknown contract versions, and malformed evidence.
+The test suite covers a passing fixture and negative controls for unavailable variants, price mismatch, payment mismatch, unrelated state mutation, late confirmation, extra or unsupported write operations, mismatched identity-event linkage, unsupported notification claims, unintended order creation, unknown contract versions, malformed evidence, and malformed/out-of-scope requested options.
 
 ```bash
 python -m pytest tests/test_retail_exchange_observation_adapter.py
