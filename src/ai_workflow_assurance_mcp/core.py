@@ -1,18 +1,10 @@
-"""Core evaluation module (loads compressed payload from package data)."""
+"""Core evaluation module (bootstrap expands compressed source at import)."""
 from __future__ import annotations
 
 import base64
 import zlib
-from pathlib import Path
 
-def _load() -> bytes:
-    here = Path(__file__).resolve().parent
-    payload_dir = here / "_payload"
-    parts = sorted(payload_dir.glob("core.z64.*"))
-    if not parts:
-        raise ImportError("Missing core payload parts under _payload/")
-    z64 = "".join(p.read_text(encoding="ascii") for p in parts)
-    return zlib.decompress(base64.b64decode(z64.encode("ascii")))
-
-_SRC = _load()
-exec(compile(_SRC, __file__, "exec"), globals())
+_SRC = zlib.decompress(
+    base64.b64decode(
+        """
+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
