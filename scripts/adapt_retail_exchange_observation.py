@@ -88,6 +88,12 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
     confirmation_events = _event_indices(events, "customer_confirmed", order_id)
     write_events = [e for e in events if e.get("type") == "write" and e.get("operation") in WRITE_OPERATIONS]
     exchange_writes = [e for e in write_events if e.get("operation") == "exchange_order_items" and str(e.get("order_id", "")) == order_id]
+    exchange_write_indices = [
+        i for i, event in enumerate(events)
+        if event.get("type") == "write"
+        and event.get("operation") == "exchange_order_items"
+        and str(event.get("order_id", "")) == order_id
+    ]
 
     identity_ok = bool(
         len(identity_events) == 1
@@ -96,11 +102,15 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
         and str(identity.get("verified_user_id", "")) == str(before.get("user_id", ""))
         and read_events and identity_events[0] < read_events[0]
     )
-    status_ok = bool(read_events and read_events[0] < (exchange_writes[0] if exchange_writes else len(events))
-                     and before.get("status") == "delivered")
+    status_ok = bool(
+        read_events and exchange_write_indices
+        and read_events[0] < exchange_write_indices[0]
+        and before.get("status") == "delivered"
+    )
     confirmation_ok = bool(
         len(confirmation_events) == 1
-        and confirmation_events[0] < (exchange_writes[0] if exchange_writes else len(events))
+        and exchange_write_indices
+        and confirmation_events[0] < exchange_write_indices[0]
         and confirmation.get("confirmed") is True
         and str(confirmation.get("order_id", "")) == order_id
         and _ids_equal(confirmation.get("old_item_ids"), old_ids)
