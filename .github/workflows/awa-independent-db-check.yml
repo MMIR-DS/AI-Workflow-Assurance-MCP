@@ -1,0 +1,108 @@
+name: Independent tau2 RetailDB state verification (no model calls)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/verify_tau2_independent_db.py"
+      - "tests/test_tau2_adapter.py"
+      - "tests/fixtures/tau2_task0_trace_minimal.json"
+      - ".github/workflows/awa-independent-db-check.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  independent-db-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Check out tau2-bench at the trace's recorded source commit
+        uses: actions/checkout@v4
+        with:
+          repository: sierra-research/tau2-bench
+          ref: 4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699
+          path: tau2-bench
+      - name: Install pinned tau2-bench runtime
+        working-directory: tau2-bench
+        run: uv sync --extra dev
+      - name: Load archived trace (fixture fallback; no model runs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          gh run download 38047957343 \
+            --repo MMIR-DS/AI-Workflow-Assurance-MCP \
+            --name tau2-standalone-retail-smoke \
+            --dir saved-tau2
+          download_status=$?
+          set -e
+          TRACE_FILE="$(find saved-tau2 -type f -path '*/tau2-standalone-retail-task0/results.json' -print -quit 2>/dev/null)"
+          if [ -z "$TRACE_FILE" ]; then
+            echo "::warning::Archived result unavailable (status=$download_status); using committed minimal fixture."
+            TRACE_FILE="tests/fixtures/tau2_task0_trace_minimal.json"
+            TRACE_SOURCE="committed_minimal_fixture"
+          else
+            TRACE_SOURCE="archived_full_tau2_result"
+          fi
+          python - "$TRACE_FILE" "$TRACE_SOURCE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          results = json.loads(path.read_text(encoding="utf-8"))
+          source_commit = str((results.get("info") or {}).get("git_commit") or "")
+          if not source_commit:
+              raise SystemExit("Trace does not declare info.git_commit.")
+          print(f"Loaded {sys.argv[2]}: {path}; bytes={path.stat().st_size}; trace_source_commit={source_commit}")
+          PY
+          echo "TRACE_FILE=$TRACE_FILE" >> "$GITHUB_ENV"
+          echo "TRACE_SOURCE=$TRACE_SOURCE" >> "$GITHUB_ENV"
+      - name: Replay the write against a clean RetailDB and compare direct state
+        working-directory: tau2-bench
+        run: |
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          uv run python ../scripts/verify_tau2_independent_db.py \
+            --results "$GITHUB_WORKSPACE/$TRACE_FILE" \
+            --output "$GITHUB_WORKSPACE/awa-independent-db-report.json" \
+            --source-commit "$SOURCE_COMMIT"
+      - name: Enforce independent database decision
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report = json.loads(Path("awa-independent-db-report.json").read_text(encoding="utf-8"))
+          assert report["decision"] == "GO", report
+          assert report["checks"]["pre_state_matches_recorded_order_read"] is True, report
+          assert report["checks"]["independent_db_state_matches_recorded_exchange_response"] is True, report
+          assert report["checks"]["live_payment_profile_and_original_transaction_match"] is True, report
+          assert report["checks"]["tamper_probe_is_detected"] is True, report
+          assert report["summary"]["passed_checks"] == report["summary"]["total_checks"], report
+          print(json.dumps({
+              "trace_source": os.environ.get("TRACE_SOURCE"),
+              "decision": report["decision"],
+              "summary": report["summary"],
+              "checks": report["checks"]
+          }, indent=2))
+          PY
+      - name: Upload independent database evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awa-independent-retail-db-evidence
+          path: |
+            awa-independent-db-report.json
+            saved-tau2/**
+          if-no-files-found: warn
+          retention-days: 14
