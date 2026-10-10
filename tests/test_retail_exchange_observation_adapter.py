@@ -69,12 +69,15 @@ def test_evidence_mutations_fail_closed(mutation: str, expected_check: str) -> N
         observation["order_after"]["address"]["city"] = "Unexpected City"
     elif mutation == "confirmation_after_write":
         confirmation = observation["events"].pop(2)
+        confirmation["collector_sequence"] = 5
+        confirmation["occurred_at"] = "2026-10-10T12:00:00Z"
         observation["events"].append(confirmation)
     elif mutation == "extra_write":
         observation["events"].append({
             "type": "write", "operation": "modify_order",
             "order_id": "ORD-1001", "succeeded": True,
             "source_event_id": "evt-extra-write",
+            "collector_sequence": 5, "occurred_at": "2026-10-10T12:00:00Z",
         })
     elif mutation == "claimed_email_without_receipt":
         observation["notification_evidence"] = {
@@ -90,6 +93,7 @@ def test_evidence_mutations_fail_closed(mutation: str, expected_check: str) -> N
             "type": "write", "operation": "unexpected_mutation",
             "order_id": "ORD-1001", "succeeded": True,
             "source_event_id": "evt-unknown-write",
+            "collector_sequence": 5, "occurred_at": "2026-10-10T12:00:00Z",
         })
 
     case, _, report, release = evaluate_observation(observation, spec)
