@@ -14,7 +14,6 @@ from typing import Any
 
 from ai_workflow_assurance_mcp.core import create_release_report, evaluate_suite
 
-
 EXPECTED_ORDER_KEYS = {
     "order_id", "user_id", "address", "items", "status", "fulfillments",
     "payment_history", "cancel_reason", "exchange_items", "exchange_new_items",
