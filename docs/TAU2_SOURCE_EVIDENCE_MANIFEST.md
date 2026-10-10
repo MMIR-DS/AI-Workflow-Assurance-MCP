@@ -8,7 +8,7 @@ This is a source-specific adapter for the repository's pinned tau2 simulator—n
 
 ## Run
 
-First run the [independent RetailDB replay workflow](../.github/workflows/awa-independent-db-check.yml) and obtain its `awa-independent-db-report.json` artifact. Then, from a checkout with the project installed:
+The [independent RetailDB replay workflow](../.github/workflows/awa-independent-db-check.yml) now runs this adapter immediately after a successful replay and uploads both `awa-independent-db-report.json` and `awa-source-evidence-manifest.json`. To package a saved report manually, run the following from a checkout with the project installed:
 
 ```bash
 python scripts/adapt_tau2_db_evidence.py \
