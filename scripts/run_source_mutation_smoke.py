@@ -66,8 +66,8 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "release_spec_drift_guard",
         "description": "Disable the check that release policy matches the evaluated workflow specification.",
-        "source": "if stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]: ",
-        "replacement": "if False and stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]: ",
+        "source": "if stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]:",
+        "replacement": "if False and stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_rejects_spec_drift_from_evaluation_report",
     }
 ]
