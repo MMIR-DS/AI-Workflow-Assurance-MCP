@@ -30,6 +30,8 @@ def test_valid_evidence_bundle_passes_release_gate() -> None:
     assert case["actual"]["policy_violation_count"] == 0
     assert metadata["computed_price_difference_usd"] == "5.00"
     assert metadata["evidence_contract"] == "retail-exchange-observation-v1"
+    assert metadata["assurance_scope"] == "structural_and_policy_consistency_only"
+    assert metadata["production_ready"] is False
     assert metadata["evidence_integrity"] == {
         "structural_validation": "passed",
         "source_authenticity": "not_verified",
