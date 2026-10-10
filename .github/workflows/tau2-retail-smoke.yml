@@ -1,4 +1,4 @@
-name: tau2 retail smoke benchmark (AWA v0.1.2 baseline)
+name: Standalone tau2 retail smoke benchmark (not yet AWA-integrated)
 
 on:
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
       - name: Validate benchmark data
         working-directory: tau2-bench
         run: uv run tau2 check-data
-      - name: Run one retail task, one trial (bounded)
+      - name: Run one retail task and one trial (bounded; tau2 only)
         working-directory: tau2-bench
         shell: bash
         run: |
@@ -75,13 +75,13 @@ jobs:
             --max-steps "$MAX_STEPS" \
             --max-errors 4 \
             --timeout 480 \
-            --save-to awa-v0.1.2-retail-task0 \
+            --save-to tau2-standalone-retail-task0 \
             2>&1 | tee ../tau2-benchmark.log
       - name: Preserve trace, result, and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tau2-retail-smoke-v0.1.2
+          name: tau2-standalone-retail-smoke
           path: |
             tau2-bench/data/simulations/**
             tau2-benchmark.log
