@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,18 @@ def _ids_equal(left: Any, right: Any) -> bool:
     return isinstance(left, list) and isinstance(right, list) and Counter(map(str, left)) == Counter(map(str, right))
 
 
+def _parse_timestamp(value: Any, label: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty ISO-8601 timestamp.")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a valid ISO-8601 timestamp.") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{label} must include a timezone.")
+    return parsed.astimezone(timezone.utc)
+
+
 def _require_object(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a JSON object.")
@@ -55,13 +68,38 @@ def _event_indices(events: list[Any], event_type: str, order_id: str) -> list[in
     ]
 
 
-def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def normalize_observation(
+    observation: dict[str, Any],
+    *,
+    evaluation_time: datetime | None = None,
+    max_evidence_age_seconds: float | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Derive one AWA case from the v1 retail-exchange evidence contract."""
     if observation.get("schema_version") != "1.0":
         raise ValueError("schema_version must be '1.0'.")
     run_id = observation.get("run_id")
     if not isinstance(run_id, str) or not run_id.strip():
         raise ValueError("run_id must be a non-empty string.")
+    collected_at = _parse_timestamp(observation.get("collected_at"), "collected_at")
+    freshness_checked = max_evidence_age_seconds is not None
+    if freshness_checked:
+        if (
+            isinstance(max_evidence_age_seconds, bool)
+            or not isinstance(max_evidence_age_seconds, (int, float))
+            or max_evidence_age_seconds < 0
+        ):
+            raise ValueError("max_evidence_age_seconds must be a non-negative number.")
+        checked_at = evaluation_time or datetime.now(timezone.utc)
+        if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+            raise ValueError("evaluation_time must include a timezone.")
+        age_seconds = (checked_at.astimezone(timezone.utc) - collected_at).total_seconds()
+        if age_seconds < -30:
+            raise ValueError("collected_at is in the future beyond the 30-second clock-skew allowance.")
+        if age_seconds > max_evidence_age_seconds:
+            raise ValueError(
+                f"Evidence is stale: age {age_seconds:.1f}s exceeds "
+                f"max_evidence_age_seconds={max_evidence_age_seconds}."
+            )
 
     before = _require_object(observation.get("order_before"), "order_before")
     after = _require_object(observation.get("order_after"), "order_after")
@@ -78,6 +116,16 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
         raise ValueError("Every event must have a non-empty string source_event_id.")
     if len(set(event_ids)) != len(event_ids):
         raise ValueError("Event source_event_id values must be unique within an observation.")
+    sequences = [event.get("collector_sequence") for event in events]
+    if any(
+        isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1
+        for sequence in sequences
+    ):
+        raise ValueError("Every event must have a positive integer collector_sequence.")
+    if any(current <= previous for previous, current in zip(sequences, sequences[1:])):
+        raise ValueError("collector_sequence values must be strictly increasing in event order.")
+    for index, event in enumerate(events):
+        _parse_timestamp(event.get("occurred_at"), f"events[{index}].occurred_at")
 
     order_id = request.get("order_id")
     if not isinstance(order_id, str) or not order_id.strip():
@@ -285,6 +333,10 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
         "evidence_contract": "retail-exchange-observation-v1",
         "assurance_scope": "structural_and_policy_consistency_only",
         "production_ready": False,
+        "freshness_validation": {
+            "status": "passed" if freshness_checked else "not_configured",
+            "max_evidence_age_seconds": max_evidence_age_seconds,
+        },
         "evidence_integrity": {
             "structural_validation": "passed",
             "source_authenticity": "not_verified",
@@ -314,9 +366,17 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
 
 
 def evaluate_observation(
-    observation: dict[str, Any], spec: dict[str, Any]
+    observation: dict[str, Any],
+    spec: dict[str, Any],
+    *,
+    evaluation_time: datetime | None = None,
+    max_evidence_age_seconds: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
-    case, metadata = normalize_observation(observation)
+    case, metadata = normalize_observation(
+        observation,
+        evaluation_time=evaluation_time,
+        max_evidence_age_seconds=max_evidence_age_seconds,
+    )
     report = evaluate_suite(spec, [case])
     release = create_release_report(spec, report)
     return case, metadata, report, release
@@ -327,11 +387,14 @@ def main() -> int:
     parser.add_argument("--observation", required=True, type=Path)
     parser.add_argument("--spec", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--max-evidence-age-seconds", type=float, default=None, help="Reject evidence bundles older than this age; required by the deployment freshness policy.")
     args = parser.parse_args()
     try:
         observation = json.loads(args.observation.read_text(encoding="utf-8"))
         spec = json.loads(args.spec.read_text(encoding="utf-8"))
-        case, metadata, report, release = evaluate_observation(observation, spec)
+        case, metadata, report, release = evaluate_observation(
+            observation, spec, max_evidence_age_seconds=args.max_evidence_age_seconds
+        )
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         parser.error(str(exc))
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -349,6 +412,7 @@ def main() -> int:
         "run_id": observation.get("run_id"),
         "assurance_scope": metadata["assurance_scope"],
         "production_ready": metadata["production_ready"],
+        "freshness_validation": metadata["freshness_validation"],
         "pass_rate": report["summary"]["pass_rate"],
         "decision": release["decision"],
         "blocking_checks": release["blocking_checks"],
