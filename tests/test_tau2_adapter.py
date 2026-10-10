@@ -223,3 +223,44 @@ def test_independent_db_snapshot_contract_rejects_unknown_profile_payment_method
     )
     assert report["decision"] == "NO_GO"
     assert report["checks"]["replay_db_payment_profile_and_original_transaction_match"] is False
+
+def test_full_database_invariant_allows_only_target_order_change() -> None:
+    from scripts.verify_tau2_independent_db import other_database_entities_unchanged
+
+    before = {
+        "orders": {
+            "#W1": {"status": "delivered"},
+            "#W2": {"status": "pending"},
+        },
+        "products": {"P1": {"price": 10}},
+        "users": {"U1": {"payment_method": "C1"}},
+    }
+    after = {
+        "orders": {
+            "#W1": {"status": "exchange requested"},
+            "#W2": {"status": "pending"},
+        },
+        "products": {"P1": {"price": 10}},
+        "users": {"U1": {"payment_method": "C1"}},
+    }
+    assert other_database_entities_unchanged(before, after, "#W1") is True
+
+
+def test_full_database_invariant_rejects_mutated_product_or_other_order() -> None:
+    from scripts.verify_tau2_independent_db import other_database_entities_unchanged
+
+    before = {
+        "orders": {
+            "#W1": {"status": "delivered"},
+            "#W2": {"status": "pending"},
+        },
+        "products": {"P1": {"price": 10}},
+        "users": {"U1": {"payment_method": "C1"}},
+    }
+    mutated_product = json.loads(json.dumps(before))
+    mutated_product["products"]["P1"]["price"] = 11
+    mutated_order = json.loads(json.dumps(before))
+    mutated_order["orders"]["#W2"]["status"] = "cancelled"
+    assert other_database_entities_unchanged(before, mutated_product, "#W1") is False
+    assert other_database_entities_unchanged(before, mutated_order, "#W1") is False
+
