@@ -51,3 +51,46 @@ def test_cli_release_writes_json_file(tmp_path: Path):
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["decision"] == "GO"
     assert "warnings" in report
+
+
+
+def test_cli_validate_spec_reports_validity():
+    result = _run_cli("validate-spec", "--spec", str(EXAMPLES / "workflow.json"))
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["valid"] is True
+    assert payload["criterion_count"] > 0
+
+
+def test_cli_compare_baseline_and_candidate():
+    result = _run_cli(
+        "compare",
+        "--spec", str(EXAMPLES / "workflow.json"),
+        "--baseline", str(EXAMPLES / "cases_baseline.json"),
+        "--candidate", str(EXAMPLES / "cases_candidate.json"),
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "overall_trend" in payload
+    assert payload["workflow_id"] == "invoice-matching"
+
+
+def test_cli_explain_returns_bounded_failure_summary():
+    result = _run_cli(
+        "explain",
+        "--spec", str(EXAMPLES / "workflow.json"),
+        "--cases", str(EXAMPLES / "cases_baseline.json"),
+        "--max-items", "1",
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["failures_returned"] <= 1
+    assert "failure_groups" in payload
+
+
+def test_cli_invalid_input_returns_nonzero_without_traceback(tmp_path: Path):
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("{not-json", encoding="utf-8")
+    result = _run_cli("validate-spec", "--spec", str(invalid))
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
