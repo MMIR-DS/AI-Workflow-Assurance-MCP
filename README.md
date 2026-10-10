@@ -64,6 +64,12 @@ python scripts/run_assurance_mutation_harness.py
 python -m unittest tests.test_mutation_harness
 ```
 
+Run the focused source-code mutation smoke test (two hand-selected mutants; not comprehensive mutation testing):
+
+```bash
+python scripts/run_source_mutation_smoke.py
+```
+
 The harness checks one valid control and five seeded observation faults, including a missing required path and boolean/numeric type confusion. It reports fault detection, control false rejections, and repeatability. This is **input-fault detection**, not source-code mutation testing or a production reliability estimate; see [scope and interpretation](docs/AWA_MUTATION_HARNESS.md).
 
 ## Public retail workflow pack
