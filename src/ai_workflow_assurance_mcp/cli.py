@@ -17,6 +17,7 @@ from ai_workflow_assurance_mcp.core import (
     explain_report_failures,
     parse_json_text,
     summarize_thresholds,
+    summarize_unknown_thresholds,
     summarize_workflow_metadata,
     validate_spec,
 )
@@ -80,6 +81,7 @@ def _parser() -> argparse.ArgumentParser:
     release.add_argument("--spec", required=True)
     release.add_argument("--cases", required=True)
     release.add_argument("--output")
+    release.add_argument("--fail-on-non-go", action="store_true", help="exit 1 for HOLD or NO_GO after emitting the report")
     return parser
 
 
@@ -98,6 +100,7 @@ def main() -> None:
                     "workflow": summarize_workflow_metadata(spec),
                     "criterion_count": len(spec.get("criteria", [])) if isinstance(spec.get("criteria"), list) else 0,
                     "thresholds": summarize_thresholds(spec.get("thresholds")),
+                    "unknown_thresholds": summarize_unknown_thresholds(spec.get("thresholds")),
                     "errors": errors,
                 }
             _emit(result, args.output)
@@ -131,6 +134,8 @@ def main() -> None:
         else:  # Defensive: argparse prevents this branch.
             raise AssuranceInputError(f"Unsupported command: {args.command}")
         _emit(result, args.output)
+        if args.command == "release" and args.fail_on_non_go and result["decision"] != "GO":
+            raise SystemExit(1)
     except AssuranceInputError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
