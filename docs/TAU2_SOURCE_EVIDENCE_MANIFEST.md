@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`scripts/adapt_tau2_db_evidence.py` packages a report produced by `scripts/verify_tau2_independent_db.py` into a stable evidence manifest. It is a **read-only post-processor**: it reads the report, validates its structure and internal consistency, and writes a normalized manifest. It does not call a model, connect to the database, or execute workflow writes.
+`scripts/adapt_tau2_db_evidence.py` packages a report produced by `scripts/verify_tau2_independent_db.py` into a stable evidence manifest. It is a **read-only post-processor**: it reads the report, validates its structure and internal consistency, and writes a normalized manifest. It does not call a model, connect to the database, or execute workflow writes. The manifest always sets `release_eligible: false`, even when its simulator replay decision is `GO`.
 
 This is a source-specific adapter for the repository's pinned tau2 simulator—not a live commerce integration and not a production security control.
 
@@ -32,7 +32,7 @@ The command returns exit code 0 for a consistent `GO` report and 2 for a consist
 
 ## Trust boundary
 
-The manifest labels its scope as `pinned_simulator_replay_evidence_only` and sets `production_ready: false`. It does not authenticate the report, the collector, or the simulator binary. A SHA-256 fingerprint is a change-detection value, not a signature. The independent DB report represents a deterministic replay against the pinned benchmark database, not a forensic snapshot of the original model run's in-memory database.
+The manifest labels its scope as `pinned_simulator_replay_evidence_only`, sets `production_ready: false`, and sets `release_eligible: false`. A simulated `GO` is a result about the replay evidence, not authorization to release a production workflow. It does not authenticate the report, the collector, or the simulator binary. A SHA-256 fingerprint is a change-detection value, not a signature. The independent DB report represents a deterministic replay against the pinned benchmark database, not a forensic snapshot of the original model run's in-memory database.
 
 Before using an equivalent design against a real service, replace the simulator-specific reader with a least-privilege read-only connector, authenticate the source and collector, record source versions/timestamps, verify signed attestations where available, and define freshness and replay protection at the source boundary.
 

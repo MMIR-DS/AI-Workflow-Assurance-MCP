@@ -114,6 +114,7 @@ jobs:
           manifest = json.loads(Path("awa-source-evidence-manifest.json").read_text(encoding="utf-8"))
           assert manifest["decision"] == "GO", manifest
           assert manifest["production_ready"] is False, manifest
+          assert manifest["release_eligible"] is False, manifest
           assert manifest["assurance_scope"] == "pinned_simulator_replay_evidence_only", manifest
           assert manifest["source_provenance"]["source_commit_match"] is True, manifest
           assert manifest["database_evidence"]["tool_return_value_used_for_decision"] is False, manifest

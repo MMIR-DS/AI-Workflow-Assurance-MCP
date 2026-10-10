@@ -115,6 +115,8 @@ def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
         "decision": decision,
         "assurance_scope": "pinned_simulator_replay_evidence_only",
         "production_ready": False,
+        "release_eligible": False,
+        "release_eligibility_reason": "simulator replay evidence is not authenticated production-source evidence",
         "source_provenance": {
             "trace_commit": trace_commit,
             "checked_out_commit": checked_out_commit,
