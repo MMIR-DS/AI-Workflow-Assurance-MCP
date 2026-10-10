@@ -54,6 +54,36 @@ def test_cli_release_writes_json_file(tmp_path: Path):
 
 
 
+def test_cli_release_fail_on_non_go_exits_one_after_emitting_report(tmp_path: Path):
+    spec = {
+        "id": "gate-flow", "name": "Gate flow", "version": "1",
+        "criteria": [{"id": "critical_check", "operator": "equals", "actual_path": "status", "expected_path": "status", "severity": "critical"}],
+        "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+    }
+    cases = [{"case_id": "critical-mismatch", "expected": {"status": "safe"}, "actual": {"status": "unsafe"}}]
+    spec_path, cases_path, output_path = tmp_path / "spec.json", tmp_path / "cases.json", tmp_path / "release.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+    cases_path.write_text(json.dumps(cases), encoding="utf-8")
+    result = _run_cli("release", "--spec", str(spec_path), "--cases", str(cases_path), "--output", str(output_path), "--fail-on-non-go")
+    assert result.returncode == 1
+    assert json.loads(output_path.read_text(encoding="utf-8"))["decision"] == "NO_GO"
+
+
+def test_cli_validate_spec_lists_unknown_threshold_names(tmp_path: Path):
+    spec = {
+        "id": "unknown-threshold", "name": "Unknown threshold", "version": "1",
+        "criteria": [{"id": "x", "operator": "exists", "actual_path": "x"}],
+        "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0, "max_custom_metric": 5},
+    }
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+    result = _run_cli("validate-spec", "--spec", str(spec_path))
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["unknown_thresholds"] == ["max_custom_metric"]
+    assert any("Unknown release threshold" in error for error in payload["errors"])
+
+
 def test_cli_validate_spec_reports_validity():
     result = _run_cli("validate-spec", "--spec", str(EXAMPLES / "workflow.json"))
     assert result.returncode == 0, result.stderr
