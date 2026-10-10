@@ -821,6 +821,8 @@ def create_release_report(spec: dict[str, Any], report: dict[str, Any]) -> dict[
         raise AssuranceInputError("Invalid release inputs: " + " ".join(errors))
     if spec["id"] != report["workflow"]["id"]:
         raise AssuranceInputError("Workflow specification and evaluation report have different workflow ids.")
+    if stable_json_digest(spec) != report["audit"]["spec_sha256"]:
+        raise AssuranceInputError("Workflow specification does not match the specification used to evaluate this report.")
     thresholds = spec["thresholds"]
     summary = report["summary"]
     checks: list[dict[str, Any]] = []
