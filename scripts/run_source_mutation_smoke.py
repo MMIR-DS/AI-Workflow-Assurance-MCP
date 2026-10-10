@@ -7,8 +7,10 @@ specific regression test. No model calls or external services are used.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -155,6 +157,12 @@ def run_mutation_smoke() -> dict[str, Any]:
         "mutation_score": killed_count / len(MUTANTS) if MUTANTS else 1.0,
         "model_calls": 0,
         "external_services": 0,
+        "environment": {
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "git_revision": os.environ.get("GITHUB_SHA"),
+            "github_run_id": os.environ.get("GITHUB_RUN_ID"),
+        },
         "mutants": results,
         "limitations": [
             "Only seven hand-selected source mutations are tested.",
@@ -165,8 +173,17 @@ def run_mutation_smoke() -> dict[str, Any]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Run focused source-code mutation checks.")
+    parser.add_argument("--output", help="Optional path to write the JSON report.")
+    args = parser.parse_args()
+
     report = run_mutation_smoke()
-    print(json.dumps(report, indent=2, ensure_ascii=True))
+    serialized = json.dumps(report, indent=2, ensure_ascii=True) + "\\n"
+    print(serialized, end="")
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(serialized, encoding="utf-8")
     return 0 if report["passed"] else 1
 
 
