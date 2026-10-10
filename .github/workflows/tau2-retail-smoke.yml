@@ -1,0 +1,93 @@
+name: tau2 retail smoke benchmark (AWA v0.1.2 baseline)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/tau2-retail-smoke.yml"
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "LiteLLM model identifier for OpenRouter"
+        required: true
+        default: "openrouter/google/gemini-2.5-flash"
+        type: string
+      max_steps:
+        description: "Maximum agent turns; keeps the trial bounded"
+        required: true
+        default: "40"
+        type: choice
+        options: ["20", "40", "60"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tau2-retail-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_API_BASE: https://openrouter.ai/api/v1
+      MODEL: ${{ inputs.model || 'openrouter/google/gemini-2.5-flash' }}
+      MAX_STEPS: ${{ inputs.max_steps || '40' }}
+    steps:
+      - name: Check required secret
+        shell: bash
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::Missing repository secret OPENROUTER_API_KEY"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Check out public tau2-bench
+        uses: actions/checkout@v4
+        with:
+          repository: sierra-research/tau2-bench
+          path: tau2-bench
+      - name: Install tau2-bench
+        working-directory: tau2-bench
+        run: uv sync --extra dev
+      - name: Validate benchmark data
+        working-directory: tau2-bench
+        run: uv run tau2 check-data
+      - name: Run one retail task, one trial (bounded)
+        working-directory: tau2-bench
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run tau2 run \
+            --domain retail \
+            --agent llm_agent \
+            --agent-llm "$MODEL" \
+            --user-llm "$MODEL" \
+            --num-trials 1 \
+            --task-ids 0 \
+            --max-concurrency 1 \
+            --max-steps "$MAX_STEPS" \
+            --max-errors 4 \
+            --timeout 480 \
+            --save-to awa-v0.1.2-retail-task0 \
+            2>&1 | tee ../tau2-benchmark.log
+      - name: Preserve trace, result, and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tau2-retail-smoke-v0.1.2
+          path: |
+            tau2-bench/data/simulations/**
+            tau2-benchmark.log
+          if-no-files-found: warn
+          retention-days: 14
