@@ -56,6 +56,9 @@ jobs:
       - name: Install tau2-bench
         working-directory: tau2-bench
         run: uv sync --extra dev
+      - name: Install missing runtime dependency used by tau2 data checks
+        working-directory: tau2-bench
+        run: uv pip install --python .venv/bin/python 'websockets>=13.0'
       - name: Validate benchmark data
         working-directory: tau2-bench
         run: uv run tau2 check-data
