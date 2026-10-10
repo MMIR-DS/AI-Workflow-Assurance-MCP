@@ -283,6 +283,11 @@ def normalize_observation(observation: dict[str, Any]) -> tuple[dict[str, Any], 
         "schema_version": "1.0",
         "run_id": run_id,
         "evidence_contract": "retail-exchange-observation-v1",
+        "evidence_integrity": {
+            "structural_validation": "passed",
+            "source_authenticity": "not_verified",
+            "cryptographic_signature_validation": "not_implemented",
+        },
         "evidence_sources": {
             "identity": "identity verification event and verified_user_id",
             "initial_state": "order_before snapshot plus ordered order_read event",
