@@ -37,9 +37,9 @@ MUTANTS: list[dict[str, str]] = [
     },
     {
         "id": "release_threshold_gate",
-        "description": "Make the minimum pass-rate threshold exclusive instead of inclusive.",
+        "description": "Force threshold checks to fail even when the observed metric meets the limit.",
         "source": "passed = observed >= limit if comparator == \">=\" else observed <= limit",
-        "replacement": "passed = observed > limit if comparator == \">=\" else observed <= limit",
+        "replacement": "passed = False",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_pass_rate_threshold_is_inclusive",
     },
     {
