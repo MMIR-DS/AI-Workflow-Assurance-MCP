@@ -1,83 +1,423 @@
-"""Bootstrap loader for test_core.py; expands compressed source at import time."""
 from __future__ import annotations
 
-import base64
-import zlib
+import json
+import unittest
 
-_SRC = zlib.decompress(
-    base64.b64decode(
-        """
-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
-""".encode("ascii")
-    )
+from ai_workflow_assurance_mcp.core import (
+    AssuranceInputError,
+    compare_reports,
+    create_release_report,
+    evaluate_suite,
+    explain_report_failures,
+    parse_json_text,
+    stable_json_digest,
+    summarize_thresholds,
+    summarize_workflow_metadata,
+    validate_spec,
 )
-exec(compile(_SRC, __file__, "exec"), globals())
+
+SPEC = {
+    "id": "invoice-match",
+    "name": "Invoice matching workflow",
+    "version": "1.0.0",
+    "criteria": [
+        {
+            "id": "decision_matches",
+            "operator": "equals",
+            "actual_path": "decision",
+            "expected_path": "decision",
+            "severity": "high",
+        },
+        {
+            "id": "review_flag_matches",
+            "operator": "equals",
+            "actual_path": "requires_human_review",
+            "expected_path": "requires_human_review",
+            "severity": "critical",
+        },
+        {
+            "id": "amount_variance",
+            "operator": "approx",
+            "actual_path": "amount_variance",
+            "expected_path": "amount_variance",
+            "tolerance": 0.01,
+            "severity": "high",
+        },
+    ],
+    "thresholds": {
+        "min_pass_rate": 0.9,
+        "max_critical_failures": 0,
+        "max_review_rate": 0.5,
+        "max_avg_cost_usd": 0.1,
+        "max_avg_latency_ms": 2000,
+    },
+}
+
+BASE_CASES = [
+    {
+        "case_id": "exact-match",
+        "expected": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
+        "actual": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
+        "human_review_observed": False,
+        "cost_usd": 0.03,
+        "latency_ms": 1000,
+    },
+    {
+        "case_id": "amount-mismatch",
+        "expected": {"decision": "review", "requires_human_review": True, "amount_variance": 25.0},
+        "actual": {"decision": "approve", "requires_human_review": False, "amount_variance": 25.0},
+        "human_review_observed": False,
+        "cost_usd": 0.04,
+        "latency_ms": 1200,
+    },
+]
+
+
+class WorkflowAssuranceTests(unittest.TestCase):
+    def test_valid_spec(self):
+        self.assertEqual(validate_spec(SPEC), [])
+
+    def test_rejects_unsafe_paths_and_unknown_operators(self):
+        bad = json.loads(json.dumps(SPEC))
+        bad["criteria"][0]["actual_path"] = "__class__.__mro__"
+        bad["criteria"][1]["operator"] = "execute_python"
+        errors = validate_spec(bad)
+        self.assertTrue(any("actual_path" in error for error in errors))
+        self.assertTrue(any("operator" in error for error in errors))
+
+    def test_evaluation_counts_critical_failure(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        self.assertEqual(report["summary"]["total_cases"], 2)
+        self.assertEqual(report["summary"]["passed_cases"], 1)
+        self.assertEqual(report["summary"]["critical_failures"], 1)
+        self.assertEqual(report["summary"]["pass_rate"], 0.5)
+
+    def test_release_is_no_go_when_critical_failures_exist(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        decision = create_release_report(SPEC, report)
+        self.assertEqual(decision["decision"], "NO_GO")
+        self.assertIn("critical_failures", decision["blocking_checks"])
+
+    def test_review_threshold_is_not_evaluable_without_full_coverage(self):
+        cases = [{"case_id": "no-review-data", "expected": {"x": 1}, "actual": {"x": 1}, "cost_usd": 0.01, "latency_ms": 10}]
+        spec = {
+            "id": "simple-flow", "name": "Simple flow", "version": "1",
+            "criteria": [{"id": "x_match", "operator": "equals", "actual_path": "x", "expected_path": "x"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0, "max_review_rate": 0.2},
+        }
+        report = evaluate_suite(spec, cases)
+        decision = create_release_report(spec, report)
+        self.assertEqual(decision["decision"], "HOLD")
+        self.assertEqual(next(c for c in decision["checks"] if c["metric"] == "review_rate")["status"], "NOT_EVALUABLE")
+
+    def test_compare_reports_flags_improvement(self):
+        baseline = evaluate_suite(SPEC, BASE_CASES)
+        candidate_cases = json.loads(json.dumps(BASE_CASES))
+        candidate_cases[1]["actual"] = json.loads(json.dumps(candidate_cases[1]["expected"]))
+        candidate_cases[1]["human_review_observed"] = True
+        candidate = evaluate_suite(SPEC, candidate_cases)
+        comparison = compare_reports(baseline, candidate)
+        self.assertEqual(comparison["overall_trend"], "IMPROVED_WITH_TRADEOFF")
+        self.assertEqual(comparison["metrics"]["pass_rate"]["comparison"], "improved")
+
+    def test_explains_failures_critical_first(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        result = explain_report_failures(report, max_items=1)
+        self.assertEqual(result["failures_returned"], 1)
+        self.assertEqual(result["failures"][0]["severity"], "critical")
+        self.assertTrue(result["truncated"])
+
+    def test_cannot_compare_different_workflows(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        other = json.loads(json.dumps(report))
+        other["workflow"]["id"] = "different-workflow"
+        with self.assertRaises(AssuranceInputError):
+            compare_reports(report, other)
+
+    def test_cannot_compare_different_case_sets(self):
+        baseline = evaluate_suite(SPEC, BASE_CASES)
+        changed = json.loads(json.dumps(BASE_CASES))
+        changed[1]["case_id"] = "new-case-id"
+        candidate = evaluate_suite(SPEC, changed)
+        with self.assertRaises(AssuranceInputError):
+            compare_reports(baseline, candidate)
+
+    def test_invalid_cases_are_rejected(self):
+        with self.assertRaises(AssuranceInputError):
+            evaluate_suite(SPEC, [{"case_id": "duplicate", "expected": {}, "actual": {}}, {"case_id": "duplicate", "expected": {}, "actual": {}}])
+
+    def test_nonstandard_nan_token_is_rejected(self):
+        with self.assertRaises(AssuranceInputError):
+            parse_json_text('{"value": NaN}', "input")
+
+    def test_unhashable_operator_does_not_crash_validation(self):
+        bad = json.loads(json.dumps(SPEC))
+        bad["criteria"][0]["operator"] = ["equals"]
+        self.assertTrue(validate_spec(bad))
+
+    def test_large_values_are_bounded_in_reports(self):
+        spec = {
+            "id": "text-flow", "name": "Text flow", "version": "1",
+            "criteria": [{"id": "text_match", "operator": "equals", "actual_path": "text", "expected_path": "text"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+        cases = [{"case_id": "long-text", "expected": {"text": "x" * 3000}, "actual": {"text": "y" * 3000}}]
+        report = evaluate_suite(spec, cases)
+        actual_value = report["case_results"][0]["checks"][0]["actual_value"]
+        self.assertTrue(actual_value["_truncated"])
+        self.assertLessEqual(len(actual_value["preview"]), 984)
+
+
+    def test_nested_equality_does_not_treat_bool_as_integer(self):
+        spec = {
+            "id": "nested-type", "name": "Nested types", "version": "1",
+            "criteria": [{"id": "payload_matches", "operator": "equals", "actual_path": "payload", "expected_path": "payload"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+        report = evaluate_suite(spec, [{"case_id": "typed", "expected": {"payload": {"values": [1]}}, "actual": {"payload": {"values": [True]}}}])
+        self.assertFalse(report["case_results"][0]["passed"])
+
+    def test_contains_does_not_treat_bool_as_integer(self):
+        spec = {
+            "id": "contains-type", "name": "Contains type", "version": "1",
+            "criteria": [{"id": "value_allowed", "operator": "contains", "actual_path": "values", "expected_value": 1}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+        report = evaluate_suite(spec, [{"case_id": "typed", "expected": {}, "actual": {"values": [True]}}])
+        self.assertFalse(report["case_results"][0]["passed"])
+
+    def test_extreme_json_numbers_become_input_errors(self):
+        with self.assertRaises(AssuranceInputError):
+            parse_json_text('{"value": ' + "9" * 5000 + '}', "input")
+        with self.assertRaises(AssuranceInputError):
+            parse_json_text('{"value": ' + "9" * 400 + '}', "input")
+        with self.assertRaises(AssuranceInputError):
+            parse_json_text('{"value": 1e999}', "input")
+
+    def test_zero_minimum_pass_rate_is_rejected(self):
+        spec = json.loads(json.dumps(SPEC))
+        spec["thresholds"]["min_pass_rate"] = 0
+        self.assertTrue(any("min_pass_rate" in error for error in validate_spec(spec)))
+
+    def test_review_rate_requires_explicit_observation(self):
+        spec = {
+            "id": "review-observation", "name": "Review observation", "version": "1",
+            "criteria": [{"id": "review_flag", "operator": "is_true", "actual_path": "requires_human_review", "severity": "high"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0, "max_review_rate": 0.5},
+        }
+        report = evaluate_suite(spec, [{"case_id": "no-observation", "expected": {}, "actual": {"requires_human_review": True}}])
+        self.assertEqual(report["summary"]["review_observation_coverage"], 0.0)
+        self.assertIsNone(report["summary"]["review_rate"])
+        release = create_release_report(spec, report)
+        self.assertEqual(release["decision"], "HOLD")
+
+    def test_expected_labels_cannot_change_between_compared_runs(self):
+        baseline = evaluate_suite(SPEC, BASE_CASES)
+        candidate_cases = json.loads(json.dumps(BASE_CASES))
+        candidate_cases[0]["expected"]["decision"] = "reject"
+        candidate = evaluate_suite(SPEC, candidate_cases)
+        with self.assertRaisesRegex(AssuranceInputError, "expected labels changed"):
+            compare_reports(baseline, candidate)
+
+    def test_case_level_regression_is_not_hidden_by_equal_pass_rate(self):
+        spec = {
+            "id": "case-regression", "name": "Case regression", "version": "1",
+            "criteria": [{"id": "match", "operator": "equals", "actual_path": "decision", "expected_path": "decision"}],
+            "thresholds": {"min_pass_rate": 0.5, "max_critical_failures": 0},
+        }
+        baseline_cases = [
+            {"case_id": "a", "expected": {"decision": "ok"}, "actual": {"decision": "bad"}},
+            {"case_id": "b", "expected": {"decision": "ok"}, "actual": {"decision": "ok"}},
+        ]
+        candidate_cases = [
+            {"case_id": "a", "expected": {"decision": "ok"}, "actual": {"decision": "ok"}},
+            {"case_id": "b", "expected": {"decision": "ok"}, "actual": {"decision": "bad"}},
+        ]
+        comparison = compare_reports(evaluate_suite(spec, baseline_cases), evaluate_suite(spec, candidate_cases))
+        self.assertEqual(comparison["overall_trend"], "MIXED_CASE_CHANGES")
+        self.assertEqual(comparison["regressed_case_ids"], ["b"])
+        self.assertEqual(comparison["improved_case_ids"], ["a"])
+
+    def test_critical_regression_takes_precedence_over_pass_rate_improvement(self):
+        spec = {
+            "id": "critical-regression", "name": "Critical regression", "version": "1",
+            "criteria": [
+                {"id": "decision", "operator": "equals", "actual_path": "decision", "expected_path": "decision", "severity": "high"},
+                {"id": "safety", "operator": "is_true", "actual_path": "safe", "severity": "critical"},
+            ],
+            "thresholds": {"min_pass_rate": 0.5, "max_critical_failures": 10},
+        }
+        baseline_cases = [
+            {"case_id": "a", "expected": {"decision": "ok"}, "actual": {"decision": "bad", "safe": True}},
+            {"case_id": "b", "expected": {"decision": "ok"}, "actual": {"decision": "bad", "safe": True}},
+            {"case_id": "c", "expected": {"decision": "ok"}, "actual": {"decision": "ok", "safe": True}},
+            {"case_id": "d", "expected": {"decision": "ok"}, "actual": {"decision": "ok", "safe": True}},
+        ]
+        candidate_cases = json.loads(json.dumps(baseline_cases))
+        candidate_cases[0]["actual"]["decision"] = "ok"
+        candidate_cases[1]["actual"]["decision"] = "ok"
+        candidate_cases[2]["actual"]["safe"] = False
+        comparison = compare_reports(evaluate_suite(spec, baseline_cases), evaluate_suite(spec, candidate_cases))
+        self.assertGreater(comparison["metrics"]["pass_rate"]["delta"], 0)
+        self.assertEqual(comparison["overall_trend"], "REGRESSED_CRITICAL_FAILURES")
+
+    def test_cost_threshold_compares_unrounded_values_and_max_case(self):
+        spec = {
+            "id": "cost-latency", "name": "Cost and latency", "version": "1",
+            "criteria": [{"id": "x", "operator": "equals", "actual_path": "x", "expected_path": "x"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0, "max_avg_cost_usd": 0.1, "max_case_latency_ms": 2000},
+        }
+        cases = [{"case_id": f"normal-{i}", "expected": {"x": 1}, "actual": {"x": 1}, "cost_usd": 0.1, "latency_ms": 100} for i in range(99)]
+        cases.append({"case_id": "outlier", "expected": {"x": 1}, "actual": {"x": 1}, "cost_usd": 0.1000004, "latency_ms": 100000})
+        report = evaluate_suite(spec, cases)
+        self.assertGreater(report["summary"]["avg_cost_usd_per_observed_case"], 0.1)
+        release = create_release_report(spec, report)
+        self.assertEqual(release["decision"], "NO_GO")
+        self.assertIn("avg_cost_usd_per_case", release["blocking_checks"])
+        self.assertIn("max_case_latency_ms", release["blocking_checks"])
+
+    def test_forged_summary_inconsistent_with_case_results_is_rejected(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        forged = json.loads(json.dumps(report))
+        forged["summary"]["pass_rate"] = 1.0
+        with self.assertRaisesRegex(AssuranceInputError, "does not match case_results"):
+            create_release_report(SPEC, forged)
+
+    def test_report_contains_reproducibility_digests(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        self.assertEqual(len(report["audit"]["spec_sha256"]), 64)
+        self.assertEqual(len(report["audit"]["criteria_sha256"]), 64)
+        self.assertEqual(len(report["audit"]["thresholds_sha256"]), 64)
+        self.assertEqual(len(report["audit"]["cases_sha256"]), 64)
+        self.assertEqual(len(report["case_results"][0]["expected_sha256"]), 64)
+
+
+    def test_conflicting_review_observation_aliases_are_rejected(self):
+        cases = [{
+            "case_id": "conflicting-review",
+            "expected": {"x": 1},
+            "actual": {"x": 1, "requires_human_review": True},
+            "human_review_observed": False,
+            "human_review_required": True,
+        }]
+        spec = {
+            "id": "review-conflict", "name": "Review conflict", "version": "1",
+            "criteria": [{"id": "x", "operator": "equals", "actual_path": "x", "expected_path": "x"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+        with self.assertRaisesRegex(AssuranceInputError, "conflicts with legacy"):
+            evaluate_suite(spec, cases)
+
+
+    def test_lone_surrogate_can_be_fingerprinted_and_evaluated(self):
+        self.assertEqual(len(stable_json_digest({"value": "\ud800"})), 64)
+        spec = {
+            "id": "surrogate-flow", "name": "Surrogate flow", "version": "1",
+            "criteria": [{"id": "value_matches", "operator": "equals", "actual_path": "value", "expected_path": "value"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+        report = evaluate_suite(spec, [{"case_id": "surrogate", "expected": {"value": "\ud800"}, "actual": {"value": "\ud800"}}])
+        self.assertTrue(report["case_results"][0]["passed"])
+        self.assertIn("\\ud800", json.dumps(report, ensure_ascii=True))
+
+    def test_json_nesting_depth_is_limited_for_text_and_python_inputs(self):
+        deeply_nested = "[" * 70 + "0" + "]" * 70
+        with self.assertRaisesRegex(AssuranceInputError, "nesting depth"):
+            parse_json_text(deeply_nested, "deep")
+        # The documented cap is 64 containers. 64 is accepted; 65 is rejected.
+        acceptable = "[" * 64 + "0" + "]" * 64
+        self.assertEqual(parse_json_text(acceptable, "depth-ok"), json.loads(acceptable))
+        over_limit = "[" * 65 + "0" + "]" * 65
+        with self.assertRaisesRegex(AssuranceInputError, "nesting depth"):
+            parse_json_text(over_limit, "depth-over")
+        spec = {
+            "id": "deep-flow", "name": "Deep flow", "version": "1",
+            "criteria": [{"id": "value_matches", "operator": "equals", "actual_path": "value", "expected_path": "value"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+        nested: object = 1
+        for _ in range(70):
+            nested = [nested]
+        with self.assertRaisesRegex(AssuranceInputError, "Invalid cases"):
+            evaluate_suite(spec, [{"case_id": "deep", "expected": {"value": nested}, "actual": {"value": nested}}])
+
+    def test_digest_normalizes_integral_float_to_equal_integer(self):
+        self.assertEqual(stable_json_digest({"amount": 0}), stable_json_digest({"amount": 0.0}))
+        self.assertEqual(stable_json_digest({"amount": [1, 2.0]}), stable_json_digest({"amount": [1.0, 2]}))
+        with self.assertRaises(AssuranceInputError):
+            stable_json_digest({"amount": float("nan")})
+        with self.assertRaises(AssuranceInputError):
+            stable_json_digest({"amount": float("inf")})
+
+    def test_compare_reports_accepts_numerically_equal_expected_labels(self):
+        spec = {
+            "id": "numeric-labels", "name": "Numeric labels", "version": "1",
+            "criteria": [{"id": "amount_matches", "operator": "equals", "actual_path": "amount", "expected_path": "amount"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+        baseline = evaluate_suite(spec, [{"case_id": "a", "expected": {"amount": 0.0}, "actual": {"amount": 0}}])
+        candidate = evaluate_suite(spec, [{"case_id": "a", "expected": {"amount": 0}, "actual": {"amount": 0.0}}])
+        self.assertFalse(compare_reports(baseline, candidate)["thresholds_changed"])
+
+    def test_threshold_preview_omits_unknown_and_unbounded_values(self):
+        preview = summarize_thresholds({
+            "min_pass_rate": 0.9,
+            "max_critical_failures": 0,
+            "unknown": "x" * 1_000_000,
+            "max_review_rate": {"nested": "bad"},
+        })
+        self.assertEqual(preview, {"min_pass_rate": 0.9, "max_critical_failures": 0})
+
+
+    def test_workflow_metadata_preview_is_bounded(self):
+        preview = summarize_workflow_metadata({"id": "x" * 1_000_000, "name": "Test", "version": 7})
+        self.assertEqual(len(preview["id"]), 160)
+        self.assertEqual(preview["name"], "Test")
+        self.assertIsNone(preview["version"])
+
+    def test_package_version_matches_project_metadata(self):
+        import re
+        from pathlib import Path
+
+        from ai_workflow_assurance_mcp import __version__
+        pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject)
+        self.assertIsNotNone(match)
+        self.assertEqual(__version__, match.group(1))
+
+
+    def test_high_failure_cap_can_block_release(self):
+        spec = {
+            "id": "high-cap", "name": "High failure cap", "version": "1",
+            "criteria": [{"id": "decision_matches", "operator": "equals", "actual_path": "decision", "expected_path": "decision", "severity": "high"}],
+            "thresholds": {"min_pass_rate": 0.5, "max_critical_failures": 0, "max_high_failures": 0},
+        }
+        cases = [{"case_id": "a", "expected": {"decision": "approve"}, "actual": {"decision": "reject"}}]
+        release = create_release_report(spec, evaluate_suite(spec, cases))
+        self.assertEqual(release["decision"], "NO_GO")
+        self.assertIn("high_failures", release["blocking_checks"])
+
+    def test_failure_group_case_ids_are_bounded(self):
+        spec = {
+            "id": "group-cap", "name": "Group cap", "version": "1",
+            "criteria": [{"id": "decision_matches", "operator": "equals", "actual_path": "decision", "expected_path": "decision", "severity": "high"}],
+            "thresholds": {"min_pass_rate": 0.5, "max_critical_failures": 0},
+        }
+        cases = [{"case_id": f"case-{index}", "expected": {"decision": "approve"}, "actual": {"decision": "reject"}} for index in range(40)]
+        failure_report = explain_report_failures(evaluate_suite(spec, cases), max_items=100)
+        group = failure_report["failure_groups"][0]
+        self.assertEqual(len(group["case_ids"]), 20)
+        self.assertEqual(group["case_ids_omitted_count"], 20)
+        self.assertEqual(group["failure_count"], 40)
+
+    def test_validation_error_output_is_bounded(self):
+        spec = json.loads(json.dumps(SPEC))
+        spec["thresholds"].update({f"unknown_{index}_" + "x" * 350: True for index in range(150)})
+        errors = validate_spec(spec)
+        self.assertLessEqual(len(errors), 101)
+        self.assertTrue(all(len(message) <= 300 for message in errors))
+        self.assertTrue(any("Additional validation errors omitted" in message for message in errors))
+
+
+if __name__ == "__main__":
+    unittest.main()
