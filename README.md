@@ -1,27 +1,25 @@
-# AI Workflow Assurance MCP — v0.1.2 baseline
+# AI Workflow Assurance MCP — bootstrap status
 
-The first commit has initialized this repository. The full v0.1.2 source tree and GitHub Actions workflows are prepared in the starter bundle linked in the ChatGPT conversation.
+This repository is being prepared for a reproducible **v0.1.2** baseline.
 
-## Next step: add the source and workflows
+## Current repository state
 
-The connected GitHub integration was able to create this initial commit, but the bulk source upload has not been completed here. Download and extract `AI_Workflow_Assurance_v0.1.2_GitHub_Starter.zip` from the conversation, open PowerShell in the extracted folder, and run:
+- The initial repository commit and this README exist.
+- `.github/workflows/tau2-retail-smoke.yml` has been added as a **manual-only** OpenRouter-backed smoke run against the public `sierra-research/tau2-bench` retail task 0.
+- **The AWA v0.1.2 source package and its tests have not yet been committed to this repository.** The smoke workflow only runs tau2-bench; it does not call AWA or prove AWA detects a workflow violation.
+- The complete starter bundle is available in the related ChatGPT conversation as `AI_Workflow_Assurance_v0.1.2_GitHub_Starter.zip`. It contains the v0.1.2 source archive, public simulated retail workflow pack, CI workflow, documentation, and a PowerShell helper for a safe Git push.
 
-```powershell
-.\PUSH_TO_GITHUB.ps1
-```
+## What is needed to complete the baseline
 
-The script clones this repository, copies the starter source into it, commits, and pushes to `main`. Sign in through Git Credential Manager if prompted. It does not force-push or store GitHub credentials. If the push fails, stop and review the error rather than pasting a token into chat.
+Transfer the starter bundle's source and `.github/workflows/ci.yml` into the repository. Once the source is present, CI should install the package and run pytest and Ruff across supported Python versions. Only after that should we adapt tau2 traces and final state into AWA's normalized observation contract.
 
-## Required secret
+## OpenRouter and cost controls
 
-In **Settings → Secrets and variables → Actions**, confirm that the repository secret is named exactly `OPENROUTER_API_KEY`. The workflow will not print its value.
+Create a repository secret named `OPENROUTER_API_KEY` under **Settings → Secrets and variables → Actions**. The benchmark workflow is manual-only and defaults to one retail task, one trial, one concurrent run, and a low step cap. Model calls may incur charges, so verify your OpenRouter spending limit before launching it.
 
-## Planned execution
+Go to **Actions → tau2 retail smoke benchmark (AWA v0.1.2 baseline) → Run workflow** to run the model-backed smoke test. It produces a downloadable artifact containing logs and simulation outputs. Do not treat a model-run result as evidence that AWA passed or failed until the AWA adapter and assurance report are integrated and reviewed.
 
-- CI will run the v0.1.2 tests and Ruff lint on Python 3.10–3.13 for pushes and pull requests.
-- The model-backed evaluation is manual-only under **Actions → tau2 retail smoke benchmark (AWA v0.1.2 baseline) → Run workflow**, to avoid surprise API charges.
-- Default run: one retail task (`0`), one trial, one concurrent run, max 80 steps, and OpenRouter model `openrouter/google/gemini-2.5-flash`.
-- Logs and the benchmark simulation output will be preserved as a workflow artifact.
+## Pinned source checksums
 
-The benchmark uses a simulated public retail environment, not real customer production data. The AWA test suite and tau2 run remain separate until a reviewed adapter converts the raw trace and final state into AWA's normalized observation contract; do not claim AWA caught a defect/regression until that adapter and evidence case are reviewed.
-
+- Full v0.1.2 source release ZIP: `8e8c3f31461857557bf4ea794e0266d00bd36c85056f8ca6e86b638a0b49567a`
+- Public retail workflow pack ZIP: `34e08942fba2da825b42b5a91394425a1fc5dbd348093bf40374478677de4af8`
