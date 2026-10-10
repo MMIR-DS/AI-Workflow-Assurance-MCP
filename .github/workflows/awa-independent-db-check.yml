@@ -85,6 +85,7 @@ jobs:
           report = json.loads(Path("awa-independent-db-report.json").read_text(encoding="utf-8"))
           assert report["decision"] == "GO", report
           assert report["checks"]["pre_state_matches_recorded_order_read"] is True, report
+          assert report["checks"]["no_other_database_entities_mutated"] is True, report
           assert report["checks"]["independent_db_state_matches_recorded_exchange_response"] is True, report
           assert report["checks"]["replay_db_payment_profile_and_original_transaction_match"] is True, report
           assert report["checks"]["tamper_probe_is_detected"] is True, report
