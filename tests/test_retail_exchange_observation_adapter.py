@@ -111,3 +111,27 @@ def test_adapter_does_not_trust_boolean_like_strings() -> None:
     case, _, _, release = evaluate_observation(observation, spec)
     assert case["actual"]["confirmation_policy_respected"] is False
     assert release["decision"] == "NO_GO"
+
+
+def test_adapter_rejects_non_object_requested_options() -> None:
+    observation, _ = _load()
+    observation["requested_exchange"]["requested_options"] = "not-an-object"
+
+    with pytest.raises(ValueError, match="requested_options must be a JSON object"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_non_object_option_entry() -> None:
+    observation, _ = _load()
+    observation["requested_exchange"]["requested_options"]["ITEM-12"] = "blue"
+
+    with pytest.raises(ValueError, match="Each requested_options entry must be a JSON object"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_options_for_unrequested_variant() -> None:
+    observation, _ = _load()
+    observation["requested_exchange"]["requested_options"]["ITEM-999"] = {"color": "blue"}
+
+    with pytest.raises(ValueError, match="only contain requested new_item_ids"):
+        normalize_observation(observation)
