@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -190,3 +191,67 @@ def test_adapter_rejects_malformed_required_item_lists() -> None:
 
     with pytest.raises(ValueError, match="old_item_ids must be a non-empty list"):
         normalize_observation(observation)
+
+
+def test_adapter_rejects_missing_collector_sequence() -> None:
+    observation, _ = _load()
+    observation["events"][1].pop("collector_sequence")
+
+    with pytest.raises(ValueError, match="positive integer collector_sequence"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_non_monotonic_collector_sequence() -> None:
+    observation, _ = _load()
+    observation["events"][2]["collector_sequence"] = 1
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_boolean_collector_sequence() -> None:
+    observation, _ = _load()
+    observation["events"][0]["collector_sequence"] = True
+
+    with pytest.raises(ValueError, match="positive integer collector_sequence"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_timezone_naive_collection_timestamp() -> None:
+    observation, _ = _load()
+    observation["collected_at"] = "2026-10-10T10:00:00"
+
+    with pytest.raises(ValueError, match="must include a timezone"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_stale_evidence_when_freshness_policy_is_configured() -> None:
+    observation, spec = _load()
+    evaluation_time = datetime(2026, 10, 10, 10, 10, tzinfo=timezone.utc)
+
+    with pytest.raises(ValueError, match="Evidence is stale"):
+        evaluate_observation(
+            observation, spec, evaluation_time=evaluation_time, max_evidence_age_seconds=300
+        )
+
+
+def test_adapter_reports_freshness_policy_as_unconfigured_by_default() -> None:
+    observation, spec = _load()
+    _, metadata, _, _ = evaluate_observation(observation, spec)
+
+    assert metadata["freshness_validation"] == {
+        "status": "not_configured", "max_evidence_age_seconds": None
+    }
+
+
+def test_adapter_passes_freshness_policy_when_evidence_is_recent() -> None:
+    observation, spec = _load()
+    evaluation_time = datetime(2026, 10, 10, 10, 1, tzinfo=timezone.utc)
+
+    _, metadata, _, _ = evaluate_observation(
+        observation, spec, evaluation_time=evaluation_time, max_evidence_age_seconds=300
+    )
+
+    assert metadata["freshness_validation"] == {
+        "status": "passed", "max_evidence_age_seconds": 300
+    }
