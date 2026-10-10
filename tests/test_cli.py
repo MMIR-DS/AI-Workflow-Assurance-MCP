@@ -72,7 +72,7 @@ def test_cli_compare_baseline_and_candidate():
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert "overall_trend" in payload
-    assert payload["workflow_id"] == "invoice-matching"
+    assert payload["workflow_id"] == "invoice-match"
 
 
 def test_cli_explain_returns_bounded_failure_summary():
