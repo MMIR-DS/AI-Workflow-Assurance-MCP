@@ -76,7 +76,9 @@ jobs:
             --domain retail \
             --agent llm_agent \
             --agent-llm "$MODEL" \
+            --agent-llm-args '{"max_tokens": 2048}' \
             --user-llm "$MODEL" \
+            --user-llm-args '{"max_tokens": 2048}' \
             --num-trials 1 \
             --task-ids 0 \
             --max-concurrency 1 \
