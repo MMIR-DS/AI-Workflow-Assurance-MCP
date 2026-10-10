@@ -66,6 +66,7 @@ def test_evidence_mutations_fail_closed(mutation: str, expected_check: str) -> N
         observation["events"].append({
             "type": "write", "operation": "modify_order",
             "order_id": "ORD-1001", "succeeded": True,
+            "source_event_id": "evt-extra-write",
         })
     elif mutation == "claimed_email_without_receipt":
         observation["notification_evidence"] = {
@@ -80,6 +81,7 @@ def test_evidence_mutations_fail_closed(mutation: str, expected_check: str) -> N
         observation["events"].append({
             "type": "write", "operation": "unexpected_mutation",
             "order_id": "ORD-1001", "succeeded": True,
+            "source_event_id": "evt-unknown-write",
         })
 
     case, _, report, release = evaluate_observation(observation, spec)
@@ -145,4 +147,39 @@ def test_adapter_rejects_partial_requested_options_map() -> None:
     }
 
     with pytest.raises(ValueError, match="must cover every requested new_item_id"):
+        normalize_observation(observation)
+
+
+
+def test_adapter_rejects_missing_event_source_id() -> None:
+    observation, _ = _load()
+    observation["events"][0].pop("source_event_id")
+
+    with pytest.raises(ValueError, match="Every event must have a non-empty string source_event_id"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_duplicate_event_source_ids() -> None:
+    observation, _ = _load()
+    observation["events"][1]["source_event_id"] = observation["events"][0]["source_event_id"]
+
+    with pytest.raises(ValueError, match="must be unique"):
+        normalize_observation(observation)
+
+
+def test_adapter_rejects_missing_confirmation_id_linkage() -> None:
+    observation, spec = _load()
+    observation["confirmation_evidence"].pop("confirmation_id")
+    observation["events"][2].pop("confirmation_id")
+
+    case, _, _, release = evaluate_observation(observation, spec)
+    assert case["actual"]["confirmation_policy_respected"] is False
+    assert release["decision"] == "NO_GO"
+
+
+def test_adapter_rejects_malformed_required_item_lists() -> None:
+    observation, _ = _load()
+    observation["requested_exchange"]["old_item_ids"] = "ITEM-11"
+
+    with pytest.raises(ValueError, match="old_item_ids must be a non-empty list"):
         normalize_observation(observation)
