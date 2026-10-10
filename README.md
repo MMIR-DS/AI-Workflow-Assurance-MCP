@@ -67,7 +67,9 @@ Pinned pack checksum (when using the published ZIP):
 
 `.github/workflows/tau2-retail-smoke.yml` is a **manual-only** OpenRouter-backed run against public `sierra-research/tau2-bench` retail task 0. It does **not** invoke AWA until an adapter and assurance report are integrated.
 
-Requires repository secret `OPENROUTER_API_KEY`. Model calls may incur charges.
+Requires repository secret `OPENROUTER_API_KEY`. The workflow caps output at 2,048 tokens per model request and is manual-only to avoid surprise runs. Model calls may incur charges.
+
+The bounded smoke run on 2026-10-10 completed retail task 0 with reward 1.0, a matching final database state, and 5/5 matched action checks. LiteLLM could not map the model's price metadata, so tau2's displayed `$0.0000` must not be treated as the actual provider bill. See [the result note](docs/TAU2_SMOKE_RESULT_2026-10-10.md) and [GitHub Actions run](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343). This was a standalone tau2 result, not an AWA evaluation.
 
 ## License
 
