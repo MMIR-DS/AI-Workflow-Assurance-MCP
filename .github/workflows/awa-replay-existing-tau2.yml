@@ -1,0 +1,79 @@
+name: Replay saved tau2 trace through AWA (no model calls)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/awa-replay-existing-tau2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[replay-tau2-artifact]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install AWA and test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Download previously recorded public tau2 trial
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 38047957343 \
+            --repo MMIR-DS/AI-Workflow-Assurance-MCP \
+            --name tau2-standalone-retail-smoke \
+            --dir saved-tau2
+          TRACE_FILE="$(find saved-tau2 -type f -path '*/tau2-standalone-retail-task0/results.json' -print -quit)"
+          if [ -z "$TRACE_FILE" ]; then
+            echo "::error::The pinned tau2 artifact did not contain the expected task-0 results.json"
+            find saved-tau2 -maxdepth 8 -type f -print
+            exit 1
+          fi
+          python - "$TRACE_FILE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          result = json.loads(path.read_text(encoding="utf-8"))
+          sims = result.get("simulations")
+          if not isinstance(sims, list) or len(sims) != 1:
+              raise SystemExit("Expected exactly one saved tau2 simulation.")
+          print(f"Loaded trace: {path}; bytes={path.stat().st_size}; simulations={len(sims)}; task_id={sims[0].get('task_id')}")
+          PY
+          echo "TRACE_FILE=$TRACE_FILE" >> "$GITHUB_ENV"
+      - name: Generate AWA case, evaluation, and release reports
+        run: |
+          PYTHONPATH=src python scripts/adapt_tau2_results.py \
+            --results "$TRACE_FILE" \
+            --spec examples/tau2_retail_workflow.json \
+            --output-dir awa-replay-output
+      - name: Verify generated release decision
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("awa-replay-output/awa_release_report.json").read_text(encoding="utf-8"))
+          summary = json.loads(Path("awa-replay-output/awa_eval_report.json").read_text(encoding="utf-8"))["summary"]
+          print(json.dumps({"decision": report["decision"], "blocking_checks": report["blocking_checks"], "summary": summary}, indent=2))
+          if report["decision"] != "GO":
+              raise SystemExit("Pinned known-good tau2 trace did not produce AWA GO.")
+          PY
+      - name: Upload raw trace and AWA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awa-replay-existing-tau2-trace
+          path: |
+            saved-tau2/**
+            awa-replay-output/**
+          if-no-files-found: warn
+          retention-days: 14
