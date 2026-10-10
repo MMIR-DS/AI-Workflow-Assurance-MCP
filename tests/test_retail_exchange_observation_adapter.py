@@ -135,3 +135,14 @@ def test_adapter_rejects_options_for_unrequested_variant() -> None:
 
     with pytest.raises(ValueError, match="only contain requested new_item_ids"):
         normalize_observation(observation)
+
+
+
+def test_adapter_rejects_partial_requested_options_map() -> None:
+    observation, _ = _load()
+    observation["requested_exchange"]["requested_options"] = {
+        "ITEM-12": {"color": "blue", "size": "large"}
+    }
+
+    with pytest.raises(ValueError, match="must cover every requested new_item_id"):
+        normalize_observation(observation)
