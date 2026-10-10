@@ -20,7 +20,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE_RELATIVE = Path("src/ai_workflow_assurance_mcp/core.py")
+CLI_RELATIVE = Path("src/ai_workflow_assurance_mcp/cli.py")
 TEST_RELATIVE = Path("tests/test_core.py")
+CLI_TEST_RELATIVE = Path("tests/test_cli.py")
 
 MUTANTS: list[dict[str, str]] = [
     {
@@ -71,6 +73,14 @@ MUTANTS: list[dict[str, str]] = [
         "source": "if stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]:",
         "replacement": "if False and stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_rejects_spec_drift_from_evaluation_report",
+    },
+    {
+        "id": "release_cli_exit_gate",
+        "description": "Disable non-GO exit status when the explicit CLI release gate is enabled.",
+        "file": "src/ai_workflow_assurance_mcp/cli.py",
+        "source": 'if args.command == "release" and args.fail_on_non_go and result["decision"] != "GO":',
+        "replacement": "if False:",
+        "test": "tests/test_cli.py::test_cli_release_fail_on_non_go_exits_one_after_emitting_report",
     }
 ]
 
@@ -96,9 +106,14 @@ def run_mutation_smoke() -> dict[str, Any]:
         shutil.copytree(ROOT / "src", worktree / "src")
         (worktree / "tests").mkdir()
         shutil.copy2(ROOT / TEST_RELATIVE, worktree / TEST_RELATIVE)
+        shutil.copy2(ROOT / CLI_TEST_RELATIVE, worktree / CLI_TEST_RELATIVE)
+        shutil.copytree(ROOT / "examples", worktree / "examples")
 
-        core_path = worktree / CORE_RELATIVE
-        original = core_path.read_text(encoding="utf-8")
+        source_paths = {
+            CORE_RELATIVE: worktree / CORE_RELATIVE,
+            CLI_RELATIVE: worktree / CLI_RELATIVE,
+        }
+        originals = {relative: path.read_text(encoding="utf-8") for relative, path in source_paths.items()}
 
         # Establish that each selected regression test passes before mutation.
         baseline_tests = sorted({item["test"] for item in MUTANTS})
@@ -122,17 +137,21 @@ def run_mutation_smoke() -> dict[str, Any]:
             }
 
         for mutant in MUTANTS:
-            if original.count(mutant["source"]) != 1:
+            relative = Path(mutant.get("file", str(CORE_RELATIVE)))
+            source_path = source_paths[relative]
+            original = originals[relative]
+            match_count = original.count(mutant["source"])
+            if match_count != 1:
                 results.append({
                     "id": mutant["id"],
                     "killed": False,
                     "status": "INVALID_MUTATION_ANCHOR",
-                    "detail": f"Expected exactly one source match; found {original.count(mutant['source'])}.",
+                    "detail": f"Expected exactly one source match; found {match_count}.",
                 })
                 continue
 
             mutated = original.replace(mutant["source"], mutant["replacement"], 1)
-            core_path.write_text(mutated, encoding="utf-8")
+            source_path.write_text(mutated, encoding="utf-8")
             process = _run_test(worktree, mutant["test"])
             killed = process.returncode != 0
             results.append({
@@ -144,7 +163,7 @@ def run_mutation_smoke() -> dict[str, Any]:
                 "test_returncode": process.returncode,
                 "test_output_tail": (process.stdout + process.stderr)[-2500:],
             })
-            core_path.write_text(original, encoding="utf-8")
+            source_path.write_text(original, encoding="utf-8")
 
     killed_count = sum(1 for result in results if result.get("killed"))
     return {
@@ -165,7 +184,7 @@ def run_mutation_smoke() -> dict[str, Any]:
         },
         "mutants": results,
         "limitations": [
-            "Only seven hand-selected source mutations are tested.",
+            f"Only {len(MUTANTS)} hand-selected source mutations are tested.",
             "The mutation score applies only to this small selected set, not to all possible defects.",
             "This smoke test complements but does not replace broader mutation-testing tools and code review.",
         ],
