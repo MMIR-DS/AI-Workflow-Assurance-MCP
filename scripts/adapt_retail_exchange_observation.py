@@ -24,7 +24,6 @@ MUTABLE_FIELDS = {
     "status", "exchange_items", "exchange_new_items",
     "exchange_payment_method_id", "exchange_price_difference",
 }
-WRITE_OPERATIONS = {"exchange_order_items", "cancel_order", "modify_order", "create_order"}
 
 
 def _money(value: Any) -> Decimal | None:
