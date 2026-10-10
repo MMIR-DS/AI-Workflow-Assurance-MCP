@@ -69,7 +69,7 @@ Pinned pack checksum (when using the published ZIP):
 
 Requires repository secret `OPENROUTER_API_KEY`. The workflow caps output at 2,048 tokens per model request and is manual-only to avoid surprise runs. Model calls may incur charges.
 
-The bounded smoke run on 2026-10-10 completed retail task 0 with reward 1.0, a matching final database state, and 5/5 matched action checks. LiteLLM could not map the model's price metadata, so tau2's displayed `$0.0000` must not be treated as the actual provider bill. See [the result note](docs/TAU2_SMOKE_RESULT_2026-10-10.md) and [GitHub Actions run](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343). This was a standalone tau2 result, not an AWA evaluation.
+The bounded smoke run on 2026-10-10 completed retail task 0 with reward 1.0, a matching final database state, and 5/5 matched action checks. The new adapter `scripts/adapt_tau2_results.py` converts the trace into AWA cases and release reports. On this single known-good case, AWA returned `GO` with 14/14 criteria passing. See the [tau2 run](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343), [tau2 result note](docs/TAU2_SMOKE_RESULT_2026-10-10.md), and [AWA adapter result and limitations](docs/AWA_ADAPTER_RESULT_TASK0_2026-10-10.md). Cost from per-call usage metadata sums to about $0.01660; tau2's aggregate cost field was unreliable for this model, so reconcile with OpenRouter billing. This one positive case does not establish regression-detection effectiveness.
 
 ## License
 
