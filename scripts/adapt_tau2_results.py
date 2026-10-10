@@ -6,9 +6,9 @@ independently diff the simulator's full initial/final database snapshots.
 from __future__ import annotations
 
 import argparse
-import json
 from collections import Counter
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import json
 from pathlib import Path
 from typing import Any
 
