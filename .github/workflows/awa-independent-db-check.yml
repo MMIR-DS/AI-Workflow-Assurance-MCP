@@ -6,6 +6,8 @@ on:
     paths:
       - "scripts/verify_tau2_independent_db.py"
       - "scripts/adapt_tau2_db_evidence.py"
+      - "scripts/redact_tau2_db_report.py"
+      - "tests/test_tau2_db_report_redaction.py"
       - "tests/test_tau2_evidence_manifest.py"
       - "docs/TAU2_SOURCE_EVIDENCE_MANIFEST.md"
       - "tests/test_tau2_adapter.py"
@@ -126,14 +128,18 @@ jobs:
               "production_ready": manifest["production_ready"],
           }, indent=2))
           PY
+      - name: Redact customer and payment details before artifact upload
+        run: |
+          python scripts/redact_tau2_db_report.py \
+            --input awa-independent-db-report.json \
+            --output awa-independent-db-report-public.json
       - name: Upload independent database evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: awa-independent-retail-db-evidence
           path: |
-            awa-independent-db-report.json
+            awa-independent-db-report-public.json
             awa-source-evidence-manifest.json
-            saved-tau2/**
           if-no-files-found: warn
           retention-days: 14
