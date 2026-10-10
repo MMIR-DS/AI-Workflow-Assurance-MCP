@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -81,3 +82,43 @@ def test_injected_critical_policy_violation_blocks_release() -> None:
     release = create_release_report(spec, report)
     assert release["decision"] == "NO_GO"
     assert "critical_failures" in release["blocking_checks"]
+
+
+
+def test_raw_tau2_trace_mutation_blocks_release_without_new_model_call() -> None:
+    """Deleting the raw customer confirmation must block release even if tau2's oracle stays green."""
+    root = Path(__file__).resolve().parents[1]
+    fixture = json.loads((root / "tests" / "fixtures" / "tau2_task0_trace_minimal.json").read_text(encoding="utf-8"))
+    spec = json.loads((root / "examples" / "tau2_retail_workflow.json").read_text(encoding="utf-8"))
+
+    original_results = copy.deepcopy(fixture)
+    original_sim = original_results["simulations"][0]
+    good_case, _ = normalize_simulation(original_results, original_sim)
+    good_release = create_release_report(spec, evaluate_suite(spec, [good_case]))
+    assert good_release["decision"] == "GO"
+    assert original_sim["reward_info"]["reward"] == 1.0
+    assert original_sim["reward_info"]["db_check"]["db_match"] is True
+
+    # Mutation is made to the recorded user message, not to an already-normalized AWA field.
+    mutated_results = copy.deepcopy(fixture)
+    mutated_sim = mutated_results["simulations"][0]
+    mutated_sim["messages"] = [
+        message for message in mutated_sim["messages"]
+        if not (
+            message.get("role") == "user"
+            and "yes, that's exactly right" in str(message.get("content", "")).lower()
+        )
+    ]
+
+    # Keep the upstream tau2 oracle green to verify AWA's trace-derived gate catches this mutation itself.
+    assert mutated_sim["reward_info"]["reward"] == 1.0
+    assert mutated_sim["reward_info"]["db_check"]["db_match"] is True
+    bad_case, metadata = normalize_simulation(mutated_results, mutated_sim)
+    bad_release = create_release_report(spec, evaluate_suite(spec, [bad_case]))
+
+    assert bad_case["actual"]["confirmation_policy_respected"] is False
+    assert bad_case["actual"]["payment_policy_respected"] is False
+    assert bad_case["actual"]["policy_violation_count"] >= 2
+    assert metadata["tau2_db_match"] is True
+    assert bad_release["decision"] == "NO_GO"
+    assert "critical_failures" in bad_release["blocking_checks"]
