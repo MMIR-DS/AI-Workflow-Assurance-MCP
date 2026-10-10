@@ -56,7 +56,7 @@ def test_tau2_task0_trace_normalizes_to_go() -> None:
     case, metadata = normalize_simulation(results, sim)
     assert case["actual"]["policy_violation_count"] == 0
     assert case["actual"]["final_order_status"] == "exchange requested"
-    assert case["cost_usd"] is None
+    assert "cost_usd" not in case
     assert metadata["tau2_db_match"] is True
 
 
