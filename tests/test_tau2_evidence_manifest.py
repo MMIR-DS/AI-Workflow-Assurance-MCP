@@ -117,3 +117,19 @@ def test_manifest_rejects_tamper_probe_mismatch() -> None:
 
     with pytest.raises(ValueError, match="tamper probe metadata"):
         build_evidence_manifest(report)
+
+
+def test_manifest_rejects_collateral_mutation_metadata_mismatch() -> None:
+    report = _valid_report()
+    report["database_evidence"]["other_database_entities_unchanged"] = False
+
+    with pytest.raises(ValueError, match="collateral-mutation metadata"):
+        build_evidence_manifest(report)
+
+
+def test_manifest_rejects_go_without_exactly_one_write() -> None:
+    report = _valid_report()
+    report["database_evidence"]["write_count_in_trace"] = 2
+
+    with pytest.raises(ValueError, match="exactly one write"):
+        build_evidence_manifest(report)
