@@ -17,6 +17,7 @@ from typing import Any
 SCHEMA_VERSION = "0.3"
 MAX_JSON_CHARS = 2_000_000
 MAX_JSON_DEPTH = 64
+MAX_PATH_PARTS = 32
 MAX_CASES = 500
 MAX_CRITERIA = 50
 MAX_EXPLANATION_ITEMS = 100
@@ -139,6 +140,18 @@ def summarize_thresholds(thresholds: Any) -> dict[str, int | float]:
     return safe
 
 
+
+def summarize_unknown_thresholds(thresholds: Any) -> list[str]:
+    """Return bounded names of unsupported threshold keys for validation output."""
+    allowed = {
+        "min_pass_rate", "max_critical_failures", "max_high_failures", "max_review_rate",
+        "max_avg_cost_usd", "max_avg_latency_ms", "max_case_cost_usd", "max_case_latency_ms",
+    }
+    if not isinstance(thresholds, dict):
+        return []
+    return sorted(str(key) for key in set(thresholds) - allowed)[:MAX_VALIDATION_ERRORS]
+
+
 def _is_number(value: Any) -> bool:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return False
@@ -152,7 +165,9 @@ def _valid_path(path: Any) -> bool:
     if not isinstance(path, str) or not path or len(path) > 256:
         return False
     parts = path.split(".")
-    return all(_PATH_PART.fullmatch(part) and not part.startswith("_") for part in parts)
+    return len(parts) <= MAX_PATH_PARTS and all(
+        _PATH_PART.fullmatch(part) and not part.startswith("_") for part in parts
+    )
 
 
 def _lookup_path(root: Any, path: str) -> tuple[bool, Any]:
