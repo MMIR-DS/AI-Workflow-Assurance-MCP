@@ -85,9 +85,7 @@ def test_missing_tool_evidence_fails_closed() -> None:
     assert release["decision"] == "NO_GO"
     assert report["summary"]["critical_failures"] >= 1
 
-def _independent_db_test_inputs() -> tuple[dict, dict, dict, dict, dict, set[str], bool]:
-    from scripts.verify_tau2_independent_db import evaluate_snapshot_evidence
-
+def _independent_db_test_inputs() -> tuple[dict, dict, dict, dict, set[str], bool, bool]:
     results, _ = _load_inputs()
     sim = results["simulations"][0]
     messages = sim["messages"]
