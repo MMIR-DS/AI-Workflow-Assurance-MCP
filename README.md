@@ -68,6 +68,8 @@ Run the focused source-code mutation smoke test (seven hand-selected mutants; no
 
 ```bash
 python scripts/run_source_mutation_smoke.py
+# Optional: save a JSON report
+python scripts/run_source_mutation_smoke.py --output artifacts/mutation-report.json
 ```
 
 The harness checks one valid control and five seeded observation faults, including a missing required path and boolean/numeric type confusion. It reports fault detection, control false rejections, and repeatability. This is **input-fault detection**, not source-code mutation testing or a production reliability estimate; see [scope and interpretation](docs/AWA_MUTATION_HARNESS.md).
