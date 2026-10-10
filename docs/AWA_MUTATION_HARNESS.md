@@ -37,7 +37,7 @@ python scripts/run_source_mutation_smoke.py
 The current smoke set contains seven hand-selected mutants:
 - Removing strict boolean-versus-integer equality handling.
 - Relaxing the JSON nesting-depth boundary by one level.
-- Making the minimum pass-rate threshold exclusive instead of inclusive.
+- Forcing a release threshold check to fail even when the observed metric meets the configured limit.
 - Inverting evaluation-report consistency validation.
 - Disabling the expected-label drift guard for baseline/candidate comparisons.
 - Disabling critical-regression precedence in comparison trends.
