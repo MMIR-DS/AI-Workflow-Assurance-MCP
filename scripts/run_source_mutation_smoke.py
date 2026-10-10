@@ -35,6 +35,34 @@ MUTANTS: list[dict[str, str]] = [
         "replacement": "if depth > max_depth:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_json_nesting_depth_is_limited_for_text_and_python_inputs",
     },
+    {
+        "id": "inclusive_pass_rate_boundary",
+        "description": "Make the minimum pass-rate threshold exclusive instead of inclusive.",
+        "source": "passed = observed >= limit if comparator == \">=\" else observed <= limit",
+        "replacement": "passed = observed > limit if comparator == \">=\" else observed <= limit",
+        "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_pass_rate_threshold_is_inclusive",
+    },
+    {
+        "id": "report_case_result_integrity",
+        "description": "Invert the consistency check between a case result and its individual checks.",
+        "source": "if result.get(\"passed\") != expected_case_passed:",
+        "replacement": "if result.get(\"passed\") == expected_case_passed:",
+        "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_is_no_go_when_critical_failures_exist",
+    },
+    {
+        "id": "expected_label_drift_guard",
+        "description": "Disable the guard against changed expected labels in baseline/candidate comparisons.",
+        "source": "if changed_expected:",
+        "replacement": "if False and changed_expected:",
+        "test": "tests/test_core.py::WorkflowAssuranceTests::test_expected_labels_cannot_change_between_compared_runs",
+    },
+    {
+        "id": "critical_regression_precedence",
+        "description": "Disable critical-regression precedence in the overall comparison trend.",
+        "source": "if critical_regression_ids:",
+        "replacement": "if False and critical_regression_ids:",
+        "test": "tests/test_core.py::WorkflowAssuranceTests::test_critical_regression_takes_precedence_over_pass_rate_improvement",
+    },
 ]
 
 
