@@ -1,5 +1,7 @@
 # AI Workflow Assurance MCP
 
+[![CI](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/workflows/ci.yml)
+
 Deterministic acceptance checks for AI workflow runs, exposed as an MCP server and a local CLI.
 
 **Version:** 0.1.4
