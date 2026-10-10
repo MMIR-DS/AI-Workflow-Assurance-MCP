@@ -1,4 +1,4 @@
-name: Standalone tau2 retail smoke benchmark (not yet AWA-integrated)
+name: tau2 retail + AWA assurance prototype (bounded)
 
 on:
   workflow_dispatch:
