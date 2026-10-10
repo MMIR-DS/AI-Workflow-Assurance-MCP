@@ -20,11 +20,15 @@ Given a workflow specification (criteria + thresholds) and normalized expected/a
 
 Determinism applies to evaluation results and decision logic for identical inputs; `run_id` and `executed_at` intentionally vary between reports. It does **not** run agents, call model APIs, or manage environments. An adapter must convert traces and final state into the observation contract.
 
+## Quick demo
+
+Try the [reproducible invoice-matching demo](docs/QUICK_DEMO.md). It compares a passing synthetic candidate with a deliberately failing baseline and demonstrates how `--fail-on-non-go` can block a CI release gate without making model calls.
+
 ## Install
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 pip install -e ".[dev]"
 ```
 
