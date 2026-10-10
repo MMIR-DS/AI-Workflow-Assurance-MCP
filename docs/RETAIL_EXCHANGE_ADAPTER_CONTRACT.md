@@ -26,7 +26,7 @@ The input is one JSON object with `schema_version: "1.0"` and a non-empty `run_i
 
 | Field | Required shape | Source-of-truth expectation |
 |---|---|---|
-| `requested_exchange` | `order_id`, `old_item_ids[]`, `new_item_ids[]`, `payment_method_id`, optional `requested_options` map | The requested write plus the customer's explicit confirmed intent |
+| `requested_exchange` | `order_id`, `old_item_ids[]`, `new_item_ids[]`, `payment_method_id`, optional `requested_options` map | The requested write plus the customer's explicit confirmed intent; when a non-empty options map is supplied, it must cover every requested new item and contain no unrelated item IDs |
 | `identity_evidence` | `verified_user_id` | Authentication/identity service result, not an LLM claim |
 | `confirmation_evidence` | `confirmed: true`, order ID, old/new item IDs, payment ID, confirmation ID | An explicit confirmation event before the write |
 | `order_before` | Order object with the exact supported fields shown in the fixture | Independent read before mutation |
