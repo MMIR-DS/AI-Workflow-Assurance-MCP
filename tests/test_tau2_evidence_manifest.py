@@ -43,6 +43,8 @@ def test_valid_independent_db_report_becomes_scoped_manifest() -> None:
 
     assert manifest["decision"] == "GO"
     assert manifest["production_ready"] is False
+    assert manifest["release_eligible"] is False
+    assert "not authenticated production-source evidence" in manifest["release_eligibility_reason"]
     assert manifest["assurance_scope"] == "pinned_simulator_replay_evidence_only"
     assert manifest["source_provenance"]["source_authenticity"] == "not_verified"
     assert manifest["database_evidence"]["tool_return_value_used_for_decision"] is False
