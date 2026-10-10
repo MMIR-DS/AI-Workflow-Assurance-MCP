@@ -386,6 +386,22 @@ class WorkflowAssuranceTests(unittest.TestCase):
         self.assertEqual(__version__, match.group(1))
 
 
+
+    def test_release_pass_rate_threshold_is_inclusive(self):
+        spec = {
+            "id": "inclusive-threshold", "name": "Inclusive threshold", "version": "1",
+            "criteria": [{"id": "match", "operator": "equals", "actual_path": "x", "expected_path": "x"}],
+            "thresholds": {"min_pass_rate": 0.5, "max_critical_failures": 0},
+        }
+        cases = [
+            {"case_id": "pass", "expected": {"x": 1}, "actual": {"x": 1}},
+            {"case_id": "fail", "expected": {"x": 1}, "actual": {"x": 0}},
+        ]
+        release = create_release_report(spec, evaluate_suite(spec, cases))
+        self.assertEqual(release["decision"], "GO")
+        check = next(item for item in release["checks"] if item["metric"] == "pass_rate")
+        self.assertEqual(check["status"], "PASS")
+
     def test_high_failure_cap_can_block_release(self):
         spec = {
             "id": "high-cap", "name": "High failure cap", "version": "1",
