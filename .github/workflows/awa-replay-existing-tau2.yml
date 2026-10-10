@@ -1,10 +1,6 @@
 name: Replay saved tau2 trace through AWA (no model calls)
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/awa-replay-existing-tau2.yml"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +9,6 @@ permissions:
 
 jobs:
   replay:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[replay-tau2-artifact]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,21 +19,28 @@ jobs:
           python-version: "3.12"
       - name: Install AWA and test dependencies
         run: python -m pip install -e ".[dev]"
-      - name: Download previously recorded public tau2 trial
+      - name: Load archived tau2 result or fall back to the committed task-0 fixture
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set +e
           gh run download 38047957343 \
             --repo MMIR-DS/AI-Workflow-Assurance-MCP \
             --name tau2-standalone-retail-smoke \
             --dir saved-tau2
-          TRACE_FILE="$(find saved-tau2 -type f -path '*/tau2-standalone-retail-task0/results.json' -print -quit)"
+          download_status=$?
+          set -e
+          TRACE_FILE="$(find saved-tau2 -type f -path '*/tau2-standalone-retail-task0/results.json' -print -quit 2>/dev/null)"
           if [ -z "$TRACE_FILE" ]; then
-            echo "::error::The pinned tau2 artifact did not contain the expected task-0 results.json"
-            find saved-tau2 -maxdepth 8 -type f -print
-            exit 1
+            echo "::warning::Archived run artifact is unavailable (status=$download_status); falling back to committed minimized fixture."
+            TRACE_FILE="saved-tau2/tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json"
+            mkdir -p "$(dirname "$TRACE_FILE")"
+            cp tests/fixtures/tau2_task0_trace_minimal.json "$TRACE_FILE"
+            TRACE_SOURCE="committed_minimal_fixture"
+          else
+            TRACE_SOURCE="archived_full_tau2_result"
           fi
-          python - "$TRACE_FILE" <<'PY'
+          python - "$TRACE_FILE" "$TRACE_SOURCE" <<'PY'
           import json
           import sys
           from pathlib import Path
@@ -46,10 +48,11 @@ jobs:
           result = json.loads(path.read_text(encoding="utf-8"))
           sims = result.get("simulations")
           if not isinstance(sims, list) or len(sims) != 1:
-              raise SystemExit("Expected exactly one saved tau2 simulation.")
-          print(f"Loaded trace: {path}; bytes={path.stat().st_size}; simulations={len(sims)}; task_id={sims[0].get('task_id')}")
+              raise SystemExit("Expected exactly one tau2 simulation.")
+          print(f"Loaded {sys.argv[2]}: {path}; bytes={path.stat().st_size}; simulations={len(sims)}; task_id={sims[0].get('task_id')}")
           PY
           echo "TRACE_FILE=$TRACE_FILE" >> "$GITHUB_ENV"
+          echo "TRACE_SOURCE=$TRACE_SOURCE" >> "$GITHUB_ENV"
       - name: Generate AWA case, evaluation, and release reports
         run: |
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
