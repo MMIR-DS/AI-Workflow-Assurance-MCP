@@ -227,6 +227,62 @@ def _setup_pending_items() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
+def _setup_user_address() -> tuple[list[dict[str, Any]], ToolCall]:
+    trajectory, _ = _setup()
+    order_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "order-read-1"
+    )
+    order = json.loads(order_result["content"])
+    owner_id = order["user_id"]
+    user_details = {
+        "user_id": owner_id,
+        "name": "Customer Example",
+        "email": "customer@example.com",
+        "address": order["address"],
+        "payment_methods": {},
+    }
+    trajectory.insert(16, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "user-profile-read-1",
+            "name": "get_user_details",
+            "arguments": {"user_id": owner_id},
+        }],
+    })
+    trajectory.insert(17, {
+        "role": "tool",
+        "id": "user-profile-read-1",
+        "content": json.dumps(user_details),
+    })
+    raw_call = {
+        "id": "user-address-call-001",
+        "name": "modify_user_address",
+        "arguments": {
+            "user_id": owner_id,
+            "address1": "100 Main Street",
+            "address2": "Unit 4",
+            "city": "Boston",
+            "state": "MA",
+            "country": "USA",
+            "zip": "02108",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [raw_call]
+    trajectory[18]["content"] = (
+        "For Customer Example, update your default address to 100 Main Street, Unit 4, "
+        "Boston, MA, USA, ZIP 02108. Please confirm."
+    )
+    trajectory[19]["content"] = "Yes, update my default address as stated."
+    call = ToolCall(
+        id=raw_call["id"],
+        name=raw_call["name"],
+        arguments=raw_call["arguments"],
+        requestor="assistant",
+    )
+    return trajectory, call
+
+
 def main() -> None:
     # The recorded baseline omits the order ID and old item IDs in the final
     # customer-facing confirmation. The patched dispatch must block before
@@ -358,9 +414,25 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
+    # A verified user default-address change must pass through the actual dispatcher.
+    trajectory, user_address_call = _setup_user_address()
+    results, environment, orchestrator = _dispatch(trajectory, user_address_call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["modify_user_address"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # Missing exact address disclosure blocks before the environment callback.
+    trajectory, user_address_call = _setup_user_address()
+    trajectory[18]["content"] = "For Customer Example, update your default address. Please confirm."
+    results, environment, orchestrator = _dispatch(trajectory, user_address_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == []
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
     # Every write tool without its own reviewed adapter must be denied before dispatch.
     unsupported_write_tools = [
-        "modify_user_address",
         "return_delivered_order_items",
     ]
     for index, tool_name in enumerate(unsupported_write_tools):
@@ -376,7 +448,7 @@ def main() -> None:
         assert environment.calls == [], f"{tool_name} must not reach the environment"
         assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
         assert orchestrator.num_errors == 1, tool_name
-    print("PASS: exchange/cancellation/address/payment/pending-items GO/NO_GO, same-batch duplicate blocking, and default-deny for both unsupported retail writes.")
+    print("PASS: exchange/cancellation/address/payment/pending-items/user-address GO/NO_GO, same-batch duplicate blocking, and default-deny for the remaining unsupported retail write.")
 
 
 if __name__ == "__main__":

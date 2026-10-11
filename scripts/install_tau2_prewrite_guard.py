@@ -122,6 +122,50 @@ REPLACEMENT = """        tool_results = []
                                     "and obtain fresh confirmation before retrying."
                                 ),
                             )
+                elif tool_call.name == "modify_user_address":
+                    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_user_address_prewrite
+
+                    raw_user_id = (
+                        tool_call.arguments.get("user_id")
+                        if isinstance(tool_call.arguments, dict)
+                        else None
+                    )
+                    normalized_user_id = (
+                        "user:" + raw_user_id.casefold()
+                        if isinstance(raw_user_id, str) and raw_user_id
+                        else None
+                    )
+                    if normalized_user_id and normalized_user_id in awa_write_orders_seen:
+                        tool_result = ToolMessage(
+                            id=tool_call.id,
+                            role="tool",
+                            requestor=tool_call.requestor,
+                            error=True,
+                            content=(
+                                "AWA_PREWRITE_NO_GO: a second write for the same user "
+                                "in one dispatch batch is blocked. Re-read the user profile "
+                                "and retry in a new turn."
+                            ),
+                        )
+                    else:
+                        if normalized_user_id:
+                            awa_write_orders_seen.add(normalized_user_id)
+                        preflight = evaluate_tau2_user_address_prewrite(self.trajectory, tool_call)
+                        if preflight["decision"] == "GO":
+                            tool_result = self.environment.get_response(tool_call)
+                        else:
+                            blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
+                            tool_result = ToolMessage(
+                                id=tool_call.id,
+                                role="tool",
+                                requestor=tool_call.requestor,
+                                error=True,
+                                content=(
+                                    "AWA_PREWRITE_NO_GO: user default-address change blocked before "
+                                    "execution. Disclose the exact new address and obtain fresh "
+                                    f"confirmation. Blocking checks: {blocking}."
+                                ),
+                            )
                 elif tool_call.name == "modify_pending_order_items":
                     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_pending_items_prewrite
 
