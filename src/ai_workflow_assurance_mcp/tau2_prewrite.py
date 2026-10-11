@@ -685,14 +685,14 @@ def _address_confirmation_references_consistent(
     if not isinstance(order_id, str) or not order_id or not isinstance(expected_zip, str):
         return False
     folded = text.casefold()
-    order_pattern = r"([a-z][a-z0-9_-]*\\d[a-z0-9_-]*)"
-    order_refs = re.findall(r"\\border\\s*#?\\s*" + order_pattern + r"\\b", folded)
-    order_refs += re.findall(r"#" + order_pattern + r"\\b", folded)
+    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
+    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
+    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
     expected_order_reference = order_id.casefold().lstrip("#")
     if any(reference != expected_order_reference for reference in order_refs):
         return False
     zip_refs = re.findall(
-        r"\\b(?:zip|postal(?:\\s+code)?)\\s*(?:is|:|#)?\\s*([a-z0-9-]+)\\b",
+        r"\b(?:zip|postal(?:\s+code)?)\s*(?:is|:|#)?\s*([a-z0-9-]+)\b",
         folded,
     )
     return all(reference == expected_zip.casefold() for reference in zip_refs)
