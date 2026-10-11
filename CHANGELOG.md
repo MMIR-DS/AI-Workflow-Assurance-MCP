@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.6
+
+- Add a retail-exchange observation adapter contract, a threat model, and adversarial tests for event ordering, requested variants, payment consistency, price reconciliation, and notification evidence.
+- Add a normalized read-only evidence-source contract and a strict tau2 simulator-manifest adapter; keep simulator evidence explicitly unauthenticated and ineligible for production release.
+- Add bounded CLI and MCP manifest inspection, strict nested allowlists, consistency checks, and privacy-minimized public evidence artifacts.
+- Add a read-only GitHub Actions run-metadata source and the `inspect_github_actions_run` MCP tool. Require explicit repository/run/commit inputs, successful and fresh run metadata, and read-only credentials; reject malformed IDs and inconsistent timestamps.
+- Expand CI coverage for the release-gate demo, clean wheel installation, evidence-adapter smoke tests, and selected source mutations across Python 3.10–3.13.
+- Document source trust boundaries and make clear that passing CI or simulator checks is not production authentication, certification, or release authorization.
+
 ## 0.1.5
 
 - Clarify deterministic evaluation results versus run-specific report metadata.
