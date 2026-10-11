@@ -76,6 +76,7 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     "explain_failures",
                     "generate_release_report",
                     "inspect_tau2_evidence_manifest",
+                    "inspect_github_actions_run",
                 }
 
                 spec_json = json.dumps(SPEC)
@@ -136,6 +137,11 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     await session.call_tool("inspect_tau2_evidence_manifest", {"manifest_json": evidence_json}),
                 ]
                 assert all(not _is_error(result) for result in results), [_content_text(result) for result in results]
+                invalid_github_evidence = await session.call_tool(
+                    "inspect_github_actions_run",
+                    {"repository": "owner/repo", "run_id": True, "expected_head_sha": "a" * 40},
+                )
+                assert _is_error(invalid_github_evidence)
                 evidence_payload = json.loads(_content_text(results[5]))
                 assert evidence_payload["release_eligible"] is False
                 assert evidence_payload["source_authenticity"] == "not_verified"
