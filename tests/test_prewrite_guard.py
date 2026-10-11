@@ -84,12 +84,24 @@ def test_identity_mismatch_and_non_delivered_order_fail_closed() -> None:
     assert "order_not_confirmed_delivered" in result["blocking_checks"]
 
 
-def test_incomplete_or_duplicate_action_ids_fail_closed() -> None:
+def test_empty_action_item_id_fails_closed() -> None:
     action, evidence = _valid_inputs()
-    action["new_item_ids"] = ["ITEM-12", "ITEM-12"]
+    action["new_item_ids"] = ["ITEM-12", " "]
     result = evaluate_prewrite(action, evidence)
     assert result["decision"] == "NO_GO"
     assert "action_incomplete_or_invalid" in result["blocking_checks"]
+
+
+def test_repeated_item_ids_are_supported_when_old_and_new_counts_match() -> None:
+    action, evidence = _valid_inputs()
+    action["old_item_ids"] = ["ITEM-11", "ITEM-11"]
+    action["new_item_ids"] = ["ITEM-12", "ITEM-12"]
+    evidence["confirmation"]["old_item_ids"] = ["ITEM-11", "ITEM-11"]
+    evidence["confirmation"]["new_item_ids"] = ["ITEM-12", "ITEM-12"]
+    evidence["customer_facing_confirmation"]["old_item_ids"] = ["ITEM-11", "ITEM-11"]
+    evidence["customer_facing_confirmation"]["new_item_ids"] = ["ITEM-12", "ITEM-12"]
+    result = evaluate_prewrite(action, evidence)
+    assert result["decision"] == "GO"
 
 
 def test_missing_evidence_and_wrong_types_fail_closed() -> None:
