@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ai_workflow_assurance_mcp.evidence_sources import Tau2ManifestFileSource
 from ai_workflow_assurance_mcp.core import (
     MAX_JSON_CHARS,
     AssuranceInputError,
@@ -82,6 +83,13 @@ def _parser() -> argparse.ArgumentParser:
     release.add_argument("--cases", required=True)
     release.add_argument("--output")
     release.add_argument("--fail-on-non-go", action="store_true", help="exit 1 for HOLD or NO_GO after emitting the report")
+
+    inspect_evidence = subparsers.add_parser(
+        "inspect-evidence",
+        help="validate and normalize a tau2 simulator evidence manifest",
+    )
+    inspect_evidence.add_argument("--manifest", required=True)
+    inspect_evidence.add_argument("--output")
     return parser
 
 
@@ -89,6 +97,25 @@ def main() -> None:
     parser = _parser()
     args = parser.parse_args()
     try:
+        if args.command == "inspect-evidence":
+            try:
+                envelope = Tau2ManifestFileSource(args.manifest).read_evidence()
+            except ValueError as exc:
+                raise AssuranceInputError(f"Could not inspect evidence manifest: {exc}") from exc
+            result = {
+                "source_name": envelope.source_name,
+                "source_version": envelope.source_version,
+                "assurance_scope": envelope.assurance_scope,
+                "source_authenticity": envelope.source_authenticity,
+                "release_eligible": envelope.release_eligible,
+                "collected_at": (
+                    envelope.collected_at.isoformat() if envelope.collected_at is not None else None
+                ),
+                "evidence": envelope.evidence,
+            }
+            _emit(result, args.output)
+            return
+
         if args.command == "validate-spec":
             spec = _load_json(args.spec)
             errors = validate_spec(spec)
