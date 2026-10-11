@@ -268,10 +268,13 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     names = [c["name"] for c in calls]
     writes = [c for c in calls if c["name"] in WRITE_TOOLS]
     assistant_text = "\n".join(str(m.get("content") or "") for m in messages if m.get("role") == "assistant" and m.get("content")).lower()
-    notification_claim = bool(
-        exchange_calls and "email" in assistant_text
-        and any(phrase in assistant_text for phrase in ("exchange request has been submitted", "exchange is complete", "exchange has been processed"))
+    completion_claim = bool(
+        "email" in assistant_text
+        and any(phrase in assistant_text for phrase in (
+            "exchange request has been submitted", "exchange is complete", "exchange has been processed"
+        ))
     )
+    notification_claim = bool(exchange_calls and completion_claim)
     no_transfer = not any("transfer_to_human" in name or "transfer_to_agent" in name for name in names)
     actual = {
         "identity_policy_respected": bool(auth and order_call and auth["index"] < order_call["index"] < exchange_index and authenticated_user and isinstance(before, dict) and str(before.get("user_id")) == authenticated_user),
@@ -307,12 +310,17 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             "final_state_matches_expected",
             "no_unrelated_state_mutation",
             "price_difference_reconciles",
-            "notification_claim_matches_contract",
             "final_order_status",
         )
         for key in dependent_checks:
             actual[key] = None
             unobserved_checks.append(key)
+
+        # A definitive completion claim without the corresponding write is
+        # directly contradicted by the trace, so retain it as a failed check.
+        if not completion_claim:
+            actual["notification_claim_matches_contract"] = None
+            unobserved_checks.append("notification_claim_matches_contract")
 
         # Missing identity/order evidence is not proof of a policy breach.
         # If evidence exists, retain any real failure observed in that evidence.
