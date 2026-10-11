@@ -74,8 +74,8 @@ def main() -> None:
     trajectory, call = _setup()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = (
         "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
@@ -91,8 +91,8 @@ def main() -> None:
     trajectory, first_call = _setup()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = (
         "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
