@@ -334,3 +334,27 @@ def test_tau2_adapter_blocks_new_variant_not_verified_available() -> None:
 
     assert result["decision"] == "NO_GO"
     assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
+
+
+def test_tau2_adapter_does_not_rely_on_stale_available_variant_snapshot() -> None:
+    trajectory, call = _trajectory_and_call()
+    latest_product = _tool_result_json(trajectory, "keyboard-product-1")
+    latest_product["variants"]["7706410293"]["available"] = False
+    trajectory.insert(-1, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "keyboard-product-2",
+            "name": "get_product_details",
+            "arguments": {"product_id": "1656367028"},
+        }],
+    })
+    trajectory.insert(-1, {
+        "role": "tool",
+        "id": "keyboard-product-2",
+        "content": json.dumps(latest_product),
+    })
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
