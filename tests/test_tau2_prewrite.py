@@ -56,6 +56,33 @@ def _cancel_trajectory_and_call() -> tuple[list[dict], dict]:
     return trajectory, call
 
 
+def _address_trajectory_and_call() -> tuple[list[dict], dict]:
+    trajectory, _ = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    order["status"] = "pending"
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+    call = {
+        "id": "address-call-001",
+        "name": "modify_pending_order_address",
+        "arguments": {
+            "order_id": "#W2378156",
+            "address1": "100 Main Street",
+            "address2": "Unit 4",
+            "city": "Boston",
+            "state": "MA",
+            "country": "USA",
+            "zip": "02108",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [call]
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156, change the shipping address to 100 Main Street, "
+        "Unit 4, Boston, MA, USA, ZIP 02108. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, update the shipping address as stated."
+    return trajectory, call
+
+
 def test_tau2_adapter_blocks_write_when_final_confirmation_omits_order_and_old_items() -> None:
     trajectory, call = _trajectory_and_call()
 
@@ -527,3 +554,59 @@ def test_tau2_cancel_adapter_blocks_missing_refund_timing_disclosure() -> None:
 
     assert result["decision"] == "NO_GO"
     assert "exact_cancellation_and_refund_disclosure_valid" in result["blocking_checks"]
+
+
+def test_tau2_address_adapter_allows_pending_order_after_exact_address_disclosure() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_address_prewrite
+
+    trajectory, call = _address_trajectory_and_call()
+
+    result = evaluate_tau2_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["identity_and_order_ownership_verified"] is True
+
+
+def test_tau2_address_adapter_blocks_non_pending_order() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_address_prewrite
+
+    trajectory, call = _address_trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    order["status"] = "delivered"
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+
+    result = evaluate_tau2_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "order_is_pending" in result["blocking_checks"]
+
+
+def test_tau2_address_adapter_blocks_conflicting_zip_in_user_confirmation() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_address_prewrite
+
+    trajectory, call = _address_trajectory_and_call()
+    trajectory[17]["content"] = "Yes, use ZIP 99999 instead."
+
+    result = evaluate_tau2_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "user_confirmed_after_disclosure" in result["blocking_checks"]
+
+
+def test_tau2_address_adapter_blocks_no_op_address_change() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_address_prewrite
+
+    trajectory, call = _address_trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    call["arguments"].update(order["address"])
+
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156, change the shipping address to 763 Broadway, "
+        "Suite 135, Philadelphia, PA, USA, ZIP 19122. Please confirm."
+    )
+
+    result = evaluate_tau2_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "address_differs_from_current_order" in result["blocking_checks"]
