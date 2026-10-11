@@ -104,7 +104,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
     owner_id = order_before.get("user_id") if order_is_object else None
     order_status = order_before.get("status") if order_is_object else None
 
-    identity_args, identity_result = _find_call_result(
+    _, identity_result = _find_call_result(
         messages,
         {"find_user_id_by_name_zip", "find_user_id_by_email"},
         lambda _: True,
