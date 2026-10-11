@@ -408,6 +408,24 @@ def main() -> None:
     assert results[0].content == "SIMULATED_WRITE_EXECUTED"
     assert orchestrator.num_errors == 0
 
+    # The shared batch reservation also blocks a different write tool on the same order.
+    trajectory, cancel_call = _setup_cancel()
+    _, exchange_template = _setup()
+    cross_tool_exchange = ToolCall(
+        id="cross-tool-same-order-exchange",
+        name="exchange_delivered_order_items",
+        arguments=dict(exchange_template.arguments),
+        requestor="assistant",
+    )
+    results, environment, orchestrator = _dispatch_many(
+        trajectory, [cancel_call, cross_tool_exchange]
+    )
+    assert len(results) == 2
+    assert not results[0].error and results[1].error
+    assert environment.calls == ["cancel_pending_order"]
+    assert "second write for the same order" in (results[1].content or "")
+    assert orchestrator.num_errors == 1
+
     # Without exact refund amount and timing disclosure, cancellation is blocked pre-dispatch.
     trajectory, cancel_call = _setup_cancel()
     trajectory[16]["content"] = (
