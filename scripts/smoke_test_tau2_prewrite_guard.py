@@ -90,6 +90,43 @@ def _setup_cancel() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
+def _setup_address() -> tuple[list[dict[str, Any]], ToolCall]:
+    trajectory, _ = _setup()
+    order_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "order-read-1"
+    )
+    order = json.loads(order_result["content"])
+    order["status"] = "pending"
+    order_result["content"] = json.dumps(order)
+    raw_call = {
+        "id": "address-call-001",
+        "name": "modify_pending_order_address",
+        "arguments": {
+            "order_id": "#W2378156",
+            "address1": "100 Main Street",
+            "address2": "Unit 4",
+            "city": "Boston",
+            "state": "MA",
+            "country": "USA",
+            "zip": "02108",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [raw_call]
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156, change the shipping address to 100 Main Street, "
+        "Unit 4, Boston, MA, USA, ZIP 02108. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, update the shipping address as stated."
+    call = ToolCall(
+        id=raw_call["id"],
+        name=raw_call["name"],
+        arguments=raw_call["arguments"],
+        requestor="assistant",
+    )
+    return trajectory, call
+
+
 def main() -> None:
     # The recorded baseline omits the order ID and old item IDs in the final
     # customer-facing confirmation. The patched dispatch must block before
@@ -162,9 +199,28 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
+    # A valid pending-order address change must pass through the actual dispatcher.
+    trajectory, address_call = _setup_address()
+    results, environment, orchestrator = _dispatch(trajectory, address_call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["modify_pending_order_address"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # A missing address detail must block before the environment callback.
+    trajectory, address_call = _setup_address()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156, change the shipping address to 100 Main Street, "
+        "Unit 4, Boston, MA, USA. Please confirm."
+    )
+    results, environment, orchestrator = _dispatch(trajectory, address_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == []
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
     # Every write tool without its own reviewed adapter must be denied before dispatch.
     unsupported_write_tools = [
-        "modify_pending_order_address",
         "modify_pending_order_items",
         "modify_pending_order_payment",
         "modify_user_address",
@@ -183,7 +239,7 @@ def main() -> None:
         assert environment.calls == [], f"{tool_name} must not reach the environment"
         assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
         assert orchestrator.num_errors == 1, tool_name
-    print("PASS: exchange/cancellation GO/NO_GO, same-batch duplicate blocking, and default-deny for all five unsupported retail writes.")
+    print("PASS: exchange/cancellation/address GO/NO_GO, same-batch duplicate blocking, and default-deny for all four unsupported retail writes.")
 
 
 if __name__ == "__main__":

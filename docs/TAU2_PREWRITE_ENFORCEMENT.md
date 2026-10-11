@@ -2,7 +2,7 @@
 
 ## Status
 
-The manual retail smoke workflow applies a narrow patch to the pinned Tau2 orchestrator so the actual `exchange_delivered_order_items` and `cancel_pending_order` dispatch paths consult AWA before calling the environment. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
+The manual retail smoke workflow applies a narrow patch to the pinned Tau2 orchestrator so the actual `exchange_delivered_order_items`, `cancel_pending_order`, and `modify_pending_order_address` dispatch paths consult AWA before calling the environment. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
 
 Pinned upstream Tau2 revision: `4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699`.
 
@@ -24,13 +24,17 @@ The preflight validates simulator evidence against the requested operation rathe
 - a fresh order snapshot: any intervening write attempt against the same order forces a new read before retry;
 - at most one exchange write for a given order in a single dispatcher batch, because every call in that batch otherwise observes the same pre-write trajectory snapshot.
 
-The dispatcher reserves the order ID on the first exchange attempt in a batch, including when that attempt is blocked. A second same-order exchange in that batch returns `NO_GO` and must be retried only after a new turn and fresh order read. A blocked attempt also invalidates the earlier confirmation for retry purposes: the assistant must disclose the action again and receive a new affirmative user response before another attempt can be approved.
+The dispatcher reserves the order ID on the first supported write attempt in a batch, including when that attempt is blocked. A second same-order write in that batch returns `NO_GO` and must be retried only after a new turn and fresh order read. A blocked attempt also invalidates the earlier confirmation for that operation: the assistant must disclose the action again and receive a new affirmative user response before another attempt can be approved.
 
 When the decision is `NO_GO`, the patched dispatcher returns an error `ToolMessage` and does **not** call `environment.get_response` for the exchange. The agent can then ask the user to confirm the complete details and retry. On `GO`, the normal Tau2 environment dispatch executes exactly once.
 
 ## Pending-order cancellation
 
 The separate `evaluate_tau2_cancel_prewrite` policy permits cancellation only when the latest order snapshot matches the requested order and shows `pending`, the identity lookup matches the order owner, and the cancellation reason is one of Tau2's two supported values. It also requires the order's payment history to contain only supported payment transactions, and requires the assistant to disclose the exact total refund, each payment-method ID, the cancellation reason, and the appropriate refund timing (gift-card refunds immediately; other payment methods take 5–7 business days) before a fresh affirmative user response. A missing or unsupported detail returns `NO_GO` before environment dispatch.
+
+## Pending-order address changes
+
+The separate `evaluate_tau2_address_prewrite` policy requires a matching, fresh order snapshot in `pending` state, identity matching the order owner, a complete new address that differs from the current address, and assistant disclosure of every supplied address field (including the secondary line, or an explicit no-secondary-line statement). It rejects an explicitly conflicting order ID or postal code in the user's reply and requires fresh affirmative confirmation after any prior blocked attempt.
 
 ## Fail-closed patching
 
@@ -47,7 +51,8 @@ The runtime smoke test uses Tau2's actual patched `BaseOrchestrator._execute_too
 - a synthetic complete disclosure followed by an affirmative reply returns `GO` and makes exactly one fake environment call;
 - a second exchange for the same order in one batch is blocked, so only the first approved exchange reaches the fake environment callback;
 - a valid pending-order cancellation reaches the fake callback only after exact refund disclosure, while missing disclosure is blocked before callback;
-- each of the five remaining unreviewed write tools is denied by default and makes zero environment calls.
+- a valid pending-order address change reaches the fake callback only after exact address disclosure, while a missing field is blocked before callback;
+- each of the four remaining unreviewed write tools is denied by default and makes zero environment calls.
 
 The full AWA test suite separately tests the evidence adapter and patcher's idempotency/source-layout checks.
 
