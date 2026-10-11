@@ -158,7 +158,7 @@ class Tau2ManifestFileSource:
             raise ValueError("tau2 simulator manifest must remain explicitly unverified.")
 
         decision = manifest.get("decision")
-        if decision not in {"GO", "HOLD", "NO_GO"}:
+        if not isinstance(decision, str) or decision not in {"GO", "HOLD", "NO_GO"}:
             raise ValueError("manifest decision must be GO, HOLD, or NO_GO.")
         checks = manifest.get("checks")
         if not isinstance(checks, dict) or set(checks) != self._required_checks:
