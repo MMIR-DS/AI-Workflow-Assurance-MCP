@@ -57,14 +57,68 @@ class ReadOnlyEvidenceSource(Protocol):
 
 
 class Tau2ManifestFileSource:
-    """Read an existing tau2 simulator manifest from disk without changing it.
+    """Read a known tau2 simulator manifest and return a strict safe projection.
 
-    The manifest's upstream report does not provide a trusted collection
-    timestamp, so this adapter deliberately leaves collected_at unset.
+    This adapter is deliberately schema-specific. It rejects unknown check names
+    and inconsistent counts, while recursively projecting nested snapshots onto
+    an order/item allowlist to avoid passing through unexpected customer fields.
     """
+
+    _required_checks = frozenset({
+        "source_code_commit_matches_trace",
+        "pre_state_matches_recorded_order_read",
+        "write_execution_succeeded",
+        "no_other_database_entities_mutated",
+        "independent_db_state_matches_recorded_exchange_response",
+        "replay_db_payment_profile_and_original_transaction_match",
+        "unrelated_order_fields_unchanged_in_database",
+        "database_price_recalculation_matches_post_state",
+        "database_transition_matches_write_request",
+        "tamper_probe_is_detected",
+    })
+    _order_fields = (
+        "order_id",
+        "status",
+        "exchange_items",
+        "exchange_new_items",
+        "exchange_price_difference",
+    )
+    _item_fields = ("item_id", "product_id", "price", "options")
+    _redacted_fields = [
+        "address",
+        "user_id",
+        "fulfillments",
+        "payment_history",
+        "exchange_payment_method_id",
+        "return_payment_method_id",
+        "cancel_reason",
+    ]
+    _limitations = [
+        "This manifest packages a deterministic replay against a pinned simulator; it is not a snapshot of the original model run's live in-memory database.",
+        "The replay report and its source data are not cryptographically authenticated by this adapter.",
+        "SHA-256 fingerprints support change detection; they are not digital signatures or proof of provenance.",
+        "A successful simulated replay is not evidence of production readiness or general workflow reliability.",
+    ]
 
     def __init__(self, manifest_path: str | Path) -> None:
         self._manifest_path = Path(manifest_path)
+
+    @classmethod
+    def _safe_order_projection(cls, order: Any) -> dict[str, Any]:
+        if not isinstance(order, dict):
+            raise ValueError("database evidence order snapshots must be JSON objects.")
+        projection = {key: order[key] for key in cls._order_fields if key in order}
+        if "items" in order:
+            items = order["items"]
+            if not isinstance(items, list):
+                raise ValueError("order snapshot items must be a list when present.")
+            safe_items = []
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("order snapshot items must contain JSON objects.")
+                safe_items.append({key: item[key] for key in cls._item_fields if key in item})
+            projection["items"] = safe_items
+        return projection
 
     def read_evidence(self) -> EvidenceEnvelope:
         try:
@@ -79,6 +133,8 @@ class Tau2ManifestFileSource:
             raise ValueError(f"could not read a valid JSON manifest: {exc}") from exc
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a JSON object.")
+        if manifest.get("schema_version") != "1.0.0":
+            raise ValueError("unsupported manifest schema_version.")
         if manifest.get("manifest_type") != "awa-tau2-source-evidence-v1":
             raise ValueError("unsupported manifest_type.")
         if manifest.get("assurance_scope") != "pinned_simulator_replay_evidence_only":
@@ -92,25 +148,112 @@ class Tau2ManifestFileSource:
         if not isinstance(provenance, dict):
             raise ValueError("manifest source_provenance must be an object.")
         source_version = provenance.get("checked_out_commit")
-        authenticity = provenance.get("source_authenticity")
-        if not isinstance(source_version, str) or not source_version.strip():
-            raise ValueError("manifest must include a checked-out source commit.")
-        if authenticity != "not_verified":
+        if (
+            not isinstance(source_version, str)
+            or len(source_version) != 40
+            or any(char not in "0123456789abcdef" for char in source_version)
+        ):
+            raise ValueError("manifest checked-out source commit must be 40 lowercase hexadecimal characters.")
+        if provenance.get("source_authenticity") != "not_verified":
             raise ValueError("tau2 simulator manifest must remain explicitly unverified.")
 
+        decision = manifest.get("decision")
+        if decision not in {"GO", "HOLD", "NO_GO"}:
+            raise ValueError("manifest decision must be GO, HOLD, or NO_GO.")
+        checks = manifest.get("checks")
+        if not isinstance(checks, dict) or set(checks) != self._required_checks:
+            raise ValueError("manifest checks must contain exactly the supported tau2 check names.")
+        if any(not isinstance(value, bool) for value in checks.values()):
+            raise ValueError("every manifest check must be a boolean.")
+        summary = manifest.get("summary")
+        if not isinstance(summary, dict):
+            raise ValueError("manifest summary must be an object.")
+        passed_checks = summary.get("passed_checks")
+        total_checks = summary.get("total_checks")
+        if (
+            isinstance(passed_checks, bool)
+            or not isinstance(passed_checks, int)
+            or isinstance(total_checks, bool)
+            or not isinstance(total_checks, int)
+            or total_checks != len(checks)
+            or passed_checks != sum(checks.values())
+        ):
+            raise ValueError("manifest summary counts do not reconcile with the supported checks.")
+        if (decision == "GO") != all(checks.values()):
+            raise ValueError("manifest decision does not reconcile with the supported checks.")
+
+        database = manifest.get("database_evidence")
+        if not isinstance(database, dict):
+            raise ValueError("manifest database_evidence must be an object.")
+        before = self._safe_order_projection(database.get("before"))
+        after = self._safe_order_projection(database.get("after"))
+        for label, snapshot in (("before", before), ("after", after)):
+            if str(snapshot.get("order_id", "")) != str(manifest.get("order_id", "")):
+                raise ValueError(f"database_evidence.{label} does not match manifest order_id.")
+        hashes = {}
+        for label in ("full_database_before_sha256", "full_database_after_sha256"):
+            value = database.get(label)
+            if (
+                not isinstance(value, str)
+                or len(value) != 64
+                or any(char not in "0123456789abcdef" for char in value)
+            ):
+                raise ValueError("database fingerprints must be 64 lowercase SHA-256 hexadecimal characters.")
+            hashes[label] = value
+        collateral = database.get("other_database_entities_unchanged")
+        write_count = database.get("write_count_in_trace")
+        if not isinstance(collateral, bool):
+            raise ValueError("other_database_entities_unchanged must be a boolean.")
+        if collateral is not checks["no_other_database_entities_mutated"]:
+            raise ValueError("collateral-mutation metadata does not reconcile with its check.")
+        if isinstance(write_count, bool) or not isinstance(write_count, int) or write_count < 0:
+            raise ValueError("write_count_in_trace must be a non-negative integer.")
+        if decision == "GO" and write_count != 1:
+            raise ValueError("a GO manifest must contain exactly one write in the trace.")
+        if database.get("tool_return_value_used_for_decision") is not False:
+            raise ValueError("manifest must confirm the tool return value was not used for the decision.")
+        tamper_probe = database.get("tamper_probe")
+        if (
+            not isinstance(tamper_probe, dict)
+            or tamper_probe.get("detected") is not checks["tamper_probe_is_detected"]
+            or not isinstance(tamper_probe.get("mutated_field"), str)
+        ):
+            raise ValueError("tamper probe metadata does not reconcile with its check.")
+
+        minimization = manifest.get("data_minimization")
+        if not isinstance(minimization, dict) or minimization.get("raw_order_snapshots_included") is not False:
+            raise ValueError("manifest must explicitly exclude raw order snapshots.")
+        simulation_task_id = manifest.get("simulation_task_id")
+        order_id = manifest.get("order_id")
+        if isinstance(simulation_task_id, bool) or not isinstance(simulation_task_id, (str, int)):
+            raise ValueError("simulation_task_id must be a string or integer.")
+        if not isinstance(order_id, str) or not order_id.strip():
+            raise ValueError("order_id must be a non-empty string.")
+
+        safe_database = {
+            "before": before,
+            "after": after,
+            **hashes,
+            "other_database_entities_unchanged": collateral,
+            "write_count_in_trace": write_count,
+            "tool_return_value_used_for_decision": False,
+            "tamper_probe": {
+                "mutated_field": tamper_probe["mutated_field"],
+                "detected": tamper_probe["detected"],
+            },
+        }
         evidence = {
-            key: manifest[key]
-            for key in (
-                "decision",
-                "simulation_task_id",
-                "order_id",
-                "database_evidence",
-                "checks",
-                "summary",
-                "limitations",
-                "data_minimization",
-            )
-            if key in manifest
+            "decision": decision,
+            "simulation_task_id": simulation_task_id,
+            "order_id": order_id,
+            "database_evidence": safe_database,
+            "checks": {key: checks[key] for key in sorted(self._required_checks)},
+            "summary": {"passed_checks": passed_checks, "total_checks": total_checks},
+            "limitations": list(self._limitations),
+            "data_minimization": {
+                "raw_order_snapshots_included": False,
+                "redacted_fields": list(self._redacted_fields),
+            },
         }
         return EvidenceEnvelope(
             source_name="tau2-pinned-simulator-manifest",
