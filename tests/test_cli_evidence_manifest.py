@@ -10,6 +10,7 @@ from ai_workflow_assurance_mcp.cli import main
 
 def _manifest() -> dict:
     return {
+        "schema_version": "1.0.0",
         "manifest_type": "awa-tau2-source-evidence-v1",
         "assurance_scope": "pinned_simulator_replay_evidence_only",
         "production_ready": False,
