@@ -73,6 +73,22 @@ def test_confirmation_fails_closed_when_assistant_did_not_disclose_all_new_items
     assert release["decision"] == "NO_GO"
 
 
+def test_explicitly_negated_confirmation_fails_closed() -> None:
+    results, spec = _load_inputs()
+    messages = results["simulations"][0]["messages"]
+    confirmation = next(
+        message for message in messages
+        if message.get("role") == "user"
+        and "Yes, that's exactly right" in str(message.get("content") or "")
+    )
+    confirmation["content"] = "No, don't go ahead. I need to change the selections."
+
+    case, _, _, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["confirmation_policy_respected"] is False
+    assert release["decision"] == "NO_GO"
+
+
 def test_release_decision_does_not_depend_on_tau2_reward_oracle_fields() -> None:
     results, spec = _load_inputs()
     results["simulations"][0]["reward_info"] = {
