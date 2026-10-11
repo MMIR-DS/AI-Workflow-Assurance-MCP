@@ -102,6 +102,10 @@ def main() -> None:
                 envelope = Tau2ManifestFileSource(args.manifest).read_evidence()
             except ValueError as exc:
                 raise AssuranceInputError(f"Could not inspect evidence manifest: {exc}") from exc
+            if args.output and Path(args.output).resolve() == Path(args.manifest).resolve():
+                raise AssuranceInputError(
+                    "Output path must differ from the source manifest path."
+                )
             result = {
                 "source_name": envelope.source_name,
                 "source_version": envelope.source_version,
