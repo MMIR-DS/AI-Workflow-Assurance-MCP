@@ -710,3 +710,81 @@ def test_tau2_payment_adapter_blocks_same_as_current_method() -> None:
 
     assert result["decision"] == "NO_GO"
     assert "payment_method_is_changed" in result["blocking_checks"]
+
+
+def _pending_items_trajectory_and_call() -> tuple[list[dict], dict]:
+    trajectory, _ = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    order["status"] = "pending"
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+    call = {
+        "id": "pending-items-call-001",
+        "name": "modify_pending_order_items",
+        "arguments": {
+            "order_id": "#W2378156",
+            "item_ids": ["1151293680", "4983901480"],
+            "new_item_ids": ["7706410293", "7747408585"],
+            "payment_method_id": "credit_card_9513926",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [call]
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, that's correct. Please proceed with the item update."
+    return trajectory, call
+
+
+def test_tau2_pending_items_adapter_allows_supported_pending_order_modification() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_pending_items_prewrite
+
+    trajectory, call = _pending_items_trajectory_and_call()
+
+    result = evaluate_tau2_pending_items_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["order_status"] == "pending"
+    assert result["evidence_summary"]["pending_order_item_modification_not_previously_attempted"] is True
+
+
+def test_tau2_pending_items_adapter_blocks_delivered_order() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_pending_items_prewrite
+
+    trajectory, call = _pending_items_trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    order["status"] = "delivered"
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+
+    result = evaluate_tau2_pending_items_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "order_status_matches_required_state" in result["blocking_checks"]
+
+
+def test_tau2_pending_items_adapter_blocks_prior_attempt_even_after_fresh_read() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_pending_items_prewrite
+
+    trajectory, call = _pending_items_trajectory_and_call()
+    prior_call = {
+        "id": "prior-pending-items-call",
+        "name": "modify_pending_order_items",
+        "arguments": dict(call["arguments"]),
+    }
+    order_read_index = next(
+        index for index, message in enumerate(trajectory)
+        if any(tool_call.get("id") == "order-read-1" for tool_call in message.get("tool_calls", []))
+    )
+    trajectory.insert(order_read_index, {"role": "assistant", "tool_calls": [prior_call]})
+    trajectory.insert(order_read_index + 1, {
+        "role": "tool",
+        "id": "prior-pending-items-call",
+        "content": json.dumps({"status": "pending"}),
+    })
+
+    result = evaluate_tau2_pending_items_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "pending_order_item_modification_already_attempted" in result["blocking_checks"]
