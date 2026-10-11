@@ -872,3 +872,112 @@ def test_tau2_user_address_adapter_blocks_identity_mismatch() -> None:
 
     assert result["decision"] == "NO_GO"
     assert "identity_matches_user_details" in result["blocking_checks"]
+
+
+def _return_trajectory_and_call() -> tuple[list[dict], dict]:
+    trajectory, _ = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    owner_id = order["user_id"]
+    user_details = {
+        "user_id": owner_id,
+        "name": "Customer Example",
+        "email": "customer@example.com",
+        "address": order["address"],
+        "payment_methods": {
+            "credit_card_9513926": {
+                "id": "credit_card_9513926",
+                "source": "credit_card",
+                "brand": "visa",
+                "last_four": "3926",
+            },
+            "gift_card_1234567": {
+                "id": "gift_card_1234567",
+                "source": "gift_card",
+            },
+            "credit_card_1234567": {
+                "id": "credit_card_1234567",
+                "source": "credit_card",
+                "brand": "visa",
+                "last_four": "4567",
+            },
+        },
+    }
+    trajectory.insert(16, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "return-user-read-1",
+            "name": "get_user_details",
+            "arguments": {"user_id": owner_id},
+        }],
+    })
+    trajectory.insert(17, {
+        "role": "tool",
+        "id": "return-user-read-1",
+        "content": json.dumps(user_details),
+    })
+    call = {
+        "id": "return-call-001",
+        "name": "return_delivered_order_items",
+        "arguments": {
+            "order_id": "#W2378156",
+            "item_ids": ["1151293680"],
+            "payment_method_id": "credit_card_9513926",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [call]
+    trajectory[18]["content"] = (
+        "For order #W2378156, request return of item 1151293680 using "
+        "credit_card_9513926 (credit card, visa ending 3926). This will create a "
+        "return request, and you will receive a follow-up email with return instructions. "
+        "Please confirm."
+    )
+    trajectory[19]["content"] = "Yes, I confirm the return request as described."
+    return trajectory, call
+
+
+def test_tau2_return_adapter_allows_verified_return_request() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_return_prewrite
+
+    trajectory, call = _return_trajectory_and_call()
+
+    result = evaluate_tau2_return_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["order_status"] == "delivered"
+
+
+def test_tau2_return_adapter_blocks_unrelated_non_gift_card_payment_method() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_return_prewrite
+
+    trajectory, call = _return_trajectory_and_call()
+    call["arguments"]["payment_method_id"] = "credit_card_1234567"
+    trajectory[18]["content"] = (
+        "For order #W2378156, request return of item 1151293680 using "
+        "credit_card_1234567 (credit card, visa ending 4567). This will create a "
+        "return request, and you will receive a follow-up email with return instructions. "
+        "Please confirm."
+    )
+
+    result = evaluate_tau2_return_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "payment_method_is_original_or_verified_gift_card" in result["blocking_checks"]
+
+
+def test_tau2_return_adapter_blocks_item_not_in_order() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_return_prewrite
+
+    trajectory, call = _return_trajectory_and_call()
+    call["arguments"]["item_ids"] = ["9999999999"]
+    trajectory[18]["content"] = (
+        "For order #W2378156, request return of item 9999999999 using "
+        "credit_card_9513926 (credit card, visa ending 3926). This will create a "
+        "return request, and you will receive a follow-up email with return instructions. "
+        "Please confirm."
+    )
+
+    result = evaluate_tau2_return_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "requested_items_belong_to_order_quantity" in result["blocking_checks"]
