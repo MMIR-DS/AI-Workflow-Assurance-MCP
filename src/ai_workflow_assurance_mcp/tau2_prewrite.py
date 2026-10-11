@@ -291,12 +291,18 @@ def _latest_blocked_write_result_index(
     return latest_index
 
 
-def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
-    """Evaluate a Tau2 exchange tool call immediately before its execution."""
+def evaluate_tau2_prewrite(
+    trajectory: Any,
+    tool_call: Any,
+    *,
+    expected_tool_name: str = "exchange_delivered_order_items",
+    expected_order_status: str = "delivered",
+) -> dict[str, Any]:
+    """Evaluate an item exchange/modification immediately before its execution."""
     messages = _messages(trajectory)
     name = _get(tool_call, "name")
     arguments = _get(tool_call, "arguments", {})
-    if name != "exchange_delivered_order_items" or not isinstance(arguments, dict):
+    if name != expected_tool_name or not isinstance(arguments, dict):
         return {
             "decision": "NO_GO",
             "allowed": False,
@@ -408,7 +414,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
 
     price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
     latest_blocked_attempt_index = _latest_blocked_write_result_index(
-        prior_messages, order_id, "exchange_delivered_order_items"
+        prior_messages, order_id, expected_tool_name
     )
     reconfirmed_after_block = (
         latest_blocked_attempt_index < 0
@@ -467,10 +473,11 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         "confirmation_event_sequence": last_user_index + 1 if confirmation_valid else None,
         "proposed_write_sequence": current_message_index + 1,
     }
-    result = evaluate_prewrite(action, evidence)
+    result = evaluate_prewrite(action, evidence, expected_order_status=expected_order_status)
     order_snapshot_fresh = _order_snapshot_is_fresh(messages, order_id)
     extra_checks = {
         "order_snapshot_matches_requested_order": order_snapshot_matches_request,
+        "order_status_matches_required_state": order_status == expected_order_status,
         "old_item_multiplicity_does_not_exceed_order_quantity": old_items_belong_to_order,
         "new_items_are_verified_available_variants": new_items_verified_available,
         "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
