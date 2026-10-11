@@ -53,6 +53,74 @@ class ReadOnlyEvidenceSource(Protocol):
     """Minimal adapter contract: read evidence; no mutation methods are part of it."""
 
     def read_evidence(self) -> EvidenceEnvelope:
+        """Collect or load a normalized evidence envelope."""
+
+
+class Tau2ManifestFileSource:
+    """Read a known tau2 simulator manifest and return a strict safe projection.
+
+    This adapter is deliberately schema-specific. It rejects unknown check names
+    and inconsistent counts, while recursively projecting nested snapshots onto
+    an order/item allowlist to avoid passing through unexpected customer fields.
+    """
+
+    _required_checks = frozenset({
+        "source_code_commit_matches_trace",
+        "pre_state_matches_recorded_order_read",
+        "write_execution_succeeded",
+        "no_other_database_entities_mutated",
+        "independent_db_state_matches_recorded_exchange_response",
+        "replay_db_payment_profile_and_original_transaction_match",
+        "unrelated_order_fields_unchanged_in_database",
+        "database_price_recalculation_matches_post_state",
+        "database_transition_matches_write_request",
+        "tamper_probe_is_detected",
+    })
+    _order_fields = (
+        "order_id",
+        "status",
+        "exchange_items",
+        "exchange_new_items",
+        "exchange_price_difference",
+    )
+    _item_fields = ("item_id", "product_id", "price", "options")
+    _redacted_fields = [
+        "address",
+        "user_id",
+        "fulfillments",
+        "payment_history",
+        "exchange_payment_method_id",
+        "return_payment_method_id",
+        "cancel_reason",
+    ]
+    _limitations = [
+        "This manifest packages a deterministic replay against a pinned simulator; it is not a snapshot of the original model run's live in-memory database.",
+        "The replay report and its source data are not cryptographically authenticated by this adapter.",
+        "SHA-256 fingerprints support change detection; they are not digital signatures or proof of provenance.",
+        "A successful simulated replay is not evidence of production readiness or general workflow reliability.",
+    ]
+
+    def __init__(self, manifest_path: str | Path) -> None:
+        self._manifest_path = Path(manifest_path)
+
+    @classmethod
+    def _safe_order_projection(cls, order: Any) -> dict[str, Any]:
+        if not isinstance(order, dict):
+            raise ValueError("database evidence order snapshots must be JSON objects.")
+        projection = {key: order[key] for key in cls._order_fields if key in order}
+        if "items" in order:
+            items = order["items"]
+            if not isinstance(items, list):
+                raise ValueError("order snapshot items must be a list when present.")
+            safe_items = []
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("order snapshot items must contain JSON objects.")
+                safe_items.append({key: item[key] for key in cls._item_fields if key in item})
+            projection["items"] = safe_items
+        return projection
+
+    def read_evidence(self) -> EvidenceEnvelope:
         try:
             if self._manifest_path.stat().st_size > MAX_MANIFEST_BYTES:
                 raise ValueError(
