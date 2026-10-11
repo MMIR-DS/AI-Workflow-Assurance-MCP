@@ -216,3 +216,13 @@ def test_envelope_rejects_naive_collection_timestamp() -> None:
             evidence={},
             collected_at=datetime(2026, 10, 11, 0, 0),
         )
+
+
+def test_tau2_adapter_rejects_non_string_decision(tmp_path) -> None:
+    manifest = _manifest()
+    manifest["decision"] = ["GO"]
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="decision must be GO, HOLD, or NO_GO"):
+        Tau2ManifestFileSource(path).read_evidence()
