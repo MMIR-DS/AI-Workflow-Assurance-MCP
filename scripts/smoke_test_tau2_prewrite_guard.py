@@ -46,9 +46,15 @@ def _setup() -> tuple[list[dict[str, Any]], ToolCall]:
 
 
 def _dispatch(trajectory: list[dict[str, Any]], call: ToolCall) -> tuple[list[ToolMessage], CountingEnvironment, Any]:
+    return _dispatch_many(trajectory, [call])
+
+
+def _dispatch_many(
+    trajectory: list[dict[str, Any]], calls: list[ToolCall]
+) -> tuple[list[ToolMessage], CountingEnvironment, Any]:
     environment = CountingEnvironment()
     orchestrator = SimpleNamespace(environment=environment, trajectory=trajectory, num_errors=0)
-    results = BaseOrchestrator._execute_tool_calls(orchestrator, [call])
+    results = BaseOrchestrator._execute_tool_calls(orchestrator, calls)
     return results, environment, orchestrator
 
 
@@ -80,6 +86,30 @@ def main() -> None:
     assert results[0].content == "SIMULATED_WRITE_EXECUTED"
     assert orchestrator.num_errors == 0
 
+    # Two exchanges for the same order in one batch must not reuse the same
+    # preflight snapshot. The first reaches the fake callback; the second is blocked.
+    trajectory, first_call = _setup()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. Use payment method "
+        "credit_card_9513926 for any price difference. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+    second_call = ToolCall(
+        id="duplicate-same-order-exchange",
+        name=first_call.name,
+        arguments=dict(first_call.arguments),
+        requestor="assistant",
+    )
+    results, environment, orchestrator = _dispatch_many(trajectory, [first_call, second_call])
+    assert len(results) == 2
+    assert not results[0].error and results[1].error
+    assert environment.calls == ["exchange_delivered_order_items"]
+    assert "second write for the same order" in (results[1].content or "")
+    assert orchestrator.num_errors == 1
+
     # Every write tool without its own reviewed adapter must be denied before dispatch.
     unsupported_write_tools = [
         "cancel_pending_order",
@@ -102,7 +132,7 @@ def main() -> None:
         assert environment.calls == [], f"{tool_name} must not reach the environment"
         assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
         assert orchestrator.num_errors == 1, tool_name
-    print("PASS: exchange GO/NO_GO and default-deny for all six unsupported retail writes.")
+    print("PASS: exchange GO/NO_GO, same-batch duplicate blocking, and default-deny for all six unsupported retail writes.")
 
 
 if __name__ == "__main__":

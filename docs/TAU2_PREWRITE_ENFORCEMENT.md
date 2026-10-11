@@ -17,7 +17,10 @@ The preflight requires:
 - an assistant message that explicitly includes the order ID, every old item ID, every new item ID, and the exact payment-method ID;
 - a subsequent affirmative user response, with negative or change requests rejected;
 - confirmation sequence before the proposed write sequence;
-- a fresh order snapshot: any intervening write attempt against the same order forces a new read before retry.
+- a fresh order snapshot: any intervening write attempt against the same order forces a new read before retry;
+- at most one exchange write for a given order in a single dispatcher batch, because every call in that batch otherwise observes the same pre-write trajectory snapshot.
+
+The dispatcher reserves the order ID on the first exchange attempt in a batch, including when that attempt is blocked. A second same-order exchange in that batch returns `NO_GO` and must be retried only after a new turn and fresh order read.
 
 When the decision is `NO_GO`, the patched dispatcher returns an error `ToolMessage` and does **not** call `environment.get_response` for the exchange. The agent can then ask the user to confirm the complete details and retry. On `GO`, the normal Tau2 environment dispatch executes exactly once.
 
@@ -34,6 +37,7 @@ PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_te
 The runtime smoke test uses Tau2's actual patched `BaseOrchestrator._execute_tool_calls` method with a counting fake environment, not a model and not a real database. It proves:
 - the saved baseline, whose final confirmation omits the order ID and old item IDs, returns `NO_GO` and makes zero environment calls;
 - a synthetic complete disclosure followed by an affirmative reply returns `GO` and makes exactly one fake environment call;
+- a second exchange for the same order in one batch is blocked, so only the first approved exchange reaches the fake environment callback;
 - an unreviewed write tool is denied by default and makes zero environment calls.
 
 The full AWA test suite separately tests the evidence adapter and patcher's idempotency/source-layout checks.
