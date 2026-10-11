@@ -532,5 +532,29 @@ class ReportSchemaVersionTests(unittest.TestCase):
         self.assertIn("not_evaluable_checks", report["summary"])
 
 
+
+class ExplainNotEvaluableTests(unittest.TestCase):
+    def test_explain_groups_unknown_checks_separately_from_failures(self):
+        case = {
+            "case_id": "known-failure-plus-unknown",
+            "expected": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
+            "actual": {"decision": None, "requires_human_review": True, "amount_variance": 0.0},
+            "unobserved_checks": ["decision_matches"],
+        }
+
+        report = evaluate_suite(SPEC, [case])
+        explanation = explain_report_failures(report)
+
+        self.assertEqual(explanation["total_failed_checks"], 1)
+        self.assertEqual(explanation["total_not_evaluable_checks"], 1)
+        self.assertEqual(explanation["failure_groups"][0]["criterion_id"], "review_flag_matches")
+        self.assertEqual(explanation["not_evaluable_checks_returned"], 1)
+        self.assertFalse(explanation["not_evaluable_checks_truncated"])
+        self.assertEqual(explanation["not_evaluable_groups"][0]["criterion_id"], "decision_matches")
+        self.assertEqual(explanation["not_evaluable_groups"][0]["not_evaluable_count"], 1)
+        self.assertEqual(explanation["not_evaluable_groups"][0]["case_ids"], ["known-failure-plus-unknown"])
+        self.assertEqual(explanation["not_evaluable_checks"][0]["status"], "NOT_EVALUABLE")
+
+
 if __name__ == "__main__":
     unittest.main()
