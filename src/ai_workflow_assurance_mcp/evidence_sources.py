@@ -74,9 +74,9 @@ class Tau2ManifestFileSource:
                     f"manifest exceeds the {MAX_MANIFEST_BYTES}-byte size limit."
                 )
             manifest = json.loads(self._manifest_path.read_text(encoding="utf-8"))
-        except ValueError:
-            raise
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"could not read a valid JSON manifest: {exc}") from exc
+        except (OSError, UnicodeError) as exc:
             raise ValueError(f"could not read a valid JSON manifest: {exc}") from exc
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a JSON object.")
