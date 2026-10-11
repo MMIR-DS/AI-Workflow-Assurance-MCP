@@ -467,3 +467,60 @@ class WorkflowAssuranceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class NotEvaluableStatusTests(unittest.TestCase):
+    def test_unobserved_check_is_not_counted_as_a_definite_failure(self):
+        case = {
+            "case_id": "missing-decision-evidence",
+            "expected": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
+            "actual": {"decision": None, "requires_human_review": False, "amount_variance": 0.0},
+            "unobserved_checks": ["decision_matches"],
+            "human_review_observed": False,
+            "cost_usd": 0.01,
+            "latency_ms": 100,
+        }
+
+        report = evaluate_suite(SPEC, [case])
+        result = report["case_results"][0]
+        decision = create_release_report(SPEC, report)
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["status"], "NOT_EVALUABLE")
+        check = next(item for item in result["checks"] if item["criterion_id"] == "decision_matches")
+        self.assertEqual(check["status"], "NOT_EVALUABLE")
+        self.assertFalse(check["passed"])
+        self.assertEqual(report["summary"]["failed_checks"], 0)
+        self.assertEqual(report["summary"]["not_evaluable_checks"], 1)
+        self.assertEqual(report["summary"]["critical_failures"], 0)
+        self.assertEqual(decision["decision"], "HOLD")
+
+    def test_observed_critical_failure_still_produces_no_go_with_unknown_check(self):
+        case = {
+            "case_id": "known-failure-plus-unknown",
+            "expected": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
+            "actual": {"decision": None, "requires_human_review": True, "amount_variance": 0.0},
+            "unobserved_checks": ["decision_matches"],
+            "human_review_observed": False,
+            "cost_usd": 0.01,
+            "latency_ms": 100,
+        }
+
+        report = evaluate_suite(SPEC, [case])
+        decision = create_release_report(SPEC, report)
+
+        self.assertEqual(report["summary"]["failed_checks"], 1)
+        self.assertEqual(report["summary"]["not_evaluable_checks"], 1)
+        self.assertEqual(report["summary"]["critical_failures"], 1)
+        self.assertEqual(decision["decision"], "NO_GO")
+
+    def test_rejects_unknown_unobserved_criterion_id(self):
+        case = {
+            "case_id": "bad-unobserved-id",
+            "expected": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
+            "actual": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
+            "unobserved_checks": ["not-a-real-check"],
+        }
+        with self.assertRaisesRegex(AssuranceInputError, "unknown criterion id"):
+            evaluate_suite(SPEC, [case])
