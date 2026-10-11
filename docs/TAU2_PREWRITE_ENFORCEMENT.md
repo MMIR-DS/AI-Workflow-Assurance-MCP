@@ -10,9 +10,12 @@ Pinned upstream Tau2 revision: `4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699`.
 
 Before the environment executes `exchange_delivered_order_items`, the patched orchestrator calls `evaluate_tau2_prewrite` on the current in-memory trajectory and proposed tool call. The adapter builds a normalized action/evidence bundle and delegates the decision to `evaluate_prewrite`.
 
-The preflight requires:
+The preflight validates the simulator evidence against the requested operation rather than relying only on matching confirmation text. In particular, a user confirming an invented item ID or a payment method not present in the order history is insufficient for `GO`. The preflight requires:
 
-- a matching prior `get_order_details` response for the requested order, with status `delivered`;
+- the latest matching `get_order_details` response must identify the exact requested order and report status `delivered`;
+- every old item ID must belong to that order snapshot, and old item IDs must be unique;
+- every new item ID must appear in a matching `get_product_details` result as an available variant, and new item IDs must be unique;
+- the proposed payment-method ID must appear in that order's payment history as a payment transaction;
 - a prior `find_user_id_by_name_zip` or `find_user_id_by_email` lookup whose result matches the order owner;
 - an assistant message that explicitly includes the order ID, every old item ID, every new item ID, and the exact payment-method ID;
 - a subsequent affirmative user response, with negative or change requests rejected;
