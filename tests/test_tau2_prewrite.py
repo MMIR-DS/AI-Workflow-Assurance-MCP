@@ -133,7 +133,7 @@ def _payment_trajectory_and_call() -> tuple[list[dict], dict]:
         "credit_card_1234567 (credit card, visa ending 4567). Please confirm."
     )
     trajectory[19]["content"] = (
-        "Yes, change order #W2378156 to credit_card_1234567, visa ending 4567."
+        "Yes, that's correct. Proceed with the payment method described."
     )
     return trajectory, call
 
