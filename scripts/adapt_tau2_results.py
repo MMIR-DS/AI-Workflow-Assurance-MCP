@@ -197,13 +197,29 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         (i, str(m.get("content") or "")) for i, m in enumerate(messages)
         if m.get("role") == "user" and i < exchange_index
     ]
-    user_text = "\n".join(text for _, text in user_messages).lower()
     latest_user = user_messages[-1][1].lower() if user_messages else ""
+    preceding_assistant_text = next(
+        (
+            str(message.get("content") or "").lower()
+            for message in reversed(messages[:exchange_index])
+            if message.get("role") == "assistant" and message.get("content")
+        ),
+        "",
+    )
     payment_id = args.get("payment_method_id")
+    confirmation_context_present = bool(
+        payment_id
+        and str(payment_id).lower() in preceding_assistant_text
+        and new_ids
+        and all(str(item_id).lower() in preceding_assistant_text for item_id in new_ids)
+        and any(
+            phrase in preceding_assistant_text
+            for phrase in ("confirm", "before i proceed", "would you like me to proceed", "reply with")
+        )
+    )
     confirmation = bool(
         any(phrase in latest_user for phrase in CONFIRMATION_PHRASES)
-        and payment_id and str(payment_id).lower() in latest_user
-        and new_ids and all(str(item_id).lower() in user_text for item_id in new_ids)
+        and confirmation_context_present
     )
 
     before_items = before.get("items", []) if isinstance(before, dict) else []
