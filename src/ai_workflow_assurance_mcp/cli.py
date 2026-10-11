@@ -21,6 +21,7 @@ from ai_workflow_assurance_mcp.core import (
     summarize_workflow_metadata,
     validate_spec,
 )
+from ai_workflow_assurance_mcp.evidence_sources import Tau2ManifestFileSource
 
 
 def _load_json(path: str) -> Any:
@@ -82,6 +83,13 @@ def _parser() -> argparse.ArgumentParser:
     release.add_argument("--cases", required=True)
     release.add_argument("--output")
     release.add_argument("--fail-on-non-go", action="store_true", help="exit 1 for HOLD or NO_GO after emitting the report")
+
+    inspect_evidence = subparsers.add_parser(
+        "inspect-evidence",
+        help="validate and normalize a tau2 simulator evidence manifest",
+    )
+    inspect_evidence.add_argument("--manifest", required=True)
+    inspect_evidence.add_argument("--output")
     return parser
 
 
@@ -89,6 +97,29 @@ def main() -> None:
     parser = _parser()
     args = parser.parse_args()
     try:
+        if args.command == "inspect-evidence":
+            try:
+                envelope = Tau2ManifestFileSource(args.manifest).read_evidence()
+            except ValueError as exc:
+                raise AssuranceInputError(f"Could not inspect evidence manifest: {exc}") from exc
+            if args.output and Path(args.output).resolve() == Path(args.manifest).resolve():
+                raise AssuranceInputError(
+                    "Output path must differ from the source manifest path."
+                )
+            result = {
+                "source_name": envelope.source_name,
+                "source_version": envelope.source_version,
+                "assurance_scope": envelope.assurance_scope,
+                "source_authenticity": envelope.source_authenticity,
+                "release_eligible": envelope.release_eligible,
+                "collected_at": (
+                    envelope.collected_at.isoformat() if envelope.collected_at is not None else None
+                ),
+                "evidence": envelope.evidence,
+            }
+            _emit(result, args.output)
+            return
+
         if args.command == "validate-spec":
             spec = _load_json(args.spec)
             errors = validate_spec(spec)
