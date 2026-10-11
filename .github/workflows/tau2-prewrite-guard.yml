@@ -1,0 +1,64 @@
+name: Tau2 pre-write guard smoke (no model)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/tau2-prewrite-guard.yml"
+      - ".github/workflows/tau2-retail-smoke.yml"
+      - "scripts/install_tau2_prewrite_guard.py"
+      - "scripts/smoke_test_tau2_prewrite_guard.py"
+      - "src/ai_workflow_assurance_mcp/prewrite_guard.py"
+      - "src/ai_workflow_assurance_mcp/tau2_prewrite.py"
+      - "tests/test_tau2_prewrite.py"
+      - "tests/test_tau2_prewrite_patch.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/tau2-prewrite-guard.yml"
+      - ".github/workflows/tau2-retail-smoke.yml"
+      - "scripts/install_tau2_prewrite_guard.py"
+      - "scripts/smoke_test_tau2_prewrite_guard.py"
+      - "src/ai_workflow_assurance_mcp/prewrite_guard.py"
+      - "src/ai_workflow_assurance_mcp/tau2_prewrite.py"
+      - "tests/test_tau2_prewrite.py"
+      - "tests/test_tau2_prewrite_patch.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tau2-prewrite-guard-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Check out pinned public tau2-bench
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: sierra-research/tau2-bench
+          ref: 4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699
+          path: tau2-bench
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          working-directory: tau2-bench
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Install Tau2 dependencies
+        working-directory: tau2-bench
+        run: uv sync --extra dev
+      - name: Apply fail-closed AWA dispatch patch
+        working-directory: tau2-bench
+        run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
+      - name: Prove NO_GO blocks the actual dispatch callback (no model calls)
+        working-directory: tau2-bench
+        run: PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_test_tau2_prewrite_guard.py
