@@ -118,7 +118,7 @@ class GitHubActionsRunSource:
         if payload.get("id") != self.run_id:
             raise GitHubActionsEvidenceError("GitHub returned a different workflow run ID.")
         repository = payload.get("repository")
-        if not isinstance(repository, dict) or repository.get("full_name", "").casefold() != self.repository.casefold():
+        if (\n            not isinstance(repository, dict)\n            or not isinstance(repository.get("full_name"), str)\n            or repository["full_name"].casefold() != self.repository.casefold()\n        ):
             raise GitHubActionsEvidenceError("Workflow run repository does not match the configured repository.")
         head_sha = payload.get("head_sha")
         if not isinstance(head_sha, str) or head_sha != self.expected_head_sha:
@@ -145,7 +145,7 @@ class GitHubActionsRunSource:
             "repository": self.repository,
             "run_id": self.run_id,
             "workflow_id": workflow_id,
-            "workflow_name": payload.get("name") if isinstance(payload.get("name"), str) else None,
+            "workflow_name": (\n                payload["name"][:256]\n                if isinstance(payload.get("name"), str)\n                else None\n            ),
             "head_sha": head_sha,
             "status": "completed",
             "conclusion": "success",
