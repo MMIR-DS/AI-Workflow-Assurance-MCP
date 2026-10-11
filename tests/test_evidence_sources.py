@@ -11,7 +11,6 @@ from ai_workflow_assurance_mcp.evidence_sources import (
     Tau2ManifestFileSource,
 )
 
-
 REQUIRED_CHECKS = (
     "source_code_commit_matches_trace",
     "pre_state_matches_recorded_order_read",
