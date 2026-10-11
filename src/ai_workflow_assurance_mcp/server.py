@@ -9,7 +9,6 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ai_workflow_assurance_mcp import __version__
-from ai_workflow_assurance_mcp.prewrite_tool import register_prewrite_tool
 from ai_workflow_assurance_mcp.core import (
     AssuranceInputError,
     compare_reports,
@@ -26,6 +25,7 @@ from ai_workflow_assurance_mcp.github_actions_evidence import (
     GitHubActionsEvidenceError,
     GitHubActionsRunSource,
 )
+from ai_workflow_assurance_mcp.prewrite_tool import register_prewrite_tool
 
 F = TypeVar("F", bound=Callable[..., Any])
 
