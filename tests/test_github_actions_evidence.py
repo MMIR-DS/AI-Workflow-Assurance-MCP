@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from urllib.error import HTTPError
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 
