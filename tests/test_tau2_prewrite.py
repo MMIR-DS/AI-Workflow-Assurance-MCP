@@ -83,6 +83,61 @@ def _address_trajectory_and_call() -> tuple[list[dict], dict]:
     return trajectory, call
 
 
+def _payment_trajectory_and_call() -> tuple[list[dict], dict]:
+    trajectory, _ = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    order["status"] = "pending"
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+    owner_id = order["user_id"]
+    user_details = {
+        "user_id": owner_id,
+        "payment_methods": {
+            "credit_card_9513926": {
+                "id": "credit_card_9513926",
+                "source": "credit_card",
+                "brand": "visa",
+                "last_four": "3926",
+            },
+            "credit_card_1234567": {
+                "id": "credit_card_1234567",
+                "source": "credit_card",
+                "brand": "visa",
+                "last_four": "4567",
+            },
+        },
+    }
+    trajectory.insert(-1, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "user-details-1",
+            "name": "get_user_details",
+            "arguments": {"user_id": owner_id},
+        }],
+    })
+    trajectory.insert(-1, {
+        "role": "tool",
+        "id": "user-details-1",
+        "content": json.dumps(user_details),
+    })
+    call = {
+        "id": "payment-call-001",
+        "name": "modify_pending_order_payment",
+        "arguments": {
+            "order_id": "#W2378156",
+            "payment_method_id": "credit_card_1234567",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [call]
+    trajectory[16]["content"] = (
+        "For order #W2378156, change payment method from credit_card_9513926 to "
+        "credit_card_1234567 (credit card, visa ending 4567). Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, change order #W2378156 to credit_card_1234567, visa ending 4567."
+    )
+    return trajectory, call
+
+
 def test_tau2_adapter_blocks_write_when_final_confirmation_omits_order_and_old_items() -> None:
     trajectory, call = _trajectory_and_call()
 
@@ -610,3 +665,48 @@ def test_tau2_address_adapter_blocks_no_op_address_change() -> None:
 
     assert result["decision"] == "NO_GO"
     assert "address_differs_from_current_order" in result["blocking_checks"]
+
+
+def test_tau2_payment_adapter_allows_known_new_method_after_disclosure() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_payment_prewrite
+
+    trajectory, call = _payment_trajectory_and_call()
+
+    result = evaluate_tau2_payment_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["old_payment_method_id"] == "credit_card_9513926"
+    assert result["evidence_summary"]["new_payment_method_id"] == "credit_card_1234567"
+
+
+def test_tau2_payment_adapter_blocks_method_not_in_user_details() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_payment_prewrite
+
+    trajectory, call = _payment_trajectory_and_call()
+    call["arguments"]["payment_method_id"] = "credit_card_9999999"
+    trajectory[16]["content"] = (
+        "For order #W2378156, change payment method from credit_card_9513926 to "
+        "credit_card_9999999. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, change the payment method as stated."
+
+    result = evaluate_tau2_payment_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "new_payment_method_belongs_to_order_owner" in result["blocking_checks"]
+
+
+def test_tau2_payment_adapter_blocks_same_as_current_method() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_payment_prewrite
+
+    trajectory, call = _payment_trajectory_and_call()
+    call["arguments"]["payment_method_id"] = "credit_card_9513926"
+    trajectory[16]["content"] = (
+        "For order #W2378156, keep payment method credit_card_9513926. Please confirm."
+    )
+
+    result = evaluate_tau2_payment_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "payment_method_is_changed" in result["blocking_checks"]
