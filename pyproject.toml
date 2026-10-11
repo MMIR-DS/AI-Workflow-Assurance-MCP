@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-workflow-assurance-mcp"
-version = "0.1.5"
+version = "0.1.6"
 description = "MCP server for deterministic acceptance testing of AI-enabled business workflows"
 readme = "README.md"
 requires-python = ">=3.10"
