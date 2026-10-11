@@ -25,6 +25,7 @@ from ai_workflow_assurance_mcp.github_actions_evidence import (
     GitHubActionsEvidenceError,
     GitHubActionsRunSource,
 )
+from ai_workflow_assurance_mcp.prewrite_tool import register_prewrite_tool
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -230,6 +231,9 @@ def generate_release_report(workflow_spec_json: str, cases_json: str) -> dict[st
 def main() -> None:
     # stdio is the safest default for a locally launched MCP server.
     mcp.run()
+
+
+register_prewrite_tool(mcp)
 
 
 if __name__ == "__main__":

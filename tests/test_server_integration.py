@@ -77,6 +77,7 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     "generate_release_report",
                     "inspect_tau2_evidence_manifest",
                     "inspect_github_actions_run",
+                    "preflight_sensitive_write",
                 }
 
                 spec_json = json.dumps(SPEC)
@@ -137,6 +138,46 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     await session.call_tool("inspect_tau2_evidence_manifest", {"manifest_json": evidence_json}),
                 ]
                 assert all(not _is_error(result) for result in results), [_content_text(result) for result in results]
+
+                preflight_action = {
+                    "order_id": "ORD-1001",
+                    "old_item_ids": ["ITEM-11"],
+                    "new_item_ids": ["ITEM-12"],
+                    "payment_method_id": "PAY-1",
+                }
+                preflight_evidence = {
+                    "identity_verified": True,
+                    "verified_user_id": "USER-7",
+                    "order_owner_id": "USER-7",
+                    "order_id": "ORD-1001",
+                    "order_status": "delivered",
+                    "confirmation": {
+                        "confirmed": True,
+                        "order_id": "ORD-1001",
+                        "old_item_ids": ["ITEM-11"],
+                        "new_item_ids": ["ITEM-12"],
+                        "payment_method_id": "PAY-1",
+                        "confirmation_id": "CONF-1",
+                    },
+                    "customer_facing_confirmation": {
+                        "order_id": "ORD-1001",
+                        "old_item_ids": ["ITEM-11"],
+                        "new_item_ids": ["ITEM-12"],
+                        "payment_method_id": "PAY-1",
+                        "payment_method_disclosed": True,
+                    },
+                    "confirmation_event_sequence": 3,
+                    "proposed_write_sequence": 4,
+                }
+                preflight = await session.call_tool(
+                    "preflight_sensitive_write",
+                    {
+                        "action_json": json.dumps(preflight_action),
+                        "evidence_json": json.dumps(preflight_evidence),
+                    },
+                )
+                assert not _is_error(preflight), _content_text(preflight)
+                assert json.loads(_content_text(preflight))["decision"] == "GO"
                 invalid_github_evidence = await session.call_tool(
                     "inspect_github_actions_run",
                     {"repository": "owner/repo", "run_id": True, "expected_head_sha": "a" * 40},
