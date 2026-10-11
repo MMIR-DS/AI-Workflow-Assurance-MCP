@@ -22,7 +22,15 @@ def test_incomplete_trace_marks_downstream_checks_unobserved():
     assert metadata["execution_complete"] is False
     assert metadata["evaluation_completeness"] == "incomplete_or_unconfirmed"
     assert "final_state_matches_expected" in metadata["unobserved_checks"]
+    assert "identity_policy_respected" in metadata["unobserved_checks"]
+    assert "status_verification_policy_respected" in metadata["unobserved_checks"]
+    assert "no_unrequested_new_order" in metadata["unobserved_checks"]
+    assert "escalation_policy_respected" in metadata["unobserved_checks"]
     assert case["actual"]["final_state_matches_expected"] is None
+    assert case["actual"]["identity_policy_respected"] is None
+    assert case["actual"]["status_verification_policy_respected"] is None
+    assert case["actual"]["no_unrequested_new_order"] is None
+    assert case["actual"]["escalation_policy_respected"] is None
     assert case["actual"]["policy_violation_count"] is None
-    # Missing downstream evidence must not be reported as a successful case.
-    assert case["actual"]["identity_policy_respected"] is False
+    # Null checks still fail closed against the expected passing values.
+    assert case["expected"]["final_state_matches_expected"] is True
