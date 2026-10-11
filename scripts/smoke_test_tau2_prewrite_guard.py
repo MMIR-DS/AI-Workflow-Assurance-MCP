@@ -181,7 +181,7 @@ def _setup_payment() -> tuple[list[dict[str, Any]], ToolCall]:
         "credit_card_1234567 (credit card, visa ending 4567). Please confirm."
     )
     trajectory[19]["content"] = (
-        "Yes, change order #W2378156 to credit_card_1234567, visa ending 4567."
+        "Yes, that's correct. Proceed with the payment method described."
     )
     call = ToolCall(
         id=raw_call["id"],
