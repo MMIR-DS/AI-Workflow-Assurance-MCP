@@ -1250,7 +1250,7 @@ def evaluate_tau2_user_address_prewrite(trajectory: Any, tool_call: Any) -> dict
                 last_user_index = index
                 last_user_text = content
     zip_refs = re.findall(
-        r"\\b(?:zip|postal(?:\\s+code)?)\\s*(?:is|:|#)?\\s*([a-z0-9-]+)\\b",
+        r"\b(?:zip|postal(?:\s+code)?)\s*(?:is|:|#)?\s*([a-z0-9-]+)\b",
         last_user_text.casefold(),
     )
     postal_code_consistent = all(
