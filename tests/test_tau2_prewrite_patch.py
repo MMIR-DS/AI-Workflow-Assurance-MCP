@@ -16,6 +16,8 @@ def test_patcher_replaces_exactly_one_expected_dispatch_loop() -> None:
     assert PATCH_MARKER in patched
     assert patched.count("self.environment.get_response(tool_call)") == 2
     assert "evaluate_tau2_prewrite(self.trajectory, tool_call)" in patched
+    assert "no reviewed AWA policy adapter" in patched
+    assert "cancel_pending_order" in patched
     assert patched != source
 
 
