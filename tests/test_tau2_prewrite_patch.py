@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from scripts.install_tau2_prewrite_guard import (
-    PATCH_MARKER,
     ORIGINAL,
+    PATCH_MARKER,
     patch_orchestrator_source,
 )
 
