@@ -878,11 +878,12 @@ def explain_report_failures(report: dict[str, Any], max_items: int = 25) -> dict
                 failures.append(item)
             elif status == "NOT_EVALUABLE":
                 not_evaluable.append(item)
-    sort_key = lambda item: (
-        SEVERITY_ORDER.get(item.get("severity"), 9),
-        str(item.get("case_id")),
-        str(item.get("criterion_id")),
-    )
+    def sort_key(item: dict[str, Any]) -> tuple[int, str, str]:
+        return (
+            SEVERITY_ORDER.get(item.get("severity"), 9),
+            str(item.get("case_id")),
+            str(item.get("criterion_id")),
+        )
     failures.sort(key=sort_key)
     not_evaluable.sort(key=sort_key)
     total = len(failures)
