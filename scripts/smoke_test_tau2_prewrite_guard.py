@@ -1,0 +1,86 @@
+"""No-model smoke test for the patched Tau2 write-dispatch method.
+
+Run inside the pinned Tau2 virtual environment after applying the source patch:
+PYTHONPATH=../src uv run python ../scripts/smoke_test_tau2_prewrite_guard.py
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+from tau2.data_model.message import ToolCall, ToolMessage
+from tau2.orchestrator.orchestrator import BaseOrchestrator
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURE = ROOT / "tests" / "fixtures" / "tau2_task0_trace_minimal.json"
+
+
+class CountingEnvironment:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get_response(self, tool_call: ToolCall) -> ToolMessage:
+        self.calls.append(tool_call.name)
+        return ToolMessage(
+            id=tool_call.id,
+            role="tool",
+            requestor=tool_call.requestor,
+            content="SIMULATED_WRITE_EXECUTED",
+            error=False,
+        )
+
+
+def _setup() -> tuple[list[dict[str, Any]], ToolCall]:
+    results = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    trajectory = results["simulations"][0]["messages"][:19]
+    raw_call = trajectory[-1]["tool_calls"][0]
+    call = ToolCall(
+        id=raw_call["id"],
+        name=raw_call["name"],
+        arguments=raw_call["arguments"],
+        requestor="assistant",
+    )
+    return trajectory, call
+
+
+def _dispatch(trajectory: list[dict[str, Any]], call: ToolCall) -> tuple[list[ToolMessage], CountingEnvironment, Any]:
+    environment = CountingEnvironment()
+    orchestrator = SimpleNamespace(environment=environment, trajectory=trajectory, num_errors=0)
+    results = BaseOrchestrator._execute_tool_calls(orchestrator, [call])
+    return results, environment, orchestrator
+
+
+def main() -> None:
+    # The recorded baseline omits the order ID and old item IDs in the final
+    # customer-facing confirmation. The patched dispatch must block before
+    # the environment/write callback is called.
+    trajectory, call = _setup()
+    results, environment, orchestrator = _dispatch(trajectory, call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == [], "NO_GO must never reach the environment write callback"
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
+    # A complete confirmation plus an affirmative customer reply allows the
+    # fake write callback exactly once. This does not touch a real Tau2 DB.
+    trajectory, call = _setup()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. Use payment method "
+        "credit_card_9513926 for any price difference. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+    results, environment, orchestrator = _dispatch(trajectory, call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["exchange_delivered_order_items"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+    print("PASS: NO_GO blocked the callback; GO invoked the fake callback exactly once.")
+
+
+if __name__ == "__main__":
+    main()
