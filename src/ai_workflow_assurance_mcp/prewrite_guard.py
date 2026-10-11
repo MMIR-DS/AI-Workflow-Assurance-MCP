@@ -12,12 +12,11 @@ def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _unique_string_list(value: Any) -> bool:
+def _nonempty_string_list(value: Any) -> bool:
     return (
         isinstance(value, list)
         and bool(value)
         and all(_nonempty_string(item) for item in value)
-        and len(value) == len(set(value))
     )
 
 
@@ -47,8 +46,9 @@ def evaluate_prewrite(action: Any, evidence: Any) -> dict[str, Any]:
 
     action_valid = (
         _nonempty_string(order_id)
-        and _unique_string_list(old_items)
-        and _unique_string_list(new_items)
+        and _nonempty_string_list(old_items)
+        and _nonempty_string_list(new_items)
+        and len(old_items) == len(new_items)
         and _nonempty_string(payment_id)
         and set(old_items).isdisjoint(set(new_items))
     )
