@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ai_workflow_assurance_mcp.evidence_sources import Tau2ManifestFileSource
 from ai_workflow_assurance_mcp.core import (
     MAX_JSON_CHARS,
     AssuranceInputError,
@@ -22,6 +21,7 @@ from ai_workflow_assurance_mcp.core import (
     summarize_workflow_metadata,
     validate_spec,
 )
+from ai_workflow_assurance_mcp.evidence_sources import Tau2ManifestFileSource
 
 
 def _load_json(path: str) -> Any:
