@@ -82,8 +82,9 @@ def _confirmation_references_consistent(
 
     # Order IDs in Tau2 use an alphabetic prefix (e.g. W2378156). Only compare
     # explicit order/hash references; ordinary prose is not interpreted as an ID.
-    order_refs = re.findall(r"\border\s*#?\s*([a-z][a-z0-9_-]+)\b", folded)
-    order_refs += re.findall(r"#([a-z][a-z0-9_-]+)\b", folded)
+    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
+    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
+    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
     if any(reference != expected_order_id.casefold() for reference in order_refs):
         return False
 
