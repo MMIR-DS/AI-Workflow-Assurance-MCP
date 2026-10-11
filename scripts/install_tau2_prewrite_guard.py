@@ -17,6 +17,9 @@ ORIGINAL = """        tool_results = []
         return tool_results"""
 
 REPLACEMENT = """        tool_results = []
+        # One dispatch batch is evaluated against one trajectory snapshot. Never
+        # allow two writes for the same order to reuse that snapshot.
+        awa_write_orders_seen = set()
         for tool_call in tool_calls:
             # AWA_PREWRITE_GUARD_PATCH_V2: fail closed for every retail write tool.
             awa_write_tools = {
@@ -32,22 +35,49 @@ REPLACEMENT = """        tool_results = []
                 if tool_call.name == "exchange_delivered_order_items":
                     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
 
-                    preflight = evaluate_tau2_prewrite(self.trajectory, tool_call)
-                    if preflight["decision"] == "GO":
-                        tool_result = self.environment.get_response(tool_call)
-                    else:
-                        blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
+                    raw_order_id = (
+                        tool_call.arguments.get("order_id")
+                        if isinstance(tool_call.arguments, dict)
+                        else None
+                    )
+                    normalized_order_id = (
+                        raw_order_id.casefold()
+                        if isinstance(raw_order_id, str) and raw_order_id
+                        else None
+                    )
+                    if normalized_order_id and normalized_order_id in awa_write_orders_seen:
                         tool_result = ToolMessage(
                             id=tool_call.id,
                             role="tool",
                             requestor=tool_call.requestor,
                             error=True,
                             content=(
-                                "AWA_PREWRITE_NO_GO: exchange blocked before execution. "
-                                f"Blocking checks: {blocking}. Ask the customer to confirm "
-                                "the exact order, old/new item IDs, and payment method, then retry."
+                                "AWA_PREWRITE_NO_GO: a second write for the same order "
+                                "in one dispatch batch is blocked. Re-read the order and "
+                                "retry in a new turn."
                             ),
                         )
+                    else:
+                        if normalized_order_id:
+                            # Reserve even on NO_GO: a second same-order action in this
+                            # batch must wait for a new trajectory/snapshot.
+                            awa_write_orders_seen.add(normalized_order_id)
+                        preflight = evaluate_tau2_prewrite(self.trajectory, tool_call)
+                        if preflight["decision"] == "GO":
+                            tool_result = self.environment.get_response(tool_call)
+                        else:
+                            blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
+                            tool_result = ToolMessage(
+                                id=tool_call.id,
+                                role="tool",
+                                requestor=tool_call.requestor,
+                                error=True,
+                                content=(
+                                    "AWA_PREWRITE_NO_GO: exchange blocked before execution. "
+                                    f"Blocking checks: {blocking}. Ask the customer to confirm "
+                                    "the exact order, old/new item IDs, and payment method, then retry."
+                                ),
+                            )
                 else:
                     tool_result = ToolMessage(
                         id=tool_call.id,
