@@ -21,6 +21,10 @@ from ai_workflow_assurance_mcp.core import (
     validate_spec,
 )
 from ai_workflow_assurance_mcp.evidence_sources import MAX_MANIFEST_BYTES, Tau2ManifestFileSource
+from ai_workflow_assurance_mcp.github_actions_evidence import (
+    GitHubActionsEvidenceError,
+    GitHubActionsRunSource,
+)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -101,6 +105,35 @@ def validate_workflow_spec(workflow_spec_json: str) -> dict[str, Any]:
         "thresholds": summarize_thresholds(spec.get("thresholds")),
         "errors": errors,
         "limitations": ["Validation checks schema and supported operators only; it does not prove the criteria are complete or appropriate for the business risk."],
+    }
+
+
+@mcp.tool()
+@_map_input_errors_to_tool_errors
+def inspect_github_actions_run(
+    repository: str,
+    run_id: int,
+    expected_head_sha: str,
+    max_age_seconds: int = 3600,
+) -> dict[str, Any]:
+    """Read one GitHub Actions run's metadata; never authenticates production or authorizes release."""
+    try:
+        envelope = GitHubActionsRunSource(
+            repository=repository,
+            run_id=run_id,
+            expected_head_sha=expected_head_sha,
+            max_age_seconds=max_age_seconds,
+        ).read_evidence()
+    except GitHubActionsEvidenceError as exc:
+        raise AssuranceInputError(f"Could not inspect GitHub Actions evidence: {exc}") from exc
+    return {
+        "source_name": envelope.source_name,
+        "source_version": envelope.source_version,
+        "assurance_scope": envelope.assurance_scope,
+        "source_authenticity": envelope.source_authenticity,
+        "release_eligible": envelope.release_eligible,
+        "collected_at": envelope.collected_at.isoformat() if envelope.collected_at else None,
+        "evidence": envelope.evidence,
     }
 
 
