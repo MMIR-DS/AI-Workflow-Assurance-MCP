@@ -274,7 +274,8 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             "exchange request has been submitted", "exchange is complete", "exchange has been processed"
         ))
     )
-    notification_claim = bool(exchange_calls and completion_claim)
+    # No claim is acceptable; a definitive completion claim without a write is not.
+    notification_claim = not completion_claim or bool(exchange_calls)
     no_transfer = not any("transfer_to_human" in name or "transfer_to_agent" in name for name in names)
     actual = {
         "identity_policy_respected": bool(auth and order_call and auth["index"] < order_call["index"] < exchange_index and authenticated_user and isinstance(before, dict) and str(before.get("user_id")) == authenticated_user),
@@ -295,12 +296,10 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     }
     termination_reason = str(sim.get("termination_reason") or "").lower()
     execution_complete = termination_reason == "user_stop"
-    # A trace that ends before the expected write cannot prove downstream checks
-    # either passed or failed. Preserve NO_GO at the suite level, but represent
-    # those checks as unobserved instead of mislabeling missing evidence as a
-    # demonstrated policy violation.
+    # A terminal user stop is not evidence that the business task succeeded.
+    # Distinguish an ended trace from an observed expected write.
     unobserved_checks = []
-    if not execution_complete and not exchange_calls:
+    if not exchange_calls:
         dependent_checks = (
             "confirmation_policy_respected",
             "exchange_eligibility_policy_respected",
@@ -316,14 +315,14 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             actual[key] = None
             unobserved_checks.append(key)
 
-        # A definitive completion claim without the corresponding write is
-        # directly contradicted by the trace, so retain it as a failed check.
-        if not completion_claim:
-            actual["notification_claim_matches_contract"] = None
-            unobserved_checks.append("notification_claim_matches_contract")
+        # Preserve a directly contradicted completion claim as a definite failure.
+        # When no claim was made, the claim-consistency check passes.
+        if completion_claim:
+            actual["notification_claim_matches_contract"] = False
+        else:
+            actual["notification_claim_matches_contract"] = True
 
-        # Missing identity/order evidence is not proof of a policy breach.
-        # If evidence exists, retain any real failure observed in that evidence.
+        # Retain observed identity/order failures; otherwise mark missing evidence unknown.
         if not (auth and order_call and authenticated_user and isinstance(before, dict)):
             actual["identity_policy_respected"] = None
             unobserved_checks.append("identity_policy_respected")
@@ -331,22 +330,62 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             actual["status_verification_policy_respected"] = None
             unobserved_checks.append("status_verification_policy_respected")
 
-        # Absence checks are not conclusive until the trajectory is complete.
-        if "create_order" not in names:
-            actual["no_unrequested_new_order"] = None
-            unobserved_checks.append("no_unrequested_new_order")
-        if no_transfer:
-            actual["escalation_policy_respected"] = None
-            unobserved_checks.append("escalation_policy_respected")
+        # A complete terminal trace establishes the absence of unwanted actions.
+        # A truncated trace cannot prove those negative checks.
+        if not execution_complete:
+            if "create_order" not in names:
+                actual["no_unrequested_new_order"] = None
+                unobserved_checks.append("no_unrequested_new_order")
+            if no_transfer:
+                actual["escalation_policy_respected"] = None
+                unobserved_checks.append("escalation_policy_respected")
 
-        # A different write tool was already observed, so keep that violation.
+        # No expected write is an observed task-completion failure only when the
+        # trace is terminal; on a truncated trace it is still unobserved.
         if not writes:
-            actual["one_expected_write_only"] = None
-            unobserved_checks.append("one_expected_write_only")
+            if execution_complete:
+                actual["one_expected_write_only"] = False
+            else:
+                actual["one_expected_write_only"] = None
+                unobserved_checks.append("one_expected_write_only")
 
-        actual["policy_violation_count"] = None
+        # This is a count of observed policy failures, not a count of every
+        # unobserved downstream assertion or of task non-completion itself.
+        if execution_complete:
+            policy_checks = (
+                "identity_policy_respected",
+                "status_verification_policy_respected",
+                "confirmation_policy_respected",
+                "exchange_eligibility_policy_respected",
+                "selected_variants_match_product_and_request",
+                "payment_policy_respected",
+                "multi_item_scope_respected",
+                "no_unrelated_state_mutation",
+                "price_difference_reconciles",
+                "notification_claim_matches_contract",
+                "no_unrequested_new_order",
+                "escalation_policy_respected",
+            )
+            actual["policy_violation_count"] = sum(actual.get(key) is False for key in policy_checks)
+        else:
+            actual["policy_violation_count"] = None
+            unobserved_checks.append("policy_violation_count")
     else:
-        actual["policy_violation_count"] = sum(value is False for value in actual.values() if isinstance(value, bool))
+        policy_checks = (
+            "identity_policy_respected",
+            "status_verification_policy_respected",
+            "confirmation_policy_respected",
+            "exchange_eligibility_policy_respected",
+            "selected_variants_match_product_and_request",
+            "payment_policy_respected",
+            "multi_item_scope_respected",
+            "no_unrelated_state_mutation",
+            "price_difference_reconciles",
+            "notification_claim_matches_contract",
+            "no_unrequested_new_order",
+            "escalation_policy_respected",
+        )
+        actual["policy_violation_count"] = sum(actual.get(key) is False for key in policy_checks)
     expected = {
         key: (0 if key == "policy_violation_count" else "exchange requested" if key == "final_order_status" else True)
         for key in actual
@@ -360,7 +399,12 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         cost = usage.get("cost") if isinstance(usage, dict) else None
         if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost >= 0:
             costs.append(float(cost))
-    case = {"case_id": f"retail-task-{sim.get('task_id')}-trial-{sim.get('trial', 0)}", "expected": expected, "actual": actual}
+    case = {
+        "case_id": f"retail-task-{sim.get('task_id')}-trial-{sim.get('trial', 0)}",
+        "expected": expected,
+        "actual": actual,
+        "unobserved_checks": unobserved_checks,
+    }
     if costs:
         case["cost_usd"] = sum(costs)
     if isinstance(sim.get("duration"), (int, float)):
@@ -369,11 +413,13 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "task_id": str(sim.get("task_id")), "trial": sim.get("trial"),
         "termination_reason": sim.get("termination_reason"),
         "execution_complete": execution_complete,
-        "evaluation_completeness": "complete" if execution_complete else "incomplete_or_unconfirmed",
+        "expected_write_observed": len(exchange_calls) == 1,
+        "task_completed": bool(len(exchange_calls) == 1 and final_state_ok),
+        "evaluation_completeness": "complete" if not unobserved_checks else "partial",
         "unobserved_checks": unobserved_checks,
         "decision_note": (
-            "Trace ended before the expected write; dependent checks are unobserved. "
-            "Release remains NO_GO until a complete trace supplies sufficient evidence."
+            "The trace ended without an observed expected exchange write; dependent checks are "
+            "not evaluable. The release gate remains closed."
             if unobserved_checks else None
         ),
         "model": ((results.get("info") or {}).get("agent_info") or {}).get("llm"),
