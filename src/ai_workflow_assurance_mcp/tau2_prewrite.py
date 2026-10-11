@@ -119,8 +119,8 @@ def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
 
 
 def _available_variant_ids(messages: list[Any]) -> set[str]:
-    """Collect only available variants from matching, successful product-detail reads."""
-    available: set[str] = set()
+    """Collect available variants from each product's latest read only."""
+    latest_results: dict[str, Any] = {}
     for message in messages:
         for call in _tool_calls(message):
             if _get(call, "name") != "get_product_details":
@@ -132,19 +132,29 @@ def _available_variant_ids(messages: list[Any]) -> set[str]:
             if not isinstance(product_id, str) or not product_id:
                 continue
             result = _decode_tool_result(messages, str(_get(call, "id", "")))
-            if not isinstance(result, dict) or result.get("product_id") != product_id:
-                continue
-            variants = result.get("variants")
-            if not isinstance(variants, dict):
-                continue
-            for variant_id, variant in variants.items():
-                if (
-                    isinstance(variant_id, str)
-                    and isinstance(variant, dict)
-                    and variant.get("item_id") == variant_id
-                    and variant.get("available") is True
-                ):
-                    available.add(variant_id)
+            # A later failed/mismatched read supersedes an earlier snapshot; do not
+            # retain stale availability from an older successful response.
+            latest_results[product_id] = (
+                result
+                if isinstance(result, dict) and result.get("product_id") == product_id
+                else None
+            )
+
+    available: set[str] = set()
+    for result in latest_results.values():
+        if not isinstance(result, dict):
+            continue
+        variants = result.get("variants")
+        if not isinstance(variants, dict):
+            continue
+        for variant_id, variant in variants.items():
+            if (
+                isinstance(variant_id, str)
+                and isinstance(variant, dict)
+                and variant.get("item_id") == variant_id
+                and variant.get("available") is True
+            ):
+                available.add(variant_id)
     return available
 
 
