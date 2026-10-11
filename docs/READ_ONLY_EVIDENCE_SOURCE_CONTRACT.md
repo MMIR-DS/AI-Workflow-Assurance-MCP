@@ -27,7 +27,9 @@ label. It deliberately leaves collected_at unset because the manifest does
 not establish a trusted collection timestamp.
 
 The adapter returns a narrow evidence projection and does not propagate source
-provenance a second time inside the payload. It validates the manifest schema
+provenance a second time inside the payload. The MCP tool
+`inspect_tau2_evidence_manifest` accepts the manifest as JSON text and uses the
+same normalizer without reading an arbitrary filesystem path. It validates the manifest schema
 version, 40-character source commit, exact check-name set, boolean check values,
 reconciled summary counts, decision/check consistency, SHA-256 fingerprint
 shape, write-count constraints, and tamper-probe consistency. Nested order and

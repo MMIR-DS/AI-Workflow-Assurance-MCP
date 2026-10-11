@@ -56,7 +56,7 @@ ai-workflow-assurance-mcp
 python -m ai_workflow_assurance_mcp.server
 ```
 
-Tools: `validate_workflow_spec`, `run_eval_suite`, `compare_eval_runs`, `explain_failures`, `generate_release_report`.
+Tools: `validate_workflow_spec`, `run_eval_suite`, `compare_eval_runs`, `explain_failures`, `generate_release_report`, `inspect_tau2_evidence_manifest`. The evidence tool accepts JSON text and returns a strict normalized projection; it does not authenticate the source or make simulator evidence release-eligible.
 
 ## Tests
 

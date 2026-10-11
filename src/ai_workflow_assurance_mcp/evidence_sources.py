@@ -131,6 +131,11 @@ class Tau2ManifestFileSource:
             raise ValueError(f"could not read a valid JSON manifest: {exc}") from exc
         except (OSError, UnicodeError) as exc:
             raise ValueError(f"could not read a valid JSON manifest: {exc}") from exc
+        return self.normalize_manifest(manifest)
+
+    @classmethod
+    def normalize_manifest(cls, manifest: Any) -> EvidenceEnvelope:
+        """Validate and normalize a supplied manifest object without file I/O."""
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a JSON object.")
         if manifest.get("schema_version") != "1.0.0":
@@ -161,7 +166,7 @@ class Tau2ManifestFileSource:
         if not isinstance(decision, str) or decision not in {"GO", "HOLD", "NO_GO"}:
             raise ValueError("manifest decision must be GO, HOLD, or NO_GO.")
         checks = manifest.get("checks")
-        if not isinstance(checks, dict) or set(checks) != self._required_checks:
+        if not isinstance(checks, dict) or set(checks) != cls._required_checks:
             raise ValueError("manifest checks must contain exactly the supported tau2 check names.")
         if any(not isinstance(value, bool) for value in checks.values()):
             raise ValueError("every manifest check must be a boolean.")
@@ -185,8 +190,8 @@ class Tau2ManifestFileSource:
         database = manifest.get("database_evidence")
         if not isinstance(database, dict):
             raise ValueError("manifest database_evidence must be an object.")
-        before = self._safe_order_projection(database.get("before"))
-        after = self._safe_order_projection(database.get("after"))
+        before = cls._safe_order_projection(database.get("before"))
+        after = cls._safe_order_projection(database.get("after"))
         for label, snapshot in (("before", before), ("after", after)):
             if str(snapshot.get("order_id", "")) != str(manifest.get("order_id", "")):
                 raise ValueError(f"database_evidence.{label} does not match manifest order_id.")
@@ -247,12 +252,12 @@ class Tau2ManifestFileSource:
             "simulation_task_id": simulation_task_id,
             "order_id": order_id,
             "database_evidence": safe_database,
-            "checks": {key: checks[key] for key in sorted(self._required_checks)},
+            "checks": {key: checks[key] for key in sorted(cls._required_checks)},
             "summary": {"passed_checks": passed_checks, "total_checks": total_checks},
-            "limitations": list(self._limitations),
+            "limitations": list(cls._limitations),
             "data_minimization": {
                 "raw_order_snapshots_included": False,
-                "redacted_fields": list(self._redacted_fields),
+                "redacted_fields": list(cls._redacted_fields),
             },
         }
         return EvidenceEnvelope(
