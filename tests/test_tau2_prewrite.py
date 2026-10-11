@@ -18,6 +18,22 @@ def _trajectory_and_call() -> tuple[list[dict], dict]:
     return messages, call
 
 
+def _tool_result_json(trajectory: list[dict], call_id: str) -> dict:
+    message = next(
+        item for item in trajectory
+        if item.get("role") == "tool" and item.get("id") == call_id
+    )
+    return json.loads(message["content"])
+
+
+def _replace_tool_result_json(trajectory: list[dict], call_id: str, payload: dict) -> None:
+    message = next(
+        item for item in trajectory
+        if item.get("role") == "tool" and item.get("id") == call_id
+    )
+    message["content"] = json.dumps(payload)
+
+
 def test_tau2_adapter_blocks_write_when_final_confirmation_omits_order_and_old_items() -> None:
     trajectory, call = _trajectory_and_call()
 
@@ -256,3 +272,89 @@ def test_tau2_adapter_recovers_after_blocked_attempt_and_fresh_confirmation() ->
     assert result["evidence_summary"]["identity_matches_order_owner"] is True
     assert result["evidence_summary"]["assistant_disclosed_exact_order_items_and_payment"] is True
     assert result["evidence_summary"]["user_affirmed_after_disclosure"] is True
+
+
+def test_tau2_adapter_blocks_order_snapshot_for_a_different_order_id() -> None:
+    trajectory, call = _trajectory_and_call()
+    snapshot = _tool_result_json(trajectory, "order-read-1")
+    snapshot["order_id"] = "#W9999999"
+    _replace_tool_result_json(trajectory, "order-read-1", snapshot)
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "order_snapshot_matches_requested_order" in result["blocking_checks"]
+    assert result["evidence_summary"]["order_snapshot_matches_requested_order"] is False
+
+
+def test_tau2_adapter_blocks_old_item_not_present_in_order() -> None:
+    trajectory, call = _trajectory_and_call()
+    call["arguments"]["item_ids"] = ["9999999999", "4983901480"]
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 9999999999 for 7706410293 "
+        "and old item 4983901480 for 7747408585. Use payment method "
+        "credit_card_9513926 for any price difference. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, exchange item 9999999999 and item 4983901480 for 7706410293 and "
+        "7747408585 using credit_card_9513926."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "old_items_belong_to_order_and_are_unique" in result["blocking_checks"]
+
+
+def test_tau2_adapter_blocks_payment_method_not_in_order_history() -> None:
+    trajectory, call = _trajectory_and_call()
+    call["arguments"]["payment_method_id"] = "credit_card_1234567"
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. Use payment method "
+        "credit_card_1234567 for any price difference. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_1234567 for this exchange."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "payment_method_belongs_to_order" in result["blocking_checks"]
+
+
+def test_tau2_adapter_blocks_new_variant_not_verified_available() -> None:
+    trajectory, call = _trajectory_and_call()
+    product = _tool_result_json(trajectory, "keyboard-product-1")
+    product["variants"]["7706410293"]["available"] = False
+    _replace_tool_result_json(trajectory, "keyboard-product-1", product)
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
+
+
+def test_tau2_adapter_does_not_rely_on_stale_available_variant_snapshot() -> None:
+    trajectory, call = _trajectory_and_call()
+    latest_product = _tool_result_json(trajectory, "keyboard-product-1")
+    latest_product["variants"]["7706410293"]["available"] = False
+    trajectory.insert(-1, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "keyboard-product-2",
+            "name": "get_product_details",
+            "arguments": {"product_id": "1656367028"},
+        }],
+    })
+    trajectory.insert(-1, {
+        "role": "tool",
+        "id": "keyboard-product-2",
+        "content": json.dumps(latest_product),
+    })
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
