@@ -20,8 +20,10 @@ def _nonempty_string_list(value: Any) -> bool:
     )
 
 
-def evaluate_prewrite(action: Any, evidence: Any) -> dict[str, Any]:
-    """Return GO only when action, authenticated identity, and prior confirmation match."""
+def evaluate_prewrite(
+    action: Any, evidence: Any, *, expected_order_status: str = "delivered"
+) -> dict[str, Any]:
+    """Return GO only when action, identity, status, and prior confirmation match."""
     failures: list[str] = []
 
     if not isinstance(action, dict):
@@ -65,8 +67,8 @@ def evaluate_prewrite(action: Any, evidence: Any) -> dict[str, Any]:
     if not identity_valid:
         failures.append("identity_or_order_ownership_not_verified")
 
-    if evidence.get("order_status") != "delivered":
-        failures.append("order_not_confirmed_delivered")
+    if evidence.get("order_status") != expected_order_status:
+        failures.append(f"order_not_confirmed_{expected_order_status}")
 
     confirmation = evidence.get("confirmation")
     confirmation_valid = (

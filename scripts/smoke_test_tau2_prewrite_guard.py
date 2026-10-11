@@ -192,6 +192,41 @@ def _setup_payment() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
+def _setup_pending_items() -> tuple[list[dict[str, Any]], ToolCall]:
+    trajectory, _ = _setup()
+    order_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "order-read-1"
+    )
+    order = json.loads(order_result["content"])
+    order["status"] = "pending"
+    order_result["content"] = json.dumps(order)
+    raw_call = {
+        "id": "pending-items-call-001",
+        "name": "modify_pending_order_items",
+        "arguments": {
+            "order_id": "#W2378156",
+            "item_ids": ["1151293680", "4983901480"],
+            "new_item_ids": ["7706410293", "7747408585"],
+            "payment_method_id": "credit_card_9513926",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [raw_call]
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, that's correct. Please proceed with the item update."
+    call = ToolCall(
+        id=raw_call["id"],
+        name=raw_call["name"],
+        arguments=raw_call["arguments"],
+        requestor="assistant",
+    )
+    return trajectory, call
+
+
 def main() -> None:
     # The recorded baseline omits the order ID and old item IDs in the final
     # customer-facing confirmation. The patched dispatch must block before
@@ -303,9 +338,28 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
+    # A valid pending-order item modification must pass through the actual dispatcher.
+    trajectory, pending_items_call = _setup_pending_items()
+    results, environment, orchestrator = _dispatch(trajectory, pending_items_call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["modify_pending_order_items"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # Missing exact price disclosure blocks pending item modification.
+    trajectory, pending_items_call = _setup_pending_items()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156, exchange the selected items and use "
+        "credit_card_9513926. Please confirm."
+    )
+    results, environment, orchestrator = _dispatch(trajectory, pending_items_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == []
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
     # Every write tool without its own reviewed adapter must be denied before dispatch.
     unsupported_write_tools = [
-        "modify_pending_order_items",
         "modify_user_address",
         "return_delivered_order_items",
     ]
@@ -322,7 +376,7 @@ def main() -> None:
         assert environment.calls == [], f"{tool_name} must not reach the environment"
         assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
         assert orchestrator.num_errors == 1, tool_name
-    print("PASS: exchange/cancellation/address/payment GO/NO_GO, same-batch duplicate blocking, and default-deny for all three unsupported retail writes.")
+    print("PASS: exchange/cancellation/address/payment/pending-items GO/NO_GO, same-batch duplicate blocking, and default-deny for both unsupported retail writes.")
 
 
 if __name__ == "__main__":

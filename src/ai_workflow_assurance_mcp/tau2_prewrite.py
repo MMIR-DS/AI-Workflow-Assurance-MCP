@@ -291,12 +291,18 @@ def _latest_blocked_write_result_index(
     return latest_index
 
 
-def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
-    """Evaluate a Tau2 exchange tool call immediately before its execution."""
+def evaluate_tau2_prewrite(
+    trajectory: Any,
+    tool_call: Any,
+    *,
+    expected_tool_name: str = "exchange_delivered_order_items",
+    expected_order_status: str = "delivered",
+) -> dict[str, Any]:
+    """Evaluate an item exchange/modification immediately before its execution."""
     messages = _messages(trajectory)
     name = _get(tool_call, "name")
     arguments = _get(tool_call, "arguments", {})
-    if name != "exchange_delivered_order_items" or not isinstance(arguments, dict):
+    if name != expected_tool_name or not isinstance(arguments, dict):
         return {
             "decision": "NO_GO",
             "allowed": False,
@@ -408,7 +414,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
 
     price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
     latest_blocked_attempt_index = _latest_blocked_write_result_index(
-        prior_messages, order_id, "exchange_delivered_order_items"
+        prior_messages, order_id, expected_tool_name
     )
     reconfirmed_after_block = (
         latest_blocked_attempt_index < 0
@@ -467,10 +473,11 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         "confirmation_event_sequence": last_user_index + 1 if confirmation_valid else None,
         "proposed_write_sequence": current_message_index + 1,
     }
-    result = evaluate_prewrite(action, evidence)
+    result = evaluate_prewrite(action, evidence, expected_order_status=expected_order_status)
     order_snapshot_fresh = _order_snapshot_is_fresh(messages, order_id)
     extra_checks = {
         "order_snapshot_matches_requested_order": order_snapshot_matches_request,
+        "order_status_matches_required_state": order_status == expected_order_status,
         "old_item_multiplicity_does_not_exceed_order_quantity": old_items_belong_to_order,
         "new_items_are_verified_available_variants": new_items_verified_available,
         "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
@@ -1013,3 +1020,65 @@ def evaluate_tau2_payment_prewrite(trajectory: Any, tool_call: Any) -> dict[str,
             "new_payment_method_source": new_method.get("source") if new_method_valid else None,
         },
     }
+
+
+def _has_prior_attempt_not_blocked_by_awa(
+    messages: list[Any], tool_name: str, order_id: Any, current_call_id: str
+) -> bool:
+    """Treat any prior non-AWA-blocked call as an attempt for one-shot operations."""
+    for message in messages:
+        for call in _tool_calls(message):
+            arguments = _get(call, "arguments", {})
+            call_id = str(_get(call, "id", ""))
+            if (
+                call_id == current_call_id
+                or _get(call, "name") != tool_name
+                or not isinstance(arguments, dict)
+                or arguments.get("order_id") != order_id
+            ):
+                continue
+            result_message = next(
+                (
+                    candidate for candidate in messages
+                    if _get(candidate, "role") == "tool"
+                    and str(_get(candidate, "id", "")) == call_id
+                ),
+                None,
+            )
+            if result_message is None:
+                return True
+            content = _get(result_message, "content", "")
+            if not isinstance(content, str) or "AWA_PREWRITE_NO_GO" not in content:
+                return True
+    return False
+
+
+def evaluate_tau2_pending_items_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
+    """Apply the item policy to pending orders and enforce Tau2's one-modification limit."""
+    result = evaluate_tau2_prewrite(
+        trajectory,
+        tool_call,
+        expected_tool_name="modify_pending_order_items",
+        expected_order_status="pending",
+    )
+    messages = _messages(trajectory)
+    arguments = _get(tool_call, "arguments", {})
+    order_id = arguments.get("order_id") if isinstance(arguments, dict) else None
+    current_call_id = str(_get(tool_call, "id", ""))
+    prior_attempt = _has_prior_attempt_not_blocked_by_awa(
+        messages, "modify_pending_order_items", order_id, current_call_id
+    )
+    result.setdefault("checked", {})["pending_order_item_modification_not_previously_attempted"] = (
+        not prior_attempt
+    )
+    result.setdefault("evidence_summary", {})[
+        "pending_order_item_modification_not_previously_attempted"
+    ] = not prior_attempt
+    if prior_attempt:
+        result["blocking_checks"] = list(dict.fromkeys([
+            *result.get("blocking_checks", []),
+            "pending_order_item_modification_already_attempted",
+        ]))
+        result["decision"] = "NO_GO"
+        result["allowed"] = False
+    return result
