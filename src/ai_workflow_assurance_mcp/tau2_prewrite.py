@@ -61,7 +61,13 @@ def _contains_all(text: str, values: list[str]) -> bool:
 
 def _is_affirmative(text: str) -> bool:
     normalized = re.sub(r"[^a-z0-9' ]+", " ", text.casefold())
-    if re.search(r"\b(no|don't|do not|not yet|stop|wait|change|incorrect|instead|cancel)\b", normalized):
+    # A positive token is not sufficient when the reply also qualifies or changes
+    # the requested action. Prefer a false block over treating mixed intent as consent.
+    if re.search(
+        r"\b(no|don't|do not|not yet|stop|wait|change|incorrect|instead|cancel|"
+        r"but|however|except|different|another|rather|unless|maybe|not that)\b",
+        normalized,
+    ):
         return False
     return bool(
         re.search(
