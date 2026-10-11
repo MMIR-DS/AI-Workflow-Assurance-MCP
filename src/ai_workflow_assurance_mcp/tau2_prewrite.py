@@ -59,6 +59,49 @@ def _contains_all(text: str, values: list[str]) -> bool:
     return all(value in text for value in values)
 
 
+def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
+    """Require a matching order read with no later write attempt against that order."""
+    if not isinstance(order_id, str) or not order_id:
+        return False
+    write_tools = {
+        "cancel_pending_order",
+        "exchange_delivered_order_items",
+        "modify_pending_order_address",
+        "modify_pending_order_items",
+        "modify_pending_order_payment",
+        "modify_user_address",
+        "return_delivered_order_items",
+    }
+    read_index = -1
+    for index, message in enumerate(messages):
+        for call in _tool_calls(message):
+            call_args = _get(call, "arguments", {})
+            if (
+                _get(call, "name") == "get_order_details"
+                and isinstance(call_args, dict)
+                and call_args.get("order_id") == order_id
+                and _decode_tool_result(messages, str(_get(call, "id", ""))) is not None
+            ):
+                read_index = index
+    if read_index < 0:
+        return False
+
+    # Even a failed write attempt requires a fresh read before retrying; this is
+    # deliberately conservative and avoids relying on possibly ambiguous tool errors.
+    for message in messages[read_index + 1 : -1]:
+        for call in _tool_calls(message):
+            call_args = _get(call, "arguments", {})
+            if (
+                _get(call, "name") in write_tools
+                and isinstance(call_args, dict)
+                and call_args.get("order_id") == order_id
+            ):
+                return False
+    return True
+
+
+
+
 def _confirmation_references_consistent(
     text: str,
     expected_order_id: Any,
@@ -219,10 +262,22 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         "proposed_write_sequence": current_message_index + 1,
     }
     result = evaluate_prewrite(action, evidence)
+    order_snapshot_fresh = _order_snapshot_is_fresh(messages, order_id)
+    if not order_snapshot_fresh:
+        result["decision"] = "NO_GO"
+        result["allowed"] = False
+        result["blocking_checks"] = list(dict.fromkeys([
+            *result.get("blocking_checks", []),
+            "order_snapshot_stale_after_prior_write_attempt",
+        ]))
+        result.setdefault("checked", {})["order_snapshot_fresh"] = False
+    else:
+        result.setdefault("checked", {})["order_snapshot_fresh"] = True
     result["scope"] = "pinned_tau2_simulator_trajectory_not_production_identity_evidence"
     result["evidence_summary"] = {
         "identity_matches_order_owner": identity_valid,
         "order_status": order_status,
+        "order_snapshot_fresh": order_snapshot_fresh,
         "assistant_disclosed_exact_order_items_and_payment": disclosure_valid,
         "user_affirmed_after_disclosure": confirmation_valid,
     }
