@@ -4,9 +4,9 @@
 
 Deterministic evaluation logic for AI workflow observations, exposed as an MCP server and a local CLI. Reports include run-specific metadata.
 
-**Version:** 0.1.5
+**Version:** 0.1.6
 
-This repository contains the source for **AI Workflow Assurance MCP v0.1.5**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
+This repository contains the source for **AI Workflow Assurance MCP v0.1.6**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
 
 ## What it does
 
