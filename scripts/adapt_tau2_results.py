@@ -419,7 +419,11 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "execution_complete": execution_complete,
         "expected_write_observed": len(exchange_calls) == 1,
         "task_completed": bool(len(exchange_calls) == 1 and final_state_ok),
-        "evaluation_completeness": "complete" if not unobserved_checks else "partial",
+        "evaluation_completeness": (
+            "complete" if not unobserved_checks
+            else "partial" if execution_complete
+            else "incomplete_or_unconfirmed"
+        ),
         "unobserved_checks": unobserved_criterion_ids,
         "decision_note": (
             "The trace ended without an observed expected exchange write; dependent checks are "
