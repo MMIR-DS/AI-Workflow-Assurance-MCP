@@ -5,9 +5,9 @@ import unittest
 
 from ai_workflow_assurance_mcp.core import (
     AssuranceInputError,
+    SCHEMA_VERSION,
     compare_reports,
     create_release_report,
-    SCHEMA_VERSION,
     evaluate_suite,
     explain_report_failures,
     parse_json_text,
