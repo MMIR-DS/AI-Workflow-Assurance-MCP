@@ -4,6 +4,7 @@
 
 - Bump the evaluation-report schema to `0.4` for explicit `PASS` / `FAIL` / `NOT_EVALUABLE` check statuses and separate counts for definite failures versus unobserved checks.
 - Keep the release gate fail-closed: unknown-only evidence cannot produce `GO`; observed failing checks continue to block release.
+- Extend `explain` output with separate, bounded groups and case-ID previews for checks that could not be evaluated.
 - Treat Tau2 terminal traces without the expected exchange write as task non-completion, while avoiding inflated policy-violation counts from unobservable downstream assertions.
 - Upgrade GitHub Actions workflows to pinned Node.js 24-compatible revisions and configure the Tau2 `uv` cache after checkout.
 

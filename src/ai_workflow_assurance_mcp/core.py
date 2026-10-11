@@ -865,15 +865,30 @@ def explain_report_failures(report: dict[str, Any], max_items: int = 25) -> dict
     if not isinstance(max_items, int) or isinstance(max_items, bool) or not 1 <= max_items <= MAX_EXPLANATION_ITEMS:
         raise AssuranceInputError(f"max_items must be an integer between 1 and {MAX_EXPLANATION_ITEMS}.")
     failures: list[dict[str, Any]] = []
+    not_evaluable: list[dict[str, Any]] = []
     for case in report["case_results"]:
         if not isinstance(case, dict):
             continue
         for check in case.get("checks", []):
-            if isinstance(check, dict) and _evaluation_status(check) == "FAIL":
-                failures.append({"case_id": case.get("case_id"), **check})
-    failures.sort(key=lambda item: (SEVERITY_ORDER.get(item.get("severity"), 9), str(item.get("case_id")), str(item.get("criterion_id"))))
+            if not isinstance(check, dict):
+                continue
+            item = {"case_id": case.get("case_id"), **check}
+            status = _evaluation_status(check)
+            if status == "FAIL":
+                failures.append(item)
+            elif status == "NOT_EVALUABLE":
+                not_evaluable.append(item)
+    def sort_key(item: dict[str, Any]) -> tuple[int, str, str]:
+        return (
+            SEVERITY_ORDER.get(item.get("severity"), 9),
+            str(item.get("case_id")),
+            str(item.get("criterion_id")),
+        )
+    failures.sort(key=sort_key)
+    not_evaluable.sort(key=sort_key)
     total = len(failures)
     selected = failures[:max_items]
+    selected_not_evaluable = not_evaluable[:max_items]
     grouped: dict[str, dict[str, Any]] = {}
     seen_case_ids: dict[str, set[str]] = {}
     for item in failures:
@@ -892,14 +907,42 @@ def explain_report_failures(report: dict[str, Any], max_items: int = 25) -> dict
                 group["case_ids"].append(case_id)
             else:
                 group["case_ids_omitted_count"] += 1
+    not_evaluable_grouped: dict[str, dict[str, Any]] = {}
+    not_evaluable_seen_case_ids: dict[str, set[str]] = {}
+    for item in not_evaluable:
+        key = str(item.get("criterion_id", "unknown"))
+        group = not_evaluable_grouped.setdefault(key, {
+            "criterion_id": key,
+            "severity": item.get("severity", "low"),
+            "not_evaluable_count": 0,
+            "case_ids": [],
+            "case_ids_omitted_count": 0,
+        })
+        group["not_evaluable_count"] += 1
+        case_id = item.get("case_id")
+        seen = not_evaluable_seen_case_ids.setdefault(key, set())
+        if case_id not in seen:
+            seen.add(case_id)
+            if len(group["case_ids"]) < 20:
+                group["case_ids"].append(case_id)
+            else:
+                group["case_ids_omitted_count"] += 1
+
     return {
         "workflow_id": report["workflow"]["id"],
         "run_id": report["run_id"],
         "total_failed_checks": total,
-        "total_not_evaluable_checks": sum(
-            1 for case in report["case_results"] for check in case.get("checks", [])
-            if isinstance(check, dict) and _evaluation_status(check) == "NOT_EVALUABLE"
+        "total_not_evaluable_checks": len(not_evaluable),
+        "not_evaluable_checks_returned": len(selected_not_evaluable),
+        "not_evaluable_checks_truncated": len(not_evaluable) > len(selected_not_evaluable),
+        "not_evaluable_groups": sorted(
+            not_evaluable_grouped.values(),
+            key=lambda group: (
+                SEVERITY_ORDER.get(group["severity"], 9),
+                -group["not_evaluable_count"],
+            ),
         ),
+        "not_evaluable_checks": selected_not_evaluable,
         "failures_returned": len(selected),
         "truncated": total > len(selected),
         "failure_groups": sorted(grouped.values(), key=lambda group: (SEVERITY_ORDER.get(group["severity"], 9), -group["failure_count"])),
