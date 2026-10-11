@@ -357,7 +357,7 @@ def test_tau2_adapter_does_not_rely_on_stale_available_variant_snapshot() -> Non
     result = evaluate_tau2_prewrite(trajectory, call)
 
     assert result["decision"] == "NO_GO"
-    assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
+    assert "new_items_are_verified_available_variants" in result["blocking_checks"]
 
 
 def test_tau2_adapter_blocks_exchange_without_exact_price_difference_disclosure() -> None:
