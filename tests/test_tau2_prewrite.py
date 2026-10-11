@@ -981,3 +981,77 @@ def test_tau2_return_adapter_blocks_item_not_in_order() -> None:
 
     assert result["decision"] == "NO_GO"
     assert "requested_items_belong_to_order_quantity" in result["blocking_checks"]
+
+
+def test_tau2_exchange_blocks_disclosure_that_lists_ids_without_naming_exchange() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "Order #W2378156 contains old item 1151293680, new item 7706410293, old item "
+        "4983901480, new item 7747408585. The total price difference is a $16.63 "
+        "refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, that's correct. Please proceed."
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+
+
+def test_tau2_cancel_blocks_refund_disclosure_that_omits_cancellation_action() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+    trajectory[16]["content"] = (
+        "For order #W2378156, the reason is no longer needed. You will receive a "
+        "refund of 1819.92 to credit_card_9513926 in 5-7 business days. Please confirm."
+    )
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "exact_cancellation_and_refund_disclosure_valid" in result["blocking_checks"]
+
+
+def test_tau2_order_address_blocks_address_values_without_update_action() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_address_prewrite
+
+    trajectory, call = _address_trajectory_and_call()
+    trajectory[16]["content"] = (
+        "For order #W2378156: 100 Main Street, Unit 4, Boston, MA, USA, ZIP 02108. "
+        "Please confirm."
+    )
+
+    result = evaluate_tau2_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "exact_new_address_disclosed" in result["blocking_checks"]
+
+
+def test_tau2_payment_blocks_method_ids_without_describing_payment_change() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_payment_prewrite
+
+    trajectory, call = _payment_trajectory_and_call()
+    trajectory[18]["content"] = (
+        "For order #W2378156, credit_card_9513926 to credit_card_1234567 "
+        "(credit card, visa ending 4567). Please confirm."
+    )
+
+    result = evaluate_tau2_payment_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "exact_old_and_new_payment_details_disclosed" in result["blocking_checks"]
+
+
+def test_tau2_user_address_blocks_address_values_without_default_address_action() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_user_address_prewrite
+
+    trajectory, call = _user_address_trajectory_and_call()
+    trajectory[18]["content"] = (
+        "Customer Example: 100 Main Street, Unit 4, Boston, MA, USA, ZIP 02108. "
+        "Please confirm."
+    )
+
+    result = evaluate_tau2_user_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "exact_new_address_and_customer_disclosed" in result["blocking_checks"]
