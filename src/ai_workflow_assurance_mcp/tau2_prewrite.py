@@ -265,6 +265,29 @@ def _is_affirmative(text: str) -> bool:
     )
 
 
+def _latest_blocked_exchange_result_index(messages: list[Any], order_id: Any) -> int:
+    """Find the latest preflight-blocked exchange for this order, if any."""
+    latest_index = -1
+    for message in messages:
+        for call in _tool_calls(message):
+            arguments = _get(call, "arguments", {})
+            if (
+                _get(call, "name") != "exchange_delivered_order_items"
+                or not isinstance(arguments, dict)
+                or arguments.get("order_id") != order_id
+            ):
+                continue
+            call_id = str(_get(call, "id", ""))
+            for index, candidate in enumerate(messages):
+                if _get(candidate, "role") != "tool" or str(_get(candidate, "id", "")) != call_id:
+                    continue
+                content = _get(candidate, "content", "")
+                if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:
+                    latest_index = max(latest_index, index)
+                break
+    return latest_index
+
+
 def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
     """Evaluate a Tau2 exchange tool call immediately before its execution."""
     messages = _messages(trajectory)
@@ -381,6 +404,12 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
                 last_assistant_text = text
 
     price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
+    latest_blocked_attempt_index = _latest_blocked_exchange_result_index(prior_messages, order_id)
+    reconfirmed_after_block = (
+        latest_blocked_attempt_index < 0
+        or last_assistant_text_index > latest_blocked_attempt_index
+    )
+
     identifiers = [order_id, *(old_items if isinstance(old_items, list) else []),
                    *(new_items if isinstance(new_items, list) else []), payment_id]
     identifiers_are_strings = all(isinstance(item, str) and item for item in identifiers)
@@ -405,6 +434,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         and _confirmation_references_consistent(
             last_user_text, order_id, old_items, new_items, payment_id
         )
+        and reconfirmed_after_block
         and last_user_index < current_message_index
     )
 
@@ -473,5 +503,6 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         "order_snapshot_fresh": order_snapshot_fresh,
         "assistant_disclosed_exact_order_items_and_payment": disclosure_valid,
         "user_affirmed_after_disclosure": confirmation_valid,
+        "user_reconfirmed_after_latest_blocked_attempt": reconfirmed_after_block,
     }
     return result
