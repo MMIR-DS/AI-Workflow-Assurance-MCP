@@ -236,7 +236,8 @@ def _confirmation_references_consistent(
     order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
     order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
     order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
-    if any(reference != expected_order_id.casefold() for reference in order_refs):
+    expected_order_reference = expected_order_id.casefold().lstrip("#")
+    if any(reference != expected_order_reference for reference in order_refs):
         return False
 
     expected_items = {str(item) for item in [*expected_old_items, *expected_new_items]}
@@ -522,7 +523,8 @@ def _cancel_confirmation_references_consistent(
     order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
     order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
     order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
-    if any(reference != order_id.casefold() for reference in order_refs):
+    expected_order_reference = order_id.casefold().lstrip("#")
+    if any(reference != expected_order_reference for reference in order_refs):
         return False
     payment_refs = re.findall(
         r"\b(?:credit_card|gift_card|paypal|payment_method)[_-][a-z0-9_-]+\b",
