@@ -142,8 +142,21 @@ def test_tau2_adapter_blocks_when_order_was_written_after_the_snapshot() -> None
     trajectory[17]["content"] = (
         "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
     )
-    # A previous write to this order after the last order read invalidates that snapshot.
-    trajectory.insert(12, {
+    # Place a successful write immediately after the order-read result, before confirmation.
+    read_call_index = next(
+        index for index, message in enumerate(trajectory)
+        if any(
+            tool.get("name") == "get_order_details"
+            and tool.get("arguments", {}).get("order_id") == "#W2378156"
+            for tool in message.get("tool_calls", [])
+        )
+    )
+    read_call_id = trajectory[read_call_index]["tool_calls"][0]["id"]
+    read_result_index = next(
+        index for index, message in enumerate(trajectory)
+        if message.get("role") == "tool" and message.get("id") == read_call_id
+    )
+    trajectory.insert(read_result_index + 1, {
         "role": "assistant",
         "tool_calls": [{
             "id": "prior-write-001",
@@ -151,7 +164,7 @@ def test_tau2_adapter_blocks_when_order_was_written_after_the_snapshot() -> None
             "arguments": {"order_id": "#W2378156", "city": "Updated City"},
         }],
     })
-    trajectory.insert(13, {
+    trajectory.insert(read_result_index + 2, {
         "role": "tool",
         "id": "prior-write-001",
         "content": "{\"status\": \"ok\"}",
