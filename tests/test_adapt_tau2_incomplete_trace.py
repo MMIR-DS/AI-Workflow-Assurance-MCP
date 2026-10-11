@@ -34,3 +34,26 @@ def test_incomplete_trace_marks_downstream_checks_unobserved():
     assert case["actual"]["policy_violation_count"] is None
     # Null checks still fail closed against the expected passing values.
     assert case["expected"]["final_state_matches_expected"] is True
+
+
+
+def test_incomplete_trace_keeps_unsupported_completion_claim_as_failure():
+    results = {"info": {"agent_info": {"llm": "test-model"}}}
+    sim = {
+        "task_id": 0,
+        "trial": 0,
+        "termination_reason": "max_steps",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": "Your exchange request has been submitted. You will receive an email shortly.",
+            }
+        ],
+        "reward_info": {"reward": 0.0},
+    }
+
+    case, metadata = normalize_simulation(results, sim)
+
+    assert case["actual"]["notification_claim_matches_contract"] is False
+    assert "notification_claim_matches_contract" not in metadata["unobserved_checks"]
+    assert case["actual"]["policy_violation_count"] is None
