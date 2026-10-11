@@ -97,3 +97,48 @@ def test_tau2_adapter_fails_closed_without_order_read_evidence() -> None:
 
     assert result["decision"] == "NO_GO"
     assert "order_not_confirmed_delivered" in result["blocking_checks"]
+
+
+def test_tau2_adapter_recovers_after_blocked_attempt_and_fresh_confirmation() -> None:
+    trajectory, first_call = _trajectory_and_call()
+    retry_call = {
+        "id": "retry-call-001",
+        "name": first_call["name"],
+        "arguments": first_call["arguments"],
+    }
+
+    # Model the actual recovery sequence: first attempt was blocked, the assistant
+    # clarifies every material detail, the user confirms, then the same write is retried.
+    trajectory.extend([
+        {
+            "role": "tool",
+            "id": first_call["id"],
+            "content": json.dumps({
+                "error": "AWA_PREWRITE_NO_GO: missing complete customer confirmation"
+            }),
+        },
+        {
+            "role": "assistant",
+            "content": (
+                "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+                "and old item 4983901480 for 7747408585. Use payment method "
+                "credit_card_9513926 for any price difference. Please confirm."
+            ),
+        },
+        {
+            "role": "user",
+            "content": "Yes, that's correct. Please proceed with this exchange.",
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [retry_call],
+        },
+    ])
+
+    result = evaluate_tau2_prewrite(trajectory, retry_call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["identity_matches_order_owner"] is True
+    assert result["evidence_summary"]["assistant_disclosed_exact_order_items_and_payment"] is True
+    assert result["evidence_summary"]["user_affirmed_after_disclosure"] is True
