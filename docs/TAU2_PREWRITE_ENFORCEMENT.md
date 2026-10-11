@@ -16,7 +16,8 @@ The preflight requires:
 - a prior `find_user_id_by_name_zip` or `find_user_id_by_email` lookup whose result matches the order owner;
 - an assistant message that explicitly includes the order ID, every old item ID, every new item ID, and the exact payment-method ID;
 - a subsequent affirmative user response, with negative or change requests rejected;
-- confirmation sequence before the proposed write sequence.
+- confirmation sequence before the proposed write sequence;
+- a fresh order snapshot: any intervening write attempt against the same order forces a new read before retry.
 
 When the decision is `NO_GO`, the patched dispatcher returns an error `ToolMessage` and does **not** call `environment.get_response` for the exchange. The agent can then ask the user to confirm the complete details and retry. On `GO`, the normal Tau2 environment dispatch executes exactly once.
 
