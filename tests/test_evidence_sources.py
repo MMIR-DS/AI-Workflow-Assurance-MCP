@@ -225,3 +225,27 @@ def test_tau2_adapter_rejects_non_string_decision(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="decision must be GO, HOLD, or NO_GO"):
         Tau2ManifestFileSource(path).read_evidence()
+
+
+def test_tau2_adapter_rejects_nested_non_string_item_options(tmp_path) -> None:
+    manifest = _manifest()
+    manifest["database_evidence"]["before"]["items"][0]["options"] = {
+        "private_customer_note": "must not pass through"
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="item options must be null or a list of short strings"):
+        Tau2ManifestFileSource(path).read_evidence()
+
+
+def test_tau2_adapter_rejects_unexpected_nested_exchange_items_type(tmp_path) -> None:
+    manifest = _manifest()
+    manifest["database_evidence"]["after"]["exchange_items"] = {
+        "customer_address": "must not pass through"
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="exchange_items must be null or a list of short strings"):
+        Tau2ManifestFileSource(path).read_evidence()
