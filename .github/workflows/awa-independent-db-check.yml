@@ -23,21 +23,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
       - name: Check out tau2-bench at the pinned baseline commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: sierra-research/tau2-bench
           ref: 4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699
           path: tau2-bench
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          working-directory: tau2-bench
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
       - name: Install pinned tau2-bench runtime
         working-directory: tau2-bench
         run: uv sync --extra dev
@@ -149,7 +153,7 @@ jobs:
           PY
       - name: Upload independent database evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: awa-independent-retail-db-evidence
           path: |
