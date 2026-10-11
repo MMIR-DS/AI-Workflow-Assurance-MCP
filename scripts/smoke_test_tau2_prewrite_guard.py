@@ -283,6 +283,71 @@ def _setup_user_address() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
+def _setup_return() -> tuple[list[dict[str, Any]], ToolCall]:
+    trajectory, _ = _setup()
+    order_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "order-read-1"
+    )
+    order = json.loads(order_result["content"])
+    owner_id = order["user_id"]
+    user_details = {
+        "user_id": owner_id,
+        "name": "Customer Example",
+        "email": "customer@example.com",
+        "address": order["address"],
+        "payment_methods": {
+            "credit_card_9513926": {
+                "id": "credit_card_9513926",
+                "source": "credit_card",
+                "brand": "visa",
+                "last_four": "3926",
+            },
+            "gift_card_1234567": {
+                "id": "gift_card_1234567",
+                "source": "gift_card",
+            },
+        },
+    }
+    trajectory.insert(16, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "return-user-read-1",
+            "name": "get_user_details",
+            "arguments": {"user_id": owner_id},
+        }],
+    })
+    trajectory.insert(17, {
+        "role": "tool",
+        "id": "return-user-read-1",
+        "content": json.dumps(user_details),
+    })
+    raw_call = {
+        "id": "return-call-001",
+        "name": "return_delivered_order_items",
+        "arguments": {
+            "order_id": "#W2378156",
+            "item_ids": ["1151293680"],
+            "payment_method_id": "credit_card_9513926",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [raw_call]
+    trajectory[18]["content"] = (
+        "For order #W2378156, request return of item 1151293680 using "
+        "credit_card_9513926 (credit card, visa ending 3926). This will create a "
+        "return request, and you will receive a follow-up email with return instructions. "
+        "Please confirm."
+    )
+    trajectory[19]["content"] = "Yes, I confirm the return request as described."
+    call = ToolCall(
+        id=raw_call["id"],
+        name=raw_call["name"],
+        arguments=raw_call["arguments"],
+        requestor="assistant",
+    )
+    return trajectory, call
+
+
 def main() -> None:
     # The recorded baseline omits the order ID and old item IDs in the final
     # customer-facing confirmation. The patched dispatch must block before
@@ -431,10 +496,25 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    # Every write tool without its own reviewed adapter must be denied before dispatch.
-    unsupported_write_tools = [
-        "return_delivered_order_items",
-    ]
+    # A valid delivered-item return request must pass through the actual dispatcher.
+    trajectory, return_call = _setup_return()
+    results, environment, orchestrator = _dispatch(trajectory, return_call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["return_delivered_order_items"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # Missing return-process disclosure blocks before the environment callback.
+    trajectory, return_call = _setup_return()
+    trajectory[18]["content"] = (
+        "For order #W2378156, request return of item 1151293680 using "
+        "credit_card_9513926. Please confirm."
+    )
+    results, environment, orchestrator = _dispatch(trajectory, return_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == []
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
     for index, tool_name in enumerate(unsupported_write_tools):
         trajectory, _ = _setup()
         unsupported_write = ToolCall(
@@ -448,7 +528,7 @@ def main() -> None:
         assert environment.calls == [], f"{tool_name} must not reach the environment"
         assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
         assert orchestrator.num_errors == 1, tool_name
-    print("PASS: exchange/cancellation/address/payment/pending-items/user-address GO/NO_GO, same-batch duplicate blocking, and default-deny for the remaining unsupported retail write.")
+    print("PASS: all seven pinned retail write policies enforce GO/NO_GO through the actual dispatcher; same-batch duplicate blocking is verified.")
 
 
 if __name__ == "__main__":
