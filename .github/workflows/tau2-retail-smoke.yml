@@ -48,6 +48,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: sierra-research/tau2-bench
+          ref: 4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699
           path: tau2-bench
       - name: Set up uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -63,6 +64,9 @@ jobs:
       - name: Install missing runtime dependency used by tau2 data checks
         working-directory: tau2-bench
         run: uv pip install --python .venv/bin/python 'websockets>=13.0'
+      - name: Install AWA pre-write guard into pinned Tau2 dispatch path
+        working-directory: tau2-bench
+        run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
       - name: Validate benchmark data
         working-directory: tau2-bench
         run: uv run tau2 check-data
@@ -71,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          uv run tau2 run \
+          PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run tau2 run \
             --domain retail \
             --agent llm_agent \
             --agent-llm "$MODEL" \
