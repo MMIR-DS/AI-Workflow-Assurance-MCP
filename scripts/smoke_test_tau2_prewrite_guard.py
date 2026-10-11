@@ -127,6 +127,71 @@ def _setup_address() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
+def _setup_payment() -> tuple[list[dict[str, Any]], ToolCall]:
+    trajectory, _ = _setup()
+    order_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "order-read-1"
+    )
+    order = json.loads(order_result["content"])
+    order["status"] = "pending"
+    order_result["content"] = json.dumps(order)
+    owner_id = order["user_id"]
+    user_details = {
+        "user_id": owner_id,
+        "payment_methods": {
+            "credit_card_9513926": {
+                "id": "credit_card_9513926",
+                "source": "credit_card",
+                "brand": "visa",
+                "last_four": "3926",
+            },
+            "credit_card_1234567": {
+                "id": "credit_card_1234567",
+                "source": "credit_card",
+                "brand": "visa",
+                "last_four": "4567",
+            },
+        },
+    }
+    trajectory.insert(16, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "user-details-1",
+            "name": "get_user_details",
+            "arguments": {"user_id": owner_id},
+        }],
+    })
+    trajectory.insert(17, {
+        "role": "tool",
+        "id": "user-details-1",
+        "content": json.dumps(user_details),
+    })
+    raw_call = {
+        "id": "payment-call-001",
+        "name": "modify_pending_order_payment",
+        "arguments": {
+            "order_id": "#W2378156",
+            "payment_method_id": "credit_card_1234567",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [raw_call]
+    trajectory[18]["content"] = (
+        "For order #W2378156, change payment method from credit_card_9513926 to "
+        "credit_card_1234567 (credit card, visa ending 4567). Please confirm."
+    )
+    trajectory[19]["content"] = (
+        "Yes, change order #W2378156 to credit_card_1234567, visa ending 4567."
+    )
+    call = ToolCall(
+        id=raw_call["id"],
+        name=raw_call["name"],
+        arguments=raw_call["arguments"],
+        requestor="assistant",
+    )
+    return trajectory, call
+
+
 def main() -> None:
     # The recorded baseline omits the order ID and old item IDs in the final
     # customer-facing confirmation. The patched dispatch must block before
@@ -219,10 +284,28 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
+    # A valid pending-order payment-method change must pass through the actual dispatcher.
+    trajectory, payment_call = _setup_payment()
+    results, environment, orchestrator = _dispatch(trajectory, payment_call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["modify_pending_order_payment"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # A payment-method change without exact method disclosure is blocked pre-dispatch.
+    trajectory, payment_call = _setup_payment()
+    trajectory[18]["content"] = (
+        "For order #W2378156, change the payment method. Please confirm."
+    )
+    results, environment, orchestrator = _dispatch(trajectory, payment_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == []
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
     # Every write tool without its own reviewed adapter must be denied before dispatch.
     unsupported_write_tools = [
         "modify_pending_order_items",
-        "modify_pending_order_payment",
         "modify_user_address",
         "return_delivered_order_items",
     ]
@@ -239,7 +322,7 @@ def main() -> None:
         assert environment.calls == [], f"{tool_name} must not reach the environment"
         assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
         assert orchestrator.num_errors == 1, tool_name
-    print("PASS: exchange/cancellation/address GO/NO_GO, same-batch duplicate blocking, and default-deny for all four unsupported retail writes.")
+    print("PASS: exchange/cancellation/address/payment GO/NO_GO, same-batch duplicate blocking, and default-deny for all three unsupported retail writes.")
 
 
 if __name__ == "__main__":
