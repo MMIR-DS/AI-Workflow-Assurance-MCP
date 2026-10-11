@@ -320,3 +320,26 @@ def test_full_database_invariant_rejects_mutated_product_or_other_order() -> Non
     assert other_database_entities_unchanged(before, mutated_product, "#W1") is False
     assert other_database_entities_unchanged(before, mutated_order, "#W1") is False
 
+
+
+
+def test_confirmation_fails_closed_when_assistant_does_not_disclose_exact_payment_method():
+    results, spec = _load_inputs()
+    messages = results["simulations"][0]["messages"]
+    assistant_confirmation = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "To confirm:" in str(message.get("content") or "")
+    )
+    original = str(assistant_confirmation["content"])
+    assert "credit_card_9513926" in original
+    assistant_confirmation["content"] = original.replace(
+        "credit_card_9513926", "[payment method not disclosed]"
+    )
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["confirmation_policy_respected"] is False
+    assert case["actual"]["policy_violation_count"] == 1
+    assert report["summary"]["critical_failures"] >= 1
+    assert release["decision"] == "NO_GO"
