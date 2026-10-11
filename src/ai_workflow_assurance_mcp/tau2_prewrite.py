@@ -59,12 +59,39 @@ def _contains_all(text: str, values: list[str]) -> bool:
     return all(value in text for value in values)
 
 
-def _payment_references_consistent(text: str, expected_payment_id: Any) -> bool:
-    """Reject an explicit payment-method reference that conflicts with the proposed action."""
-    if not isinstance(expected_payment_id, str) or not expected_payment_id:
+def _confirmation_references_consistent(
+    text: str,
+    expected_order_id: Any,
+    expected_old_items: Any,
+    expected_new_items: Any,
+    expected_payment_id: Any,
+) -> bool:
+    """Reject explicit order, item, or payment identifiers that conflict with the action."""
+    if not all(
+        isinstance(value, str) and value
+        for value in [expected_order_id, expected_payment_id]
+    ):
         return False
-    mentioned = re.findall(r"\b(?:credit_card|payment_method)[_-][a-z0-9_-]+\b", text.casefold())
-    return all(reference == expected_payment_id.casefold() for reference in mentioned)
+    if not isinstance(expected_old_items, list) or not isinstance(expected_new_items, list):
+        return False
+
+    folded = text.casefold()
+    payment_refs = re.findall(r"\b(?:credit_card|payment_method)[_-][a-z0-9_-]+\b", folded)
+    if any(reference != expected_payment_id.casefold() for reference in payment_refs):
+        return False
+
+    # Order IDs in Tau2 use an alphabetic prefix (e.g. W2378156). Only compare
+    # explicit order/hash references; ordinary prose is not interpreted as an ID.
+    order_refs = re.findall(r"\border\s*#?\s*([a-z][a-z0-9_-]+)\b", folded)
+    order_refs += re.findall(r"#([a-z][a-z0-9_-]+)\b", folded)
+    if any(reference != expected_order_id.casefold() for reference in order_refs):
+        return False
+
+    expected_items = {str(item) for item in [*expected_old_items, *expected_new_items]}
+    mentioned_numeric_ids = re.findall(r"\b\d{8,}\b", folded)
+    if any(reference not in expected_items for reference in mentioned_numeric_ids):
+        return False
+    return True
 
 
 def _is_affirmative(text: str) -> bool:
@@ -160,7 +187,9 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         disclosure_valid
         and last_user_index > last_assistant_text_index
         and _is_affirmative(last_user_text)
-        and _payment_references_consistent(last_user_text, payment_id)
+        and _confirmation_references_consistent(
+            last_user_text, order_id, old_items, new_items, payment_id
+        )
         and last_user_index < current_message_index
     )
 
