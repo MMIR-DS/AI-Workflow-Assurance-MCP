@@ -1,0 +1,92 @@
+"""Install a narrowly scoped guard into the pinned Tau2 orchestrator source."""
+from __future__ import annotations
+
+import argparse
+import subprocess
+from pathlib import Path
+
+EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
+PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V1"
+
+ORIGINAL = """        tool_results = []
+        for tool_call in tool_calls:
+            tool_result = self.environment.get_response(tool_call)
+            if tool_result.error:
+                self.num_errors += 1
+            tool_results.append(tool_result)
+        return tool_results"""
+
+REPLACEMENT = """        tool_results = []
+        for tool_call in tool_calls:
+            # AWA_PREWRITE_GUARD_PATCH_V1: deny sensitive exchange writes before dispatch.
+            if tool_call.name == "exchange_delivered_order_items":
+                from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
+
+                preflight = evaluate_tau2_prewrite(self.trajectory, tool_call)
+                if preflight["decision"] != "GO":
+                    blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
+                    tool_result = ToolMessage(
+                        id=tool_call.id,
+                        role="tool",
+                        requestor=tool_call.requestor,
+                        error=True,
+                        content=(
+                            "AWA_PREWRITE_NO_GO: exchange blocked before execution. "
+                            f"Blocking checks: {blocking}. Ask the customer to confirm "
+                            "the exact order, old/new item IDs, and payment method, then retry."
+                        ),
+                    )
+                else:
+                    tool_result = self.environment.get_response(tool_call)
+            else:
+                tool_result = self.environment.get_response(tool_call)
+            if tool_result.error:
+                self.num_errors += 1
+            tool_results.append(tool_result)
+        return tool_results"""
+
+
+def patch_orchestrator_source(source: str) -> str:
+    """Patch only the expected dispatch loop; reject unknown source layouts."""
+    if PATCH_MARKER in source:
+        return source
+    if source.count(ORIGINAL) != 1:
+        raise ValueError(
+            "Expected exactly one unmodified Tau2 tool-dispatch loop; "
+            "the upstream source may have changed. Refusing to patch."
+        )
+    return source.replace(ORIGINAL, REPLACEMENT, 1)
+
+
+def install(tau2_root: Path) -> Path:
+    """Verify the pinned checkout and install the guard into its orchestrator."""
+    revision = subprocess.run(
+        ["git", "-C", str(tau2_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if revision != EXPECTED_TAU2_COMMIT:
+        raise RuntimeError(
+            f"Unexpected Tau2 revision {revision}; expected {EXPECTED_TAU2_COMMIT}. "
+            "Refusing to patch an unreviewed source version."
+        )
+
+    target = tau2_root / "src" / "tau2" / "orchestrator" / "orchestrator.py"
+    original_source = target.read_text(encoding="utf-8")
+    patched_source = patch_orchestrator_source(original_source)
+    if patched_source != original_source:
+        target.write_text(patched_source, encoding="utf-8")
+    return target
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--tau2-root", type=Path, required=True)
+    args = parser.parse_args()
+    path = install(args.tau2_root.resolve())
+    print(f"Installed {PATCH_MARKER} in {path}")
+
+
+if __name__ == "__main__":
+    main()
