@@ -75,10 +75,52 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     "compare_eval_runs",
                     "explain_failures",
                     "generate_release_report",
+                    "inspect_tau2_evidence_manifest",
                 }
 
                 spec_json = json.dumps(SPEC)
                 cases_json = json.dumps(CASES)
+                evidence_names = (
+                    "source_code_commit_matches_trace",
+                    "pre_state_matches_recorded_order_read",
+                    "write_execution_succeeded",
+                    "no_other_database_entities_mutated",
+                    "independent_db_state_matches_recorded_exchange_response",
+                    "replay_db_payment_profile_and_original_transaction_match",
+                    "unrelated_order_fields_unchanged_in_database",
+                    "database_price_recalculation_matches_post_state",
+                    "database_transition_matches_write_request",
+                    "tamper_probe_is_detected",
+                )
+                evidence_checks = {name: True for name in evidence_names}
+                evidence_manifest = {
+                    "schema_version": "1.0.0",
+                    "manifest_type": "awa-tau2-source-evidence-v1",
+                    "assurance_scope": "pinned_simulator_replay_evidence_only",
+                    "production_ready": False,
+                    "release_eligible": False,
+                    "decision": "GO",
+                    "simulation_task_id": "0",
+                    "order_id": "#synthetic",
+                    "source_provenance": {
+                        "checked_out_commit": "c" * 40,
+                        "source_authenticity": "not_verified",
+                    },
+                    "database_evidence": {
+                        "before": {"order_id": "#synthetic", "status": "delivered"},
+                        "after": {"order_id": "#synthetic", "status": "exchange requested"},
+                        "full_database_before_sha256": "1" * 64,
+                        "full_database_after_sha256": "2" * 64,
+                        "other_database_entities_unchanged": True,
+                        "write_count_in_trace": 1,
+                        "tool_return_value_used_for_decision": False,
+                        "tamper_probe": {"mutated_field": "status", "detected": True},
+                    },
+                    "checks": evidence_checks,
+                    "summary": {"passed_checks": len(evidence_checks), "total_checks": len(evidence_checks)},
+                    "data_minimization": {"raw_order_snapshots_included": False},
+                }
+                evidence_json = json.dumps(evidence_manifest)
                 results = [
                     await session.call_tool("validate_workflow_spec", {"workflow_spec_json": spec_json}),
                     await session.call_tool("run_eval_suite", {"workflow_spec_json": spec_json, "cases_json": cases_json}),
@@ -91,8 +133,12 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                         {"workflow_spec_json": spec_json, "cases_json": cases_json, "max_items": 10},
                     ),
                     await session.call_tool("generate_release_report", {"workflow_spec_json": spec_json, "cases_json": cases_json}),
+                    await session.call_tool("inspect_tau2_evidence_manifest", {"manifest_json": evidence_json}),
                 ]
                 assert all(not _is_error(result) for result in results), [_content_text(result) for result in results]
+                evidence_payload = json.loads(_content_text(results[5]))
+                assert evidence_payload["release_eligible"] is False
+                assert evidence_payload["source_authenticity"] == "not_verified"
                 release_payload = json.loads(_content_text(results[4]))
                 assert "failed_case_count" in release_payload
                 assert len(release_payload["failed_case_ids_preview"]) <= 20
