@@ -348,6 +348,14 @@ def validate_cases(cases: Any) -> list[str]:
             errors.append(f"{prefix}.expected must be a JSON object or list.")
         if not isinstance(case.get("actual"), (dict, list)):
             errors.append(f"{prefix}.actual must be a JSON object or list.")
+        if "unobserved_checks" in case:
+            unobserved = case["unobserved_checks"]
+            if (
+                not isinstance(unobserved, list)
+                or any(not isinstance(item, str) or not item.strip() for item in unobserved)
+                or len(set(unobserved)) != len(unobserved)
+            ):
+                errors.append(f"{prefix}.unobserved_checks must be a list of unique non-empty criterion ids.")
         for key in ("cost_usd", "latency_ms"):
             if key in case and (not _is_number(case[key]) or float(case[key]) < 0):
                 errors.append(f"{prefix}.{key} must be a finite non-negative number.")
@@ -368,7 +376,17 @@ def _expected_value(criterion: dict[str, Any], expected_root: Any) -> tuple[bool
     return False, None
 
 
-def _evaluate_criterion(criterion: dict[str, Any], expected_root: Any, actual_root: Any) -> dict[str, Any]:
+def _evaluation_status(check: dict[str, Any]) -> str:
+    status = check.get("status")
+    if status in {"PASS", "FAIL", "NOT_EVALUABLE"}:
+        return status
+    # Backward compatibility for reports created before explicit status existed.
+    return "PASS" if check.get("passed") is True else "FAIL"
+
+
+def _evaluate_criterion(
+    criterion: dict[str, Any], expected_root: Any, actual_root: Any, not_evaluable: bool = False
+) -> dict[str, Any]:
     operator = criterion["operator"]
     actual_exists, actual_value = _lookup_path(actual_root, criterion["actual_path"])
     expected_exists, expected_value = _expected_value(criterion, expected_root)
@@ -406,11 +424,16 @@ def _evaluate_criterion(criterion: dict[str, Any], expected_root: Any, actual_ro
         passed = isinstance(expected_value, list) and any(_typed_equal(actual_value, choice) for choice in expected_value)
         message = "Value is in the allowed set." if passed else "Value is outside the allowed set."
 
+    if not_evaluable:
+        passed = False
+        message = "Criterion is not evaluable from the available evidence."
+
     item: dict[str, Any] = {
         "criterion_id": criterion["id"],
         "operator": operator,
         "severity": criterion.get("severity", "high"),
         "passed": bool(passed),
+        "status": "NOT_EVALUABLE" if not_evaluable else ("PASS" if passed else "FAIL"),
         "message": message,
         "actual_path": criterion["actual_path"],
         "actual_value": _bounded_report_value(actual_value) if actual_exists else None,
@@ -435,6 +458,14 @@ def evaluate_suite(spec: dict[str, Any], cases: list[dict[str, Any]]) -> dict[st
         raise AssuranceInputError("Invalid cases: " + " ".join(case_errors))
     if len(spec["criteria"]) * len(cases) > MAX_EVALUATION_CHECKS:
         raise AssuranceInputError(f"This run would exceed {MAX_EVALUATION_CHECKS:,} individual checks; reduce cases or criteria.")
+    allowed_criterion_ids = {rule["id"] for rule in spec["criteria"]}
+    for index, case in enumerate(cases):
+        unknown_ids = set(case.get("unobserved_checks", [])) - allowed_criterion_ids
+        if unknown_ids:
+            raise AssuranceInputError(
+                f"cases[{index}].unobserved_checks contains unknown criterion id(s): "
+                + ", ".join(sorted(unknown_ids))
+            )
 
     case_results: list[dict[str, Any]] = []
     all_checks: list[dict[str, Any]] = []
@@ -443,8 +474,18 @@ def evaluate_suite(spec: dict[str, Any], cases: list[dict[str, Any]]) -> dict[st
     latencies: list[float] = []
 
     for case in cases:
-        checks = [_evaluate_criterion(rule, case["expected"], case["actual"]) for rule in spec["criteria"]]
-        passed = all(check["passed"] for check in checks)
+        unobserved = set(case.get("unobserved_checks", []))
+        checks = [
+            _evaluate_criterion(rule, case["expected"], case["actual"], rule["id"] in unobserved)
+            for rule in spec["criteria"]
+        ]
+        statuses = [_evaluation_status(check) for check in checks]
+        case_status = (
+            "PASS" if all(status == "PASS" for status in statuses)
+            else "FAIL" if any(status == "FAIL" for status in statuses)
+            else "NOT_EVALUABLE"
+        )
+        passed = case_status == "PASS"
         # Review-rate metrics must come from an explicit observation, not an
         # inference from the workflow's predicted output. The legacy name is kept
         # as an alias for backwards compatibility.
@@ -459,7 +500,10 @@ def evaluate_suite(spec: dict[str, Any], cases: list[dict[str, Any]]) -> dict[st
             "case_id": case["case_id"],
             "expected_sha256": stable_json_digest(case["expected"]),
             "passed": passed,
-            "checks_passed": sum(1 for check in checks if check["passed"]),
+            "status": case_status,
+            "checks_passed": sum(1 for status in statuses if status == "PASS"),
+            "checks_failed": sum(1 for status in statuses if status == "FAIL"),
+            "checks_not_evaluable": sum(1 for status in statuses if status == "NOT_EVALUABLE"),
             "checks_total": len(checks),
             "checks": checks,
             "human_review_observed": review,
@@ -471,17 +515,19 @@ def evaluate_suite(spec: dict[str, Any], cases: list[dict[str, Any]]) -> dict[st
 
     total_cases = len(case_results)
     total_checks = len(all_checks)
-    failed_critical = sum(1 for item in all_checks if not item["passed"] and item["severity"] == "critical")
-    failed_high = sum(1 for item in all_checks if not item["passed"] and item["severity"] == "high")
+    failed_critical = sum(1 for item in all_checks if _evaluation_status(item) == "FAIL" and item["severity"] == "critical")
+    failed_high = sum(1 for item in all_checks if _evaluation_status(item) == "FAIL" and item["severity"] == "high")
     review_count = sum(review_observations)
     summary = {
         "total_cases": total_cases,
-        "passed_cases": sum(1 for result in case_results if result["passed"]),
-        "failed_cases": sum(1 for result in case_results if not result["passed"]),
-        "pass_rate": sum(1 for result in case_results if result["passed"]) / total_cases,
+        "passed_cases": sum(1 for result in case_results if result["status"] == "PASS"),
+        "failed_cases": sum(1 for result in case_results if result["status"] == "FAIL"),
+        "not_evaluable_cases": sum(1 for result in case_results if result["status"] == "NOT_EVALUABLE"),
+        "pass_rate": sum(1 for result in case_results if result["status"] == "PASS") / total_cases,
         "total_checks": total_checks,
-        "passed_checks": sum(1 for item in all_checks if item["passed"]),
-        "failed_checks": sum(1 for item in all_checks if not item["passed"]),
+        "passed_checks": sum(1 for item in all_checks if _evaluation_status(item) == "PASS"),
+        "failed_checks": sum(1 for item in all_checks if _evaluation_status(item) == "FAIL"),
+        "not_evaluable_checks": sum(1 for item in all_checks if _evaluation_status(item) == "NOT_EVALUABLE"),
         "critical_failures": failed_critical,
         "high_failures": failed_high,
         "reviewed_cases": review_count,
@@ -535,7 +581,7 @@ def _validate_report(report: Any, label: str) -> list[str]:
             value = summary.get(key)
             if value is not None and (not _is_number(value) or (key.endswith("coverage") or key == "pass_rate" or key == "review_rate") and not 0 <= float(value) <= 1):
                 errors.append(f"{label}.summary.{key} must be null or a valid finite numeric rate between 0 and 1.")
-        for key in ("critical_failures", "high_failures", "total_cases", "passed_cases", "failed_cases"):
+        for key in ("critical_failures", "high_failures", "total_cases", "passed_cases", "failed_cases", "not_evaluable_cases", "not_evaluable_checks"):
             value = summary.get(key)
             if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
                 errors.append(f"{label}.summary.{key} must be null or a non-negative integer.")
@@ -586,18 +632,37 @@ def _validate_report(report: Any, label: str) -> list[str]:
                     if not isinstance(check, dict) or not isinstance(check.get("passed"), bool):
                         errors.append(f"{prefix}.checks[{check_index}] must contain a boolean passed field.")
                         continue
+                    if "status" in check:
+                        if check.get("status") not in {"PASS", "FAIL", "NOT_EVALUABLE"}:
+                            errors.append(f"{prefix}.checks[{check_index}].status is invalid.")
+                        elif check["passed"] is not (check["status"] == "PASS"):
+                            errors.append(f"{prefix}.checks[{check_index}].passed conflicts with status.")
                     severity = check.get("severity", "high")
                     if not isinstance(severity, str):
                         errors.append(f"{prefix}.checks[{check_index}].severity must be a string.")
                     elif severity not in SEVERITY_ORDER:
                         errors.append(f"{prefix}.checks[{check_index}].severity is invalid.")
             if isinstance(checks, list) and all(isinstance(item, dict) and isinstance(item.get("passed"), bool) for item in checks):
-                actual_passed_checks = sum(1 for item in checks if item["passed"])
+                check_statuses = [_evaluation_status(item) for item in checks]
+                actual_passed_checks = sum(1 for status in check_statuses if status == "PASS")
+                actual_failed_checks = sum(1 for status in check_statuses if status == "FAIL")
+                actual_not_evaluable_checks = sum(1 for status in check_statuses if status == "NOT_EVALUABLE")
                 if result.get("checks_passed") != actual_passed_checks or result.get("checks_total") != len(checks):
                     errors.append(f"{prefix}.checks_passed/checks_total do not match checks.")
-                expected_case_passed = all(item["passed"] for item in checks)
+                if "checks_failed" in result and result["checks_failed"] != actual_failed_checks:
+                    errors.append(f"{prefix}.checks_failed does not match checks.")
+                if "checks_not_evaluable" in result and result["checks_not_evaluable"] != actual_not_evaluable_checks:
+                    errors.append(f"{prefix}.checks_not_evaluable does not match checks.")
+                expected_case_status = (
+                    "PASS" if all(status == "PASS" for status in check_statuses)
+                    else "FAIL" if any(status == "FAIL" for status in check_statuses)
+                    else "NOT_EVALUABLE"
+                )
+                expected_case_passed = expected_case_status == "PASS"
                 if result.get("passed") != expected_case_passed:
                     errors.append(f"{prefix}.passed does not match its individual checks.")
+                if "status" in result and result["status"] != expected_case_status:
+                    errors.append(f"{prefix}.status does not match its individual checks.")
             if result.get("human_review_observed") is not None and not isinstance(result.get("human_review_observed"), bool):
                 errors.append(f"{prefix}.human_review_observed must be boolean or null.")
             for measure in ("cost_usd", "latency_ms"):
@@ -611,21 +676,27 @@ def _validate_report(report: Any, label: str) -> list[str]:
             valid_results = [item for item in case_results if isinstance(item, dict)]
             total_cases = len(valid_results)
             total_checks = sum(len(item["checks"]) for item in valid_results)
-            passed_cases = sum(1 for item in valid_results if item.get("passed") is True)
-            passed_checks = sum(1 for item in valid_results for check in item["checks"] if isinstance(check, dict) and check.get("passed") is True)
-            critical_failures = sum(1 for item in valid_results for check in item["checks"] if isinstance(check, dict) and check.get("passed") is False and check.get("severity", "high") == "critical")
-            high_failures = sum(1 for item in valid_results for check in item["checks"] if isinstance(check, dict) and check.get("passed") is False and check.get("severity", "high") == "high")
+            check_items = [check for item in valid_results for check in item["checks"] if isinstance(check, dict)]
+            statuses_present = any("status" in check for check in check_items)
+            passed_cases = sum(1 for item in valid_results if item.get("status", "PASS" if item.get("passed") is True else "FAIL") == "PASS")
+            failed_cases = sum(1 for item in valid_results if item.get("status", "PASS" if item.get("passed") is True else "FAIL") == "FAIL")
+            not_evaluable_cases = sum(1 for item in valid_results if item.get("status") == "NOT_EVALUABLE")
+            passed_checks = sum(1 for check in check_items if _evaluation_status(check) == "PASS")
+            failed_checks = sum(1 for check in check_items if _evaluation_status(check) == "FAIL")
+            not_evaluable_checks = sum(1 for check in check_items if _evaluation_status(check) == "NOT_EVALUABLE")
+            critical_failures = sum(1 for check in check_items if _evaluation_status(check) == "FAIL" and check.get("severity", "high") == "critical")
+            high_failures = sum(1 for check in check_items if _evaluation_status(check) == "FAIL" and check.get("severity", "high") == "high")
             reviews = [item.get("human_review_observed") for item in valid_results if isinstance(item.get("human_review_observed"), bool)]
             costs = [item["cost_usd"] for item in valid_results if _is_number(item.get("cost_usd")) and float(item["cost_usd"]) >= 0]
             latencies = [item["latency_ms"] for item in valid_results if _is_number(item.get("latency_ms")) and float(item["latency_ms"]) >= 0]
             expected_summary = {
                 "total_cases": total_cases,
                 "passed_cases": passed_cases,
-                "failed_cases": total_cases - passed_cases,
+                "failed_cases": failed_cases,
                 "pass_rate": passed_cases / total_cases if total_cases else None,
                 "total_checks": total_checks,
                 "passed_checks": passed_checks,
-                "failed_checks": total_checks - passed_checks,
+                "failed_checks": failed_checks,
                 "critical_failures": critical_failures,
                 "high_failures": high_failures,
                 "reviewed_cases": sum(reviews),
@@ -639,6 +710,9 @@ def _validate_report(report: Any, label: str) -> list[str]:
                 "avg_latency_ms_observed": sum(latencies) / len(latencies) if latencies else None,
                 "max_latency_ms_observed": max(latencies) if latencies else None,
             }
+            if statuses_present:
+                expected_summary["not_evaluable_cases"] = not_evaluable_cases
+                expected_summary["not_evaluable_checks"] = not_evaluable_checks
             for key, expected_value in expected_summary.items():
                 actual_value = summary.get(key)
                 same = (
@@ -685,11 +759,11 @@ def compare_reports(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict
         before_case, after_case = baseline_cases[case_id], candidate_cases[case_id]
         before_critical = sum(
             1 for check in before_case["checks"]
-            if check.get("passed") is False and check.get("severity", "high") == "critical"
+            if _evaluation_status(check) == "FAIL" and check.get("severity", "high") == "critical"
         )
         after_critical = sum(
             1 for check in after_case["checks"]
-            if check.get("passed") is False and check.get("severity", "high") == "critical"
+            if _evaluation_status(check) == "FAIL" and check.get("severity", "high") == "critical"
         )
         if after_critical > before_critical:
             critical_regression_ids.append(case_id)
@@ -795,7 +869,7 @@ def explain_report_failures(report: dict[str, Any], max_items: int = 25) -> dict
         if not isinstance(case, dict):
             continue
         for check in case.get("checks", []):
-            if isinstance(check, dict) and check.get("passed") is False:
+            if isinstance(check, dict) and _evaluation_status(check) == "FAIL":
                 failures.append({"case_id": case.get("case_id"), **check})
     failures.sort(key=lambda item: (SEVERITY_ORDER.get(item.get("severity"), 9), str(item.get("case_id")), str(item.get("criterion_id"))))
     total = len(failures)
@@ -822,6 +896,10 @@ def explain_report_failures(report: dict[str, Any], max_items: int = 25) -> dict
         "workflow_id": report["workflow"]["id"],
         "run_id": report["run_id"],
         "total_failed_checks": total,
+        "total_not_evaluable_checks": sum(
+            1 for case in report["case_results"] for check in case.get("checks", [])
+            if isinstance(check, dict) and _evaluation_status(check) == "NOT_EVALUABLE"
+        ),
         "failures_returned": len(selected),
         "truncated": total > len(selected),
         "failure_groups": sorted(grouped.values(), key=lambda group: (SEVERITY_ORDER.get(group["severity"], 9), -group["failure_count"])),
@@ -851,7 +929,16 @@ def create_release_report(spec: dict[str, Any], report: dict[str, Any]) -> dict[
             status = "PASS" if passed else "FAIL"
         checks.append({"metric": name, "observed": observed, "comparator": comparator, "threshold": limit, "status": status, "passed": passed, "note": note})
 
-    add_check("pass_rate", summary.get("pass_rate"), ">=", float(thresholds["min_pass_rate"]))
+    if summary.get("not_evaluable_cases", 0) > 0 and summary.get("failed_checks", 0) == 0:
+        add_check(
+            "pass_rate",
+            None,
+            ">=",
+            float(thresholds["min_pass_rate"]),
+            "At least one case has unobserved checks and no observed failed check; a passing suite rate cannot be established.",
+        )
+    else:
+        add_check("pass_rate", summary.get("pass_rate"), ">=", float(thresholds["min_pass_rate"]))
     add_check("critical_failures", summary.get("critical_failures"), "<=", thresholds["max_critical_failures"])
     if "max_high_failures" in thresholds:
         add_check("high_failures", summary.get("high_failures"), "<=", thresholds["max_high_failures"])
