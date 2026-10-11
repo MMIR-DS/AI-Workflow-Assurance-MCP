@@ -50,9 +50,10 @@ class Response:
 
 
 def source(**kwargs):
+    run_id = kwargs.pop("run_id", 12345)
     return GitHubActionsRunSource(
         "MMIR-DS/AI-Workflow-Assurance-MCP",
-        12345,
+        run_id,
         SHA,
         token="test-token",
         now=NOW,
@@ -92,6 +93,13 @@ def test_missing_token_fails_closed():
     ("overrides", "message"),
     [
         ({"id": 99}, "different workflow run ID"),
+        (
+            {
+                "created_at": (NOW - timedelta(minutes=1)).isoformat(),
+                "updated_at": (NOW - timedelta(minutes=2)).isoformat(),
+            },
+            "created_at must not be later than updated_at",
+        ),
         ({"repository": {"full_name": "other/repo"}}, "repository does not match"),
         ({"head_sha": "b" * 40}, "head SHA does not match"),
         ({"status": "in_progress", "conclusion": None}, "completed successfully"),
@@ -109,6 +117,15 @@ def test_invalid_run_metadata_fails_closed(overrides, message):
     ):
         with pytest.raises(GitHubActionsEvidenceError, match=message):
             source().read_evidence()
+
+
+def test_boolean_run_id_is_rejected_even_when_integer_value_matches():
+    with patch(
+        "ai_workflow_assurance_mcp.github_actions_evidence.urlopen",
+        return_value=Response(payload(id=True)),
+    ):
+        with pytest.raises(GitHubActionsEvidenceError, match="different workflow run ID"):
+            source(run_id=1).read_evidence()
 
 
 def test_http_errors_are_sanitized():
