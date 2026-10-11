@@ -417,3 +417,33 @@ def test_tau2_adapter_allows_duplicate_old_item_ids_only_when_order_quantity_sup
     assert result["decision"] == "GO"
     assert result["allowed"] is True
     assert result["evidence_summary"]["old_item_multiplicity_does_not_exceed_order_quantity"] is True
+
+
+def test_tau2_adapter_blocks_replay_of_confirmation_after_no_go() -> None:
+    trajectory, first_call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+    trajectory.append({
+        "role": "tool",
+        "id": first_call["id"],
+        "content": "AWA_PREWRITE_NO_GO: the previous attempt was blocked.",
+    })
+    retry_call = {
+        "id": "retry-with-replayed-confirmation",
+        "name": first_call["name"],
+        "arguments": dict(first_call["arguments"]),
+    }
+    trajectory.append({"role": "assistant", "tool_calls": [retry_call]})
+
+    result = evaluate_tau2_prewrite(trajectory, retry_call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["evidence_summary"]["user_reconfirmed_after_latest_blocked_attempt"] is False
+    assert "explicit_confirmation_does_not_match_action" in result["blocking_checks"]
