@@ -32,6 +32,11 @@ WRITE_TOOLS = {
     "return_delivered_order_items", "modify_user_address",
 }
 CONFIRMATION_PHRASES = ("yes, that's exactly right", "i confirm", "please proceed", "go ahead")
+NEGATIVE_CONFIRMATION_PHRASES = (
+    "don't go ahead", "do not go ahead", "don't proceed", "do not proceed",
+    "please don't", "please do not", "not yet", "hold off", "cancel that",
+    "that's not correct", "that is not correct", "no, don't", "no, do not",
+)
 
 
 def _payload(message: dict[str, Any] | None) -> Any:
@@ -218,7 +223,8 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         )
     )
     confirmation = bool(
-        any(phrase in latest_user for phrase in CONFIRMATION_PHRASES)
+        not any(phrase in latest_user for phrase in NEGATIVE_CONFIRMATION_PHRASES)
+        and any(phrase in latest_user for phrase in CONFIRMATION_PHRASES)
         and confirmation_context_present
     )
 
