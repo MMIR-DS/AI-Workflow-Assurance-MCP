@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
-
 from ai_workflow_assurance_mcp.guarded_executor import execute_if_prewrite_allowed
 
 
