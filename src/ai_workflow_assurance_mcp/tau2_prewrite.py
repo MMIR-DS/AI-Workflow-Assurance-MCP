@@ -843,13 +843,13 @@ def _order_and_payment_references_consistent(
     if not isinstance(order_id, str) or not order_id:
         return False
     folded = text.casefold()
-    order_pattern = r"([a-z][a-z0-9_-]*\\d[a-z0-9_-]*)"
-    order_refs = re.findall(r"\\border\\s*#?\\s*" + order_pattern + r"\\b", folded)
-    order_refs += re.findall(r"#" + order_pattern + r"\\b", folded)
+    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
+    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
+    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
     if any(reference != order_id.casefold().lstrip("#") for reference in order_refs):
         return False
     payment_refs = re.findall(
-        r"\\b(?:credit_card|gift_card|paypal|payment_method)[_-][a-z0-9_-]+\\b",
+        r"\b(?:credit_card|gift_card|paypal|payment_method)[_-][a-z0-9_-]+\b",
         folded,
     )
     allowed = {payment_id.casefold() for payment_id in payment_ids}
