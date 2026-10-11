@@ -232,5 +232,10 @@ def main() -> None:
     mcp.run()
 
 
+from ai_workflow_assurance_mcp.prewrite_tool import register_prewrite_tool
+
+register_prewrite_tool(mcp)
+
+
 if __name__ == "__main__":
     main()
