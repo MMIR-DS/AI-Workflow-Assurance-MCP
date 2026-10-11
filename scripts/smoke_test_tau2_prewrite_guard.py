@@ -79,7 +79,21 @@ def main() -> None:
     assert environment.calls == ["exchange_delivered_order_items"]
     assert results[0].content == "SIMULATED_WRITE_EXECUTED"
     assert orchestrator.num_errors == 0
-    print("PASS: NO_GO blocked the callback; GO invoked the fake callback exactly once.")
+
+    # Unsupported write tools are denied by default until they have a reviewed policy adapter.
+    trajectory, _ = _setup()
+    unsupported_write = ToolCall(
+        id="unsupported-write-001",
+        name="cancel_pending_order",
+        arguments={"order_id": "#W2378156", "reason": "ordered by mistake"},
+        requestor="assistant",
+    )
+    results, environment, orchestrator = _dispatch(trajectory, unsupported_write)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == [], "unreviewed write tools must not reach the environment"
+    assert "no reviewed AWA policy adapter" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+    print("PASS: guarded exchange GO/NO_GO and default-deny for unsupported retail writes.")
 
 
 if __name__ == "__main__":

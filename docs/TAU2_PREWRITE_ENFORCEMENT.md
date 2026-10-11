@@ -33,7 +33,8 @@ PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_te
 
 The runtime smoke test uses Tau2's actual patched `BaseOrchestrator._execute_tool_calls` method with a counting fake environment, not a model and not a real database. It proves:
 - the saved baseline, whose final confirmation omits the order ID and old item IDs, returns `NO_GO` and makes zero environment calls;
-- a synthetic complete disclosure followed by an affirmative reply returns `GO` and makes exactly one fake environment call.
+- a synthetic complete disclosure followed by an affirmative reply returns `GO` and makes exactly one fake environment call;
+- an unreviewed write tool is denied by default and makes zero environment calls.
 
 The full AWA test suite separately tests the evidence adapter and patcher's idempotency/source-layout checks.
 
@@ -41,7 +42,7 @@ The full AWA test suite separately tests the evidence adapter and patcher's idem
 
 This is a **simulator-specific enforcement experiment**, not a production authorization system.
 
-- Only `exchange_delivered_order_items` is guarded by this patch. Other Tau2 write tools are not covered by this change.
+- The dispatcher recognizes all seven write tools in the pinned Tau2 retail toolkit. Only `exchange_delivered_order_items` has a reviewed policy adapter; the other six write tools fail closed before environment dispatch until their own policy adapters and tests are added. Read-only and generic non-write tools continue through the normal dispatch path.
 - Tau2's simulated identity lookup and in-memory database are benchmark evidence, not production authentication or trusted payment authorization.
 - The normalized trajectory is not cryptographically authenticated; the adapter must not be used as proof of real customer identity.
 - This source patch is applied in the workflow checkout and is not automatically installed into the upstream Tau2 repository or a user's local environment.
