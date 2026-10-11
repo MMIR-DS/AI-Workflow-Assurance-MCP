@@ -590,23 +590,7 @@ def evaluate_tau2_cancel_prewrite(trajectory: Any, tool_call: Any) -> dict[str, 
     payment_ids = [payment["payment_method_id"] for payment in payments]
     refund_total = round(sum(float(payment["amount"]) for payment in payments), 2) if payments_valid else None
     refund_total_text = f"{refund_total:.2f}" if refund_total is not None else ""
-    refund_timing_valid = (
-        payments_valid
-        and (
-            not any(payment_id.startswith("gift_card_") for payment_id in payment_ids)
-            or "immediately" in " ".join(
-                str(_get(message, "content", "")) for message in messages
-                if _get(message, "role") == "assistant"
-            ).casefold()
-        )
-        and (
-            not any(not payment_id.startswith("gift_card_") for payment_id in payment_ids)
-            or "5-7 business days" in " ".join(
-                str(_get(message, "content", "")) for message in messages
-                if _get(message, "role") == "assistant"
-            ).casefold()
-        )
-    )
+    refund_timing_valid = payments_valid
 
     current_message_index = len(messages) - 1
     prior_messages = messages[:-1] if messages and _tool_calls(messages[-1]) else messages
@@ -628,9 +612,12 @@ def evaluate_tau2_cancel_prewrite(trajectory: Any, tool_call: Any) -> dict[str, 
         and "refund" in last_assistant_text.casefold()
         and refund_timing_valid
         and (
-            "immediately" in last_assistant_text.casefold()
-            if any(payment_id.startswith("gift_card_") for payment_id in payment_ids)
-            else "5-7 business days" in last_assistant_text.casefold()
+            not any(payment_id.startswith("gift_card_") for payment_id in payment_ids)
+            or "immediately" in last_assistant_text.casefold()
+        )
+        and (
+            not any(not payment_id.startswith("gift_card_") for payment_id in payment_ids)
+            or "5-7 business days" in last_assistant_text.casefold()
         )
     )
 
