@@ -148,7 +148,7 @@ def test_tau2_adapter_blocks_when_order_was_written_after_the_snapshot() -> None
         "tool_calls": [{
             "id": "prior-write-001",
             "name": "modify_pending_order_address",
-            "arguments": {"order_id": "W2378156", "city": "Updated City"},
+            "arguments": {"order_id": "#W2378156", "city": "Updated City"},
         }],
     })
     trajectory.insert(13, {
