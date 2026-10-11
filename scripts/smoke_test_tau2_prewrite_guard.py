@@ -58,6 +58,38 @@ def _dispatch_many(
     return results, environment, orchestrator
 
 
+def _setup_cancel() -> tuple[list[dict[str, Any]], ToolCall]:
+    trajectory, _ = _setup()
+    order_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "order-read-1"
+    )
+    order = json.loads(order_result["content"])
+    order["status"] = "pending"
+    order_result["content"] = json.dumps(order)
+    raw_call = {
+        "id": "cancel-call-001",
+        "name": "cancel_pending_order",
+        "arguments": {
+            "order_id": "#W2378156",
+            "reason": "no longer needed",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [raw_call]
+    trajectory[16]["content"] = (
+        "To cancel order #W2378156 because it is no longer needed, you will receive "
+        "a refund of 1819.92 to credit_card_9513926 in 5-7 business days. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, I confirm the cancellation and refund as described."
+    call = ToolCall(
+        id=raw_call["id"],
+        name=raw_call["name"],
+        arguments=raw_call["arguments"],
+        requestor="assistant",
+    )
+    return trajectory, call
+
+
 def main() -> None:
     # The recorded baseline omits the order ID and old item IDs in the final
     # customer-facing confirmation. The patched dispatch must block before
@@ -110,9 +142,28 @@ def main() -> None:
     assert "second write for the same order" in (results[1].content or "")
     assert orchestrator.num_errors == 1
 
+    # A valid pending-order cancellation must pass through the same actual dispatcher.
+    trajectory, cancel_call = _setup_cancel()
+    results, environment, orchestrator = _dispatch(trajectory, cancel_call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["cancel_pending_order"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # Without exact refund amount and timing disclosure, cancellation is blocked pre-dispatch.
+    trajectory, cancel_call = _setup_cancel()
+    trajectory[16]["content"] = (
+        "To cancel order #W2378156 because it is no longer needed. "
+        "Please confirm."
+    )
+    results, environment, orchestrator = _dispatch(trajectory, cancel_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == []
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
     # Every write tool without its own reviewed adapter must be denied before dispatch.
     unsupported_write_tools = [
-        "cancel_pending_order",
         "modify_pending_order_address",
         "modify_pending_order_items",
         "modify_pending_order_payment",
@@ -132,7 +183,7 @@ def main() -> None:
         assert environment.calls == [], f"{tool_name} must not reach the environment"
         assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
         assert orchestrator.num_errors == 1, tool_name
-    print("PASS: exchange GO/NO_GO, same-batch duplicate blocking, and default-deny for all six unsupported retail writes.")
+    print("PASS: exchange/cancellation GO/NO_GO, same-batch duplicate blocking, and default-deny for all five unsupported retail writes.")
 
 
 if __name__ == "__main__":

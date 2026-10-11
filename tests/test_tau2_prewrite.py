@@ -34,6 +34,28 @@ def _replace_tool_result_json(trajectory: list[dict], call_id: str, payload: dic
     message["content"] = json.dumps(payload)
 
 
+def _cancel_trajectory_and_call() -> tuple[list[dict], dict]:
+    trajectory, _ = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    order["status"] = "pending"
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+    call = {
+        "id": "cancel-call-001",
+        "name": "cancel_pending_order",
+        "arguments": {
+            "order_id": "#W2378156",
+            "reason": "no longer needed",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [call]
+    trajectory[16]["content"] = (
+        "To cancel order #W2378156 because it is no longer needed, you will receive "
+        "a refund of 1819.92 to credit_card_9513926 in 5-7 business days. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, I confirm the cancellation and refund as described."
+    return trajectory, call
+
+
 def test_tau2_adapter_blocks_write_when_final_confirmation_omits_order_and_old_items() -> None:
     trajectory, call = _trajectory_and_call()
 
@@ -447,3 +469,61 @@ def test_tau2_adapter_blocks_replay_of_confirmation_after_no_go() -> None:
     assert result["allowed"] is False
     assert result["evidence_summary"]["user_reconfirmed_after_latest_blocked_attempt"] is False
     assert "explicit_confirmation_does_not_match_action" in result["blocking_checks"]
+
+
+def test_tau2_cancel_adapter_allows_pending_order_after_exact_refund_disclosure() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["refund_total"] == 1819.92
+    assert result["evidence_summary"]["identity_and_order_ownership_verified"] is True
+
+
+def test_tau2_cancel_adapter_blocks_non_pending_order() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    order["status"] = "delivered"
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "order_is_pending" in result["blocking_checks"]
+
+
+def test_tau2_cancel_adapter_blocks_unsupported_reason() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+    call["arguments"]["reason"] = "changed my mind"
+    trajectory[16]["content"] = (
+        "To cancel order #W2378156 because it is changed my mind, you will receive "
+        "a refund of 1819.92 to credit_card_9513926 in 5-7 business days. Please confirm."
+    )
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "cancellation_reason_supported" in result["blocking_checks"]
+
+
+def test_tau2_cancel_adapter_blocks_missing_refund_timing_disclosure() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To cancel order #W2378156 because it is no longer needed, you will receive "
+        "a refund to credit_card_9513926. Please confirm."
+    )
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "exact_cancellation_and_refund_disclosure_valid" in result["blocking_checks"]
