@@ -199,10 +199,12 @@ def _exchange_price_difference(
 
 
 def _price_difference_disclosed(text: str, price_difference: float | None) -> bool:
-    """Require the amount and direction (charge/refund/no delta) in assistant disclosure."""
+    """Require an explicitly labeled amount and direction in assistant disclosure."""
+    folded = text.casefold()
+    if not any(term in folded for term in ("price difference", "price delta")):
+        return False
     if price_difference is None or f"{abs(price_difference):.2f}" not in text:
         return False
-    folded = text.casefold()
     if price_difference > 0:
         return any(term in folded for term in ("charge", "pay an additional", "additional payment"))
     if price_difference < 0:
@@ -428,6 +430,10 @@ def evaluate_tau2_prewrite(
         identifiers_are_strings
         and last_assistant_text_index >= 0
         and _contains_all(last_assistant_text, identifiers)
+        and any(
+            term in last_assistant_text.casefold()
+            for term in ("exchange", "replace", "swap")
+        )
     )
 
     last_user_index = -1
@@ -617,6 +623,10 @@ def evaluate_tau2_cancel_prewrite(trajectory: Any, tool_call: Any) -> dict[str, 
         all(isinstance(item, str) and item for item in identifiers)
         and last_assistant_text_index >= 0
         and _contains_all(last_assistant_text, identifiers)
+        and any(
+            term in last_assistant_text.casefold()
+            for term in ("cancel", "cancellation")
+        )
         and refund_total_text in last_assistant_text
         and "refund" in last_assistant_text.casefold()
         and refund_timing_valid
@@ -787,6 +797,11 @@ def evaluate_tau2_address_prewrite(trajectory: Any, tool_call: Any) -> dict[str,
         and all(isinstance(value, str) and value for value in disclosed_values)
         and last_assistant_text_index >= 0
         and _contains_all(last_assistant_text, disclosed_values)
+        and "address" in last_assistant_text.casefold()
+        and any(
+            term in last_assistant_text.casefold()
+            for term in ("update", "change")
+        )
         and address2_disclosed
     )
 
@@ -964,6 +979,9 @@ def evaluate_tau2_payment_prewrite(trajectory: Any, tool_call: Any) -> dict[str,
         and new_method_valid
         and last_assistant_text_index >= 0
         and _contains_all(last_assistant_text, disclosure_values)
+        and "payment method" in last_assistant_text.casefold()
+        and "from" in last_assistant_text.casefold()
+        and "to" in last_assistant_text.casefold()
     )
 
     last_user_index = -1
@@ -1238,6 +1256,11 @@ def evaluate_tau2_user_address_prewrite(trajectory: Any, tool_call: Any) -> dict
         all(isinstance(value, str) and value for value in disclosed_values)
         and last_assistant_text_index >= 0
         and _contains_all(last_assistant_text, disclosed_values)
+        and "default address" in last_assistant_text.casefold()
+        and any(
+            term in last_assistant_text.casefold()
+            for term in ("update", "change")
+        )
         and address2_disclosed
     )
 
