@@ -6,6 +6,7 @@ source, enforce operating-system permissions, or authorize production releases.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -107,7 +108,33 @@ class Tau2ManifestFileSource:
     def _safe_order_projection(cls, order: Any) -> dict[str, Any]:
         if not isinstance(order, dict):
             raise ValueError("database evidence order snapshots must be JSON objects.")
-        projection = {key: order[key] for key in cls._order_fields if key in order}
+        projection: dict[str, Any] = {}
+        for key in ("order_id", "status"):
+            if key in order:
+                value = order[key]
+                if not isinstance(value, str) or len(value) > 256:
+                    raise ValueError(f"order snapshot {key} must be a string of at most 256 characters.")
+                projection[key] = value
+        for key in ("exchange_items", "exchange_new_items"):
+            if key in order:
+                value = order[key]
+                if value is not None and (
+                    not isinstance(value, list)
+                    or any(not isinstance(item, str) or len(item) > 256 for item in value)
+                ):
+                    raise ValueError(f"order snapshot {key} must be null or a list of short strings.")
+                projection[key] = value
+        if "exchange_price_difference" in order:
+            value = order["exchange_price_difference"]
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (str, int, float))
+                or isinstance(value, str) and len(value) > 64
+            ):
+                raise ValueError("order snapshot exchange_price_difference has an unsupported value type.")
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError("order snapshot exchange_price_difference must be finite.")
+            projection["exchange_price_difference"] = value
         if "items" in order:
             items = order["items"]
             if not isinstance(items, list):
@@ -116,7 +143,31 @@ class Tau2ManifestFileSource:
             for item in items:
                 if not isinstance(item, dict):
                     raise ValueError("order snapshot items must contain JSON objects.")
-                safe_items.append({key: item[key] for key in cls._item_fields if key in item})
+                safe_item: dict[str, Any] = {}
+                for key in ("item_id", "product_id"):
+                    if key in item:
+                        value = item[key]
+                        if not isinstance(value, str) or len(value) > 256:
+                            raise ValueError(f"item {key} must be a string of at most 256 characters.")
+                        safe_item[key] = value
+                if "price" in item:
+                    value = item["price"]
+                    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+                        raise ValueError("item price must be a string or finite number.")
+                    if isinstance(value, str) and len(value) > 64:
+                        raise ValueError("item price string is too long.")
+                    if isinstance(value, float) and not math.isfinite(value):
+                        raise ValueError("item price must be finite.")
+                    safe_item["price"] = value
+                if "options" in item:
+                    options = item["options"]
+                    if options is not None and (
+                        not isinstance(options, list)
+                        or any(not isinstance(option, str) or len(option) > 256 for option in options)
+                    ):
+                        raise ValueError("item options must be null or a list of short strings.")
+                    safe_item["options"] = options
+                safe_items.append(safe_item)
             projection["items"] = safe_items
         return projection
 
