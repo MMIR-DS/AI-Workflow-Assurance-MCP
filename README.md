@@ -15,7 +15,7 @@ Given a workflow specification (criteria + thresholds) and normalized expected/a
 - validates the specification
 - evaluates cases deterministically with explicit `PASS`, `FAIL`, and `NOT_EVALUABLE` outcomes
 - keeps unknown evidence distinct from a proven failure; unknown-only release gates return `HOLD`, while observed failures remain `NO_GO`
-- groups failures by criterion/severity
+- groups definite failures and not-evaluable checks separately, with criterion and case IDs for triage
 - compares baseline vs candidate runs
 - produces a threshold-based release decision (`GO` / `HOLD` / `NO_GO`)
 
