@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-
 MAX_MANIFEST_BYTES = 1_048_576
 
 
