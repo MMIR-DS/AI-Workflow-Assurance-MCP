@@ -115,7 +115,12 @@ class GitHubActionsRunSource:
         if not isinstance(payload, dict):
             raise GitHubActionsEvidenceError("GitHub Actions response must be a JSON object.")
 
-        if payload.get("id") != self.run_id:
+        response_run_id = payload.get("id")
+        if (
+            isinstance(response_run_id, bool)
+            or not isinstance(response_run_id, int)
+            or response_run_id != self.run_id
+        ):
             raise GitHubActionsEvidenceError("GitHub returned a different workflow run ID.")
         repository = payload.get("repository")
         if (
@@ -132,6 +137,10 @@ class GitHubActionsRunSource:
 
         created_at = self._timestamp(payload.get("created_at"), "created_at")
         updated_at = self._timestamp(payload.get("updated_at"), "updated_at")
+        if created_at > updated_at:
+            raise GitHubActionsEvidenceError(
+                "Workflow run created_at must not be later than updated_at."
+            )
         now_utc = self.now.astimezone(timezone.utc)
         age = now_utc - updated_at
         if age < timedelta(minutes=-5):
