@@ -86,17 +86,29 @@ def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
     if read_index < 0:
         return False
 
-    # Even a failed write attempt requires a fresh read before retrying; this is
-    # deliberately conservative and avoids relying on possibly ambiguous tool errors.
+    # A write that the AWA dispatcher explicitly blocked never reached the environment.
+    # Other write attempts (including tool errors) conservatively require a fresh read.
     for message in messages[read_index + 1 : -1]:
         for call in _tool_calls(message):
             call_args = _get(call, "arguments", {})
-            if (
+            if not (
                 _get(call, "name") in write_tools
                 and isinstance(call_args, dict)
                 and call_args.get("order_id") == order_id
             ):
-                return False
+                continue
+            call_id = str(_get(call, "id", ""))
+            result_message = next(
+                (
+                    item for item in messages
+                    if _get(item, "role") == "tool" and str(_get(item, "id", "")) == call_id
+                ),
+                None,
+            )
+            result_content = _get(result_message, "content", "") if result_message is not None else ""
+            if isinstance(result_content, str) and "AWA_PREWRITE_NO_GO" in result_content:
+                continue
+            return False
     return True
 
 
