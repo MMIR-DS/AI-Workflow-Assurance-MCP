@@ -59,6 +59,14 @@ def _contains_all(text: str, values: list[str]) -> bool:
     return all(value in text for value in values)
 
 
+def _payment_references_consistent(text: str, expected_payment_id: Any) -> bool:
+    """Reject an explicit payment-method reference that conflicts with the proposed action."""
+    if not isinstance(expected_payment_id, str) or not expected_payment_id:
+        return False
+    mentioned = re.findall(r"\b(?:credit_card|payment_method)[_-][a-z0-9_-]+\b", text.casefold())
+    return all(reference == expected_payment_id.casefold() for reference in mentioned)
+
+
 def _is_affirmative(text: str) -> bool:
     normalized = re.sub(r"[^a-z0-9' ]+", " ", text.casefold())
     # A positive token is not sufficient when the reply also qualifies or changes
@@ -152,6 +160,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         disclosure_valid
         and last_user_index > last_assistant_text_index
         and _is_affirmative(last_user_text)
+        and _payment_references_consistent(last_user_text, payment_id)
         and last_user_index < current_message_index
     )
 
