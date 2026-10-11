@@ -80,20 +80,29 @@ def main() -> None:
     assert results[0].content == "SIMULATED_WRITE_EXECUTED"
     assert orchestrator.num_errors == 0
 
-    # Unsupported write tools are denied by default until they have a reviewed policy adapter.
-    trajectory, _ = _setup()
-    unsupported_write = ToolCall(
-        id="unsupported-write-001",
-        name="cancel_pending_order",
-        arguments={"order_id": "#W2378156", "reason": "ordered by mistake"},
-        requestor="assistant",
-    )
-    results, environment, orchestrator = _dispatch(trajectory, unsupported_write)
-    assert len(results) == 1 and results[0].error
-    assert environment.calls == [], "unreviewed write tools must not reach the environment"
-    assert "no reviewed AWA policy adapter" in (results[0].content or "")
-    assert orchestrator.num_errors == 1
-    print("PASS: guarded exchange GO/NO_GO and default-deny for unsupported retail writes.")
+    # Every write tool without its own reviewed adapter must be denied before dispatch.
+    unsupported_write_tools = [
+        "cancel_pending_order",
+        "modify_pending_order_address",
+        "modify_pending_order_items",
+        "modify_pending_order_payment",
+        "modify_user_address",
+        "return_delivered_order_items",
+    ]
+    for index, tool_name in enumerate(unsupported_write_tools):
+        trajectory, _ = _setup()
+        unsupported_write = ToolCall(
+            id=f"unsupported-write-{index:03d}",
+            name=tool_name,
+            arguments={"order_id": "#W2378156"},
+            requestor="assistant",
+        )
+        results, environment, orchestrator = _dispatch(trajectory, unsupported_write)
+        assert len(results) == 1 and results[0].error, tool_name
+        assert environment.calls == [], f"{tool_name} must not reach the environment"
+        assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
+        assert orchestrator.num_errors == 1, tool_name
+    print("PASS: exchange GO/NO_GO and default-deny for all six unsupported retail writes.")
 
 
 if __name__ == "__main__":
