@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
-PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V1"
+PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V2"
 
 ORIGINAL = """        tool_results = []
         for tool_call in tool_calls:
@@ -18,26 +18,47 @@ ORIGINAL = """        tool_results = []
 
 REPLACEMENT = """        tool_results = []
         for tool_call in tool_calls:
-            # AWA_PREWRITE_GUARD_PATCH_V1: deny sensitive exchange writes before dispatch.
-            if tool_call.name == "exchange_delivered_order_items":
-                from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
+            # AWA_PREWRITE_GUARD_PATCH_V2: fail closed for every retail write tool.
+            awa_write_tools = {
+                "cancel_pending_order",
+                "exchange_delivered_order_items",
+                "modify_pending_order_address",
+                "modify_pending_order_items",
+                "modify_pending_order_payment",
+                "modify_user_address",
+                "return_delivered_order_items",
+            }
+            if tool_call.name in awa_write_tools:
+                if tool_call.name == "exchange_delivered_order_items":
+                    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
 
-                preflight = evaluate_tau2_prewrite(self.trajectory, tool_call)
-                if preflight["decision"] != "GO":
-                    blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
+                    preflight = evaluate_tau2_prewrite(self.trajectory, tool_call)
+                    if preflight["decision"] == "GO":
+                        tool_result = self.environment.get_response(tool_call)
+                    else:
+                        blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
+                        tool_result = ToolMessage(
+                            id=tool_call.id,
+                            role="tool",
+                            requestor=tool_call.requestor,
+                            error=True,
+                            content=(
+                                "AWA_PREWRITE_NO_GO: exchange blocked before execution. "
+                                f"Blocking checks: {blocking}. Ask the customer to confirm "
+                                "the exact order, old/new item IDs, and payment method, then retry."
+                            ),
+                        )
+                else:
                     tool_result = ToolMessage(
                         id=tool_call.id,
                         role="tool",
                         requestor=tool_call.requestor,
                         error=True,
                         content=(
-                            "AWA_PREWRITE_NO_GO: exchange blocked before execution. "
-                            f"Blocking checks: {blocking}. Ask the customer to confirm "
-                            "the exact order, old/new item IDs, and payment method, then retry."
+                            "AWA_PREWRITE_NO_GO: this retail write tool has no reviewed "
+                            "AWA policy adapter and is blocked before execution."
                         ),
                     )
-                else:
-                    tool_result = self.environment.get_response(tool_call)
             else:
                 tool_result = self.environment.get_response(tool_call)
             if tool_result.error:
