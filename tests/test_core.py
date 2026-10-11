@@ -4,8 +4,8 @@ import json
 import unittest
 
 from ai_workflow_assurance_mcp.core import (
-    AssuranceInputError,
     SCHEMA_VERSION,
+    AssuranceInputError,
     compare_reports,
     create_release_report,
     evaluate_suite,
