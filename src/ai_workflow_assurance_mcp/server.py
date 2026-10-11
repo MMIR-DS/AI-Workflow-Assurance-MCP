@@ -9,6 +9,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ai_workflow_assurance_mcp import __version__
+from ai_workflow_assurance_mcp.prewrite_tool import register_prewrite_tool
 from ai_workflow_assurance_mcp.core import (
     AssuranceInputError,
     compare_reports,
@@ -231,8 +232,6 @@ def main() -> None:
     # stdio is the safest default for a locally launched MCP server.
     mcp.run()
 
-
-from ai_workflow_assurance_mcp.prewrite_tool import register_prewrite_tool
 
 register_prewrite_tool(mcp)
 
