@@ -344,7 +344,6 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         )
     )
     price_difference = _exchange_price_difference(order_items, old_items, new_items, variants)
-    price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
     payment_history = order_before.get("payment_history") if order_is_object else None
     payment_method_belongs_to_order = (
         isinstance(payment_id, str)
@@ -381,6 +380,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
                 last_assistant_text_index = index
                 last_assistant_text = text
 
+    price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
     identifiers = [order_id, *(old_items if isinstance(old_items, list) else []),
                    *(new_items if isinstance(new_items, list) else []), payment_id]
     identifiers_are_strings = all(isinstance(item, str) and item for item in identifiers)
