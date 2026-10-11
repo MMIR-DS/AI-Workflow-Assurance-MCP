@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7 (Unreleased)
+
+- Bump the evaluation-report schema to `0.4` for explicit `PASS` / `FAIL` / `NOT_EVALUABLE` check statuses and separate counts for definite failures versus unobserved checks.
+- Keep the release gate fail-closed: unknown-only evidence cannot produce `GO`; observed failing checks continue to block release.
+- Treat Tau2 terminal traces without the expected exchange write as task non-completion, while avoiding inflated policy-violation counts from unobservable downstream assertions.
+- Upgrade GitHub Actions workflows to pinned Node.js 24-compatible revisions and configure the Tau2 `uv` cache after checkout.
+
 ## 0.1.6
 
 - Add a retail-exchange observation adapter contract, a threat model, and adversarial tests for event ordering, requested variants, payment consistency, price reconciliation, and notification evidence.
