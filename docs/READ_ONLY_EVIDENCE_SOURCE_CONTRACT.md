@@ -27,10 +27,15 @@ label. It deliberately leaves collected_at unset because the manifest does
 not establish a trusted collection timestamp.
 
 The adapter returns a narrow evidence projection and does not propagate source
-provenance a second time inside the payload. The normalized envelope preserves
-the simulator-only scope and always marks the evidence unverified and
-ineligible for release. A simulator GO remains a replay result, not production
-authorization.
+provenance a second time inside the payload. It validates the manifest schema
+version, 40-character source commit, exact check-name set, boolean check values,
+reconciled summary counts, decision/check consistency, SHA-256 fingerprint
+shape, write-count constraints, and tamper-probe consistency. Nested order and
+item snapshots are independently projected onto explicit allowlists; unknown
+customer fields, extra summary fields, and free-form limitation strings are not
+passed through. The normalized envelope preserves the simulator-only scope and
+always marks the evidence unverified and ineligible for release. A simulator
+GO remains a replay result, not production authorization.
 
 ## Example
 
