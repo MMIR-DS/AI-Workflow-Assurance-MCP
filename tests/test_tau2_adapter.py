@@ -33,6 +33,46 @@ def test_task0_release_uses_order_catalog_and_action_return_payloads() -> None:
     assert metadata["independence_scope"]["release_decision_uses_tau2_action_checks"] is False
 
 
+def test_confirmation_accepts_affirmative_reply_to_details_disclosed_by_assistant() -> None:
+    results, spec = _load_inputs()
+    messages = results["simulations"][0]["messages"]
+    confirmation = next(
+        message for message in messages
+        if message.get("role") == "user"
+        and "Yes, that's exactly right" in str(message.get("content") or "")
+    )
+    confirmation["content"] = (
+        "Yes, that all sounds correct. Please go ahead and process the exchange "
+        "for both items with the ones you found, and use the original payment "
+        "method for any differences. Thank you!"
+    )
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["confirmation_policy_respected"] is True
+    assert case["actual"]["policy_violation_count"] == 0
+    assert report["summary"]["pass_rate"] == 1.0
+    assert release["decision"] == "GO"
+
+
+def test_confirmation_fails_closed_when_assistant_did_not_disclose_all_new_items() -> None:
+    results, spec = _load_inputs()
+    messages = results["simulations"][0]["messages"]
+    assistant_confirmation = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "To confirm:" in str(message.get("content") or "")
+    )
+    assistant_confirmation["content"] = str(assistant_confirmation["content"]).replace(
+        "7706410293", "REDACTED_ITEM_ID"
+    )
+
+    case, _, _, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["confirmation_policy_respected"] is False
+    assert release["decision"] == "NO_GO"
+
+
 def test_release_decision_does_not_depend_on_tau2_reward_oracle_fields() -> None:
     results, spec = _load_inputs()
     results["simulations"][0]["reward_info"] = {
