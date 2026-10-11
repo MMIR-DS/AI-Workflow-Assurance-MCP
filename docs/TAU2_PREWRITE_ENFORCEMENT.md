@@ -10,11 +10,12 @@ Pinned upstream Tau2 revision: `4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699`.
 
 Before the environment executes `exchange_delivered_order_items`, the patched orchestrator calls `evaluate_tau2_prewrite` on the current in-memory trajectory and proposed tool call. The adapter builds a normalized action/evidence bundle and delegates the decision to `evaluate_prewrite`.
 
-The preflight validates the simulator evidence against the requested operation rather than relying only on matching confirmation text. In particular, a user confirming an invented item ID or a payment method not present in the order history is insufficient for `GO`. The preflight requires:
+The preflight validates simulator evidence against the requested operation rather than relying only on matching confirmation text. It verifies old-item quantity, same-product pairing, current replacement availability, the original order payment method, and the exact calculated price delta. A user confirming an invented item ID, a different product type, an undisclosed financial delta, or a payment method not present in the order history is insufficient for `GO`. The preflight requires:
 
 - the latest matching `get_order_details` response must identify the exact requested order and report status `delivered`;
-- every old item ID must belong to that order snapshot, and old item IDs must be unique;
-- every new item ID must appear in a matching `get_product_details` result as an available variant, and new item IDs must be unique;
+- requested old-item multiplicities must not exceed the quantity present in the order snapshot; duplicate item IDs are permitted only when the snapshot contains enough units;
+- each new item ID must be present in the latest matching `get_product_details` result as an available variant and must match the product type of the old item in the same position;
+- the exact total price difference and its direction (additional charge, refund, or zero difference) must be disclosed before the user confirms;
 - the proposed payment-method ID must appear in that order's payment history as a payment transaction;
 - a prior `find_user_id_by_name_zip` or `find_user_id_by_email` lookup whose result matches the order owner;
 - an assistant message that explicitly includes the order ID, every old item ID, every new item ID, and the exact payment-method ID;

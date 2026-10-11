@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from typing import Any
 
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
@@ -118,8 +119,8 @@ def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
 
 
 
-def _available_variant_ids(messages: list[Any]) -> set[str]:
-    """Collect available variants from each product's latest read only."""
+def _variant_details(messages: list[Any]) -> dict[str, dict[str, Any]]:
+    """Collect variant details from each product's latest read only."""
     latest_results: dict[str, Any] = {}
     for message in messages:
         for call in _tool_calls(message):
@@ -140,8 +141,8 @@ def _available_variant_ids(messages: list[Any]) -> set[str]:
                 else None
             )
 
-    available: set[str] = set()
-    for result in latest_results.values():
+    details: dict[str, dict[str, Any]] = {}
+    for product_id, result in latest_results.items():
         if not isinstance(result, dict):
             continue
         variants = result.get("variants")
@@ -152,10 +153,61 @@ def _available_variant_ids(messages: list[Any]) -> set[str]:
                 isinstance(variant_id, str)
                 and isinstance(variant, dict)
                 and variant.get("item_id") == variant_id
-                and variant.get("available") is True
             ):
-                available.add(variant_id)
-    return available
+                details[variant_id] = {
+                    "product_id": product_id,
+                    "price": variant.get("price"),
+                    "available": variant.get("available") is True,
+                }
+    return details
+
+
+def _exchange_price_difference(
+    order_items: Any,
+    old_items: Any,
+    new_items: Any,
+    variants: dict[str, dict[str, Any]],
+) -> float | None:
+    """Compute the same rounded total delta as the pinned Tau2 exchange tool."""
+    if not isinstance(order_items, list) or not isinstance(old_items, list):
+        return None
+    if not isinstance(new_items, list) or len(old_items) != len(new_items):
+        return None
+    total = 0.0
+    for old_item_id, new_item_id in zip(old_items, new_items, strict=True):
+        old_item = next(
+            (
+                item for item in order_items
+                if isinstance(item, dict) and item.get("item_id") == old_item_id
+            ),
+            None,
+        )
+        variant = variants.get(new_item_id) if isinstance(new_item_id, str) else None
+        if not isinstance(old_item, dict) or not isinstance(variant, dict):
+            return None
+        old_price = old_item.get("price")
+        new_price = variant.get("price")
+        if (
+            not isinstance(old_price, (int, float))
+            or isinstance(old_price, bool)
+            or not isinstance(new_price, (int, float))
+            or isinstance(new_price, bool)
+        ):
+            return None
+        total += float(new_price) - float(old_price)
+    return round(total, 2)
+
+
+def _price_difference_disclosed(text: str, price_difference: float | None) -> bool:
+    """Require the amount and direction (charge/refund/no delta) in assistant disclosure."""
+    if price_difference is None or f"{abs(price_difference):.2f}" not in text:
+        return False
+    folded = text.casefold()
+    if price_difference > 0:
+        return any(term in folded for term in ("charge", "pay an additional", "additional payment"))
+    if price_difference < 0:
+        return any(term in folded for term in ("refund", "credit"))
+    return "no price difference" in folded or "no additional charge" in folded
 
 
 def _confirmation_references_consistent(
@@ -249,28 +301,49 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
     order_status = order_before.get("status") if order_is_object else None
 
     order_items = order_before.get("items") if order_is_object else None
-    order_item_ids = {
+    order_item_ids = [
         item.get("item_id")
         for item in order_items
         if isinstance(item, dict) and isinstance(item.get("item_id"), str)
-    } if isinstance(order_items, list) else set()
+    ] if isinstance(order_items, list) else []
     old_items_are_strings = (
         isinstance(old_items, list) and all(isinstance(item, str) and item for item in old_items)
     )
     new_items_are_strings = (
         isinstance(new_items, list) and all(isinstance(item, str) and item for item in new_items)
     )
-    old_items_unique = old_items_are_strings and len(set(old_items)) == len(old_items)
-    new_items_unique = new_items_are_strings and len(set(new_items)) == len(new_items)
     old_items_belong_to_order = (
         order_snapshot_matches_request
-        and old_items_unique
-        and set(old_items).issubset(order_item_ids)
+        and old_items_are_strings
+        and Counter(old_items) <= Counter(order_item_ids)
     )
-    available_variants = _available_variant_ids(messages)
+    variants = _variant_details(messages)
     new_items_verified_available = (
-        new_items_unique and set(new_items).issubset(available_variants)
+        new_items_are_strings
+        and all(
+            item_id in variants and variants[item_id]["available"] is True
+            for item_id in new_items
+        )
     )
+    new_items_match_old_product_types = (
+        isinstance(order_items, list)
+        and old_items_are_strings
+        and new_items_are_strings
+        and len(old_items) == len(new_items)
+        and all(
+            (old_item := next(
+                (
+                    item for item in order_items
+                    if isinstance(item, dict) and item.get("item_id") == old_item_id
+                ),
+                None,
+            )) is not None
+            and new_item_id in variants
+            and old_item.get("product_id") == variants[new_item_id].get("product_id")
+            for old_item_id, new_item_id in zip(old_items, new_items, strict=True)
+        )
+    )
+    price_difference = _exchange_price_difference(order_items, old_items, new_items, variants)
     payment_history = order_before.get("payment_history") if order_is_object else None
     payment_method_belongs_to_order = (
         isinstance(payment_id, str)
@@ -307,6 +380,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
                 last_assistant_text_index = index
                 last_assistant_text = text
 
+    price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
     identifiers = [order_id, *(old_items if isinstance(old_items, list) else []),
                    *(new_items if isinstance(new_items, list) else []), payment_id]
     identifiers_are_strings = all(isinstance(item, str) and item for item in identifiers)
@@ -362,9 +436,11 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
     order_snapshot_fresh = _order_snapshot_is_fresh(messages, order_id)
     extra_checks = {
         "order_snapshot_matches_requested_order": order_snapshot_matches_request,
-        "old_items_belong_to_order_and_are_unique": old_items_belong_to_order,
-        "new_items_are_verified_available_variants_and_unique": new_items_verified_available,
+        "old_item_multiplicity_does_not_exceed_order_quantity": old_items_belong_to_order,
+        "new_items_are_verified_available_variants": new_items_verified_available,
+        "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
+        "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
     }
     for check_name, passed in extra_checks.items():
         result.setdefault("checked", {})[check_name] = passed
@@ -388,9 +464,12 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         "identity_matches_order_owner": identity_valid,
         "order_status": order_status,
         "order_snapshot_matches_requested_order": order_snapshot_matches_request,
-        "old_items_belong_to_order_and_are_unique": old_items_belong_to_order,
-        "new_items_are_verified_available_variants_and_unique": new_items_verified_available,
+        "old_item_multiplicity_does_not_exceed_order_quantity": old_items_belong_to_order,
+        "new_items_are_verified_available_variants": new_items_verified_available,
+        "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
+        "price_difference": price_difference,
+        "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
         "order_snapshot_fresh": order_snapshot_fresh,
         "assistant_disclosed_exact_order_items_and_payment": disclosure_valid,
         "user_affirmed_after_disclosure": confirmation_valid,

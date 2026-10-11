@@ -50,8 +50,8 @@ def test_tau2_adapter_allows_only_after_complete_disclosure_and_affirmative_repl
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = (
         "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
@@ -69,8 +69,8 @@ def test_tau2_adapter_blocks_negative_reply_even_when_details_were_disclosed() -
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = "No, don't go ahead. I need to change the selections."
 
@@ -84,8 +84,8 @@ def test_tau2_adapter_blocks_affirmative_reply_that_names_another_payment_id() -
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     # This is superficially affirmative and does not contain words like "change" or "instead",
     # but it explicitly names a different payment instrument.
@@ -102,8 +102,8 @@ def test_tau2_adapter_blocks_affirmative_reply_that_names_another_order() -> Non
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = "Yes, order #W9999999 is correct."
 
@@ -118,8 +118,8 @@ def test_tau2_adapter_blocks_affirmative_reply_that_names_an_unknown_item_id() -
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = "Yes, exchange item 9999999999."
 
@@ -134,8 +134,8 @@ def test_tau2_adapter_blocks_qualified_yes_that_changes_payment_method() -> None
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = (
         "Yes, but use a different payment method instead."
@@ -152,8 +152,8 @@ def test_tau2_adapter_blocks_when_order_was_written_after_the_snapshot() -> None
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = (
         "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
@@ -251,8 +251,8 @@ def test_tau2_adapter_recovers_after_blocked_attempt_and_fresh_confirmation() ->
             "role": "assistant",
             "content": (
                 "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-                "and old item 4983901480 for 7747408585. Use payment method "
-                "credit_card_9513926 for any price difference. Please confirm."
+                "and old item 4983901480 for 7747408585. The total price difference is "
+                "a $16.63 refund to credit_card_9513926. Please confirm."
             ),
         },
         {
@@ -292,8 +292,8 @@ def test_tau2_adapter_blocks_old_item_not_present_in_order() -> None:
     call["arguments"]["item_ids"] = ["9999999999", "4983901480"]
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 9999999999 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_9513926 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = (
         "Yes, exchange item 9999999999 and item 4983901480 for 7706410293 and "
@@ -303,7 +303,7 @@ def test_tau2_adapter_blocks_old_item_not_present_in_order() -> None:
     result = evaluate_tau2_prewrite(trajectory, call)
 
     assert result["decision"] == "NO_GO"
-    assert "old_items_belong_to_order_and_are_unique" in result["blocking_checks"]
+    assert "old_item_multiplicity_does_not_exceed_order_quantity" in result["blocking_checks"]
 
 
 def test_tau2_adapter_blocks_payment_method_not_in_order_history() -> None:
@@ -311,8 +311,8 @@ def test_tau2_adapter_blocks_payment_method_not_in_order_history() -> None:
     call["arguments"]["payment_method_id"] = "credit_card_1234567"
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. Use payment method "
-        "credit_card_1234567 for any price difference. Please confirm."
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_1234567. Please confirm."
     )
     trajectory[17]["content"] = (
         "Yes, that's correct. Go ahead and use credit_card_1234567 for this exchange."
@@ -333,7 +333,7 @@ def test_tau2_adapter_blocks_new_variant_not_verified_available() -> None:
     result = evaluate_tau2_prewrite(trajectory, call)
 
     assert result["decision"] == "NO_GO"
-    assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
+    assert "new_items_are_verified_available_variants" in result["blocking_checks"]
 
 
 def test_tau2_adapter_does_not_rely_on_stale_available_variant_snapshot() -> None:
@@ -357,4 +357,63 @@ def test_tau2_adapter_does_not_rely_on_stale_available_variant_snapshot() -> Non
     result = evaluate_tau2_prewrite(trajectory, call)
 
     assert result["decision"] == "NO_GO"
-    assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
+    assert "new_items_are_verified_available_variants" in result["blocking_checks"]
+
+
+def test_tau2_adapter_blocks_exchange_without_exact_price_difference_disclosure() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. Use payment method "
+        "credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "exact_price_difference_and_direction_disclosed" in result["blocking_checks"]
+
+
+def test_tau2_adapter_blocks_exchange_to_variant_of_another_product() -> None:
+    trajectory, call = _trajectory_and_call()
+    call["arguments"]["new_item_ids"] = ["7706410293", "6342039236"]
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 6342039236. The total price difference is "
+        "a $20.73 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, exchange both items as described and use credit_card_9513926."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "new_items_match_the_corresponding_old_product_types" in result["blocking_checks"]
+
+
+def test_tau2_adapter_allows_duplicate_old_item_ids_only_when_order_quantity_supports_them() -> None:
+    trajectory, call = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    keyboard = next(item for item in order["items"] if item["item_id"] == "1151293680")
+    order["items"].append(dict(keyboard))
+    _replace_tool_result_json(trajectory, "order-read-1", order)
+    call["arguments"]["item_ids"] = ["1151293680", "1151293680"]
+    call["arguments"]["new_item_ids"] = ["7706410293", "6342039236"]
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange item 1151293680 twice for "
+        "7706410293 and 6342039236. The total price difference is a $30.59 "
+        "refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, exchange both units as described and use credit_card_9513926."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["old_item_multiplicity_does_not_exceed_order_quantity"] is True
