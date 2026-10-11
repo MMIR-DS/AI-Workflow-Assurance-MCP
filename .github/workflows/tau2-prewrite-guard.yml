@@ -56,6 +56,9 @@ jobs:
       - name: Install Tau2 dependencies
         working-directory: tau2-bench
         run: uv sync --extra dev
+      - name: Install runtime dependency imported by Tau2's top-level package
+        working-directory: tau2-bench
+        run: uv pip install --python .venv/bin/python 'websockets>=13.0'
       - name: Apply fail-closed AWA dispatch patch
         working-directory: tau2-bench
         run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
