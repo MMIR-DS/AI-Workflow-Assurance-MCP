@@ -301,6 +301,50 @@ REPLACEMENT = """        tool_results = []
                                     "then obtain fresh confirmation."
                                 ),
                             )
+                elif tool_call.name == "return_delivered_order_items":
+                    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_return_prewrite
+
+                    raw_order_id = (
+                        tool_call.arguments.get("order_id")
+                        if isinstance(tool_call.arguments, dict)
+                        else None
+                    )
+                    normalized_order_id = (
+                        raw_order_id.casefold()
+                        if isinstance(raw_order_id, str) and raw_order_id
+                        else None
+                    )
+                    if normalized_order_id and normalized_order_id in awa_write_orders_seen:
+                        tool_result = ToolMessage(
+                            id=tool_call.id,
+                            role="tool",
+                            requestor=tool_call.requestor,
+                            error=True,
+                            content=(
+                                "AWA_PREWRITE_NO_GO: a second write for the same order "
+                                "in one dispatch batch is blocked. Re-read the order and "
+                                "retry in a new turn."
+                            ),
+                        )
+                    else:
+                        if normalized_order_id:
+                            awa_write_orders_seen.add(normalized_order_id)
+                        preflight = evaluate_tau2_return_prewrite(self.trajectory, tool_call)
+                        if preflight["decision"] == "GO":
+                            tool_result = self.environment.get_response(tool_call)
+                        else:
+                            blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
+                            tool_result = ToolMessage(
+                                id=tool_call.id,
+                                role="tool",
+                                requestor=tool_call.requestor,
+                                error=True,
+                                content=(
+                                    "AWA_PREWRITE_NO_GO: return request blocked before execution. "
+                                    f"Disclose the exact return items, payment method, and follow-up "
+                                    f"process, then obtain fresh confirmation. Blocking checks: {blocking}."
+                                ),
+                            )
                 else:
                     tool_result = ToolMessage(
                         id=tool_call.id,
