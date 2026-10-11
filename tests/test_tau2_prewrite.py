@@ -106,7 +106,7 @@ def _payment_trajectory_and_call() -> tuple[list[dict], dict]:
             },
         },
     }
-    trajectory.insert(-1, {
+    trajectory.insert(16, {
         "role": "assistant",
         "tool_calls": [{
             "id": "user-details-1",
@@ -114,7 +114,7 @@ def _payment_trajectory_and_call() -> tuple[list[dict], dict]:
             "arguments": {"user_id": owner_id},
         }],
     })
-    trajectory.insert(-1, {
+    trajectory.insert(17, {
         "role": "tool",
         "id": "user-details-1",
         "content": json.dumps(user_details),
@@ -128,11 +128,11 @@ def _payment_trajectory_and_call() -> tuple[list[dict], dict]:
         },
     }
     trajectory[-1]["tool_calls"] = [call]
-    trajectory[16]["content"] = (
+    trajectory[18]["content"] = (
         "For order #W2378156, change payment method from credit_card_9513926 to "
         "credit_card_1234567 (credit card, visa ending 4567). Please confirm."
     )
-    trajectory[17]["content"] = (
+    trajectory[19]["content"] = (
         "Yes, change order #W2378156 to credit_card_1234567, visa ending 4567."
     )
     return trajectory, call
@@ -685,11 +685,11 @@ def test_tau2_payment_adapter_blocks_method_not_in_user_details() -> None:
 
     trajectory, call = _payment_trajectory_and_call()
     call["arguments"]["payment_method_id"] = "credit_card_9999999"
-    trajectory[16]["content"] = (
+    trajectory[18]["content"] = (
         "For order #W2378156, change payment method from credit_card_9513926 to "
         "credit_card_9999999. Please confirm."
     )
-    trajectory[17]["content"] = "Yes, change the payment method as stated."
+    trajectory[19]["content"] = "Yes, change the payment method as stated."
 
     result = evaluate_tau2_payment_prewrite(trajectory, call)
 
@@ -702,7 +702,7 @@ def test_tau2_payment_adapter_blocks_same_as_current_method() -> None:
 
     trajectory, call = _payment_trajectory_and_call()
     call["arguments"]["payment_method_id"] = "credit_card_9513926"
-    trajectory[16]["content"] = (
+    trajectory[18]["content"] = (
         "For order #W2378156, keep payment method credit_card_9513926. Please confirm."
     )
 
