@@ -929,7 +929,16 @@ def create_release_report(spec: dict[str, Any], report: dict[str, Any]) -> dict[
             status = "PASS" if passed else "FAIL"
         checks.append({"metric": name, "observed": observed, "comparator": comparator, "threshold": limit, "status": status, "passed": passed, "note": note})
 
-    add_check("pass_rate", summary.get("pass_rate"), ">=", float(thresholds["min_pass_rate"]))
+    if summary.get("not_evaluable_cases", 0) > 0 and summary.get("failed_checks", 0) == 0:
+        add_check(
+            "pass_rate",
+            None,
+            ">=",
+            float(thresholds["min_pass_rate"]),
+            "At least one case has unobserved checks and no observed failed check; a passing suite rate cannot be established.",
+        )
+    else:
+        add_check("pass_rate", summary.get("pass_rate"), ">=", float(thresholds["min_pass_rate"]))
     add_check("critical_failures", summary.get("critical_failures"), "<=", thresholds["max_critical_failures"])
     if "max_high_failures" in thresholds:
         add_check("high_failures", summary.get("high_failures"), "<=", thresholds["max_high_failures"])
