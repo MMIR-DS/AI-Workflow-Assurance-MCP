@@ -272,7 +272,7 @@ class Tau2ManifestFileSource:
         if (
             not isinstance(tamper_probe, dict)
             or tamper_probe.get("detected") is not checks["tamper_probe_is_detected"]
-            or not isinstance(tamper_probe.get("mutated_field"), str)
+            or tamper_probe.get("mutated_field") != "status"
         ):
             raise ValueError("tamper probe metadata does not reconcile with its check.")
 
@@ -281,10 +281,14 @@ class Tau2ManifestFileSource:
             raise ValueError("manifest must explicitly exclude raw order snapshots.")
         simulation_task_id = manifest.get("simulation_task_id")
         order_id = manifest.get("order_id")
-        if isinstance(simulation_task_id, bool) or not isinstance(simulation_task_id, (str, int)):
-            raise ValueError("simulation_task_id must be a string or integer.")
-        if not isinstance(order_id, str) or not order_id.strip():
-            raise ValueError("order_id must be a non-empty string.")
+        if (
+            isinstance(simulation_task_id, bool)
+            or not isinstance(simulation_task_id, (str, int))
+            or len(str(simulation_task_id)) > 128
+        ):
+            raise ValueError("simulation_task_id must be a short string or integer.")
+        if not isinstance(order_id, str) or not order_id.strip() or len(order_id) > 256:
+            raise ValueError("order_id must be a non-empty string of at most 256 characters.")
 
         safe_database = {
             "before": before,
