@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 
+MAX_MANIFEST_BYTES = 1_048_576
+
+
 @dataclass(frozen=True)
 class EvidenceEnvelope:
     """Normalized evidence plus explicit provenance and trust-boundary metadata."""
@@ -66,8 +69,14 @@ class Tau2ManifestFileSource:
 
     def read_evidence(self) -> EvidenceEnvelope:
         try:
+            if self._manifest_path.stat().st_size > MAX_MANIFEST_BYTES:
+                raise ValueError(
+                    f"manifest exceeds the {MAX_MANIFEST_BYTES}-byte size limit."
+                )
             manifest = json.loads(self._manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+        except ValueError:
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise ValueError(f"could not read a valid JSON manifest: {exc}") from exc
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a JSON object.")
