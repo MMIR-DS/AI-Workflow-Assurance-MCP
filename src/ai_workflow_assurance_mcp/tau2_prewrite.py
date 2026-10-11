@@ -326,7 +326,8 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
         )
     )
     new_items_match_old_product_types = (
-        old_items_are_strings
+        isinstance(order_items, list)
+        and old_items_are_strings
         and new_items_are_strings
         and len(old_items) == len(new_items)
         and all(
