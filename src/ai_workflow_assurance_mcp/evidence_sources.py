@@ -186,10 +186,10 @@ class ReadOnlyEvidenceSource(Protocol):
             "database_evidence": safe_database,
             "checks": {key: checks[key] for key in sorted(cls._required_checks)},
             "summary": {"passed_checks": passed_checks, "total_checks": total_checks},
-            "limitations": list(self._limitations),
+            "limitations": list(cls._limitations),
             "data_minimization": {
                 "raw_order_snapshots_included": False,
-                "redacted_fields": list(self._redacted_fields),
+                "redacted_fields": list(cls._redacted_fields),
             },
         }
         return EvidenceEnvelope(
