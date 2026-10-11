@@ -399,11 +399,15 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         cost = usage.get("cost") if isinstance(usage, dict) else None
         if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost >= 0:
             costs.append(float(cost))
+    unobserved_criterion_ids = [
+        "final_order_status_matches_contract" if key == "final_order_status" else key
+        for key in unobserved_checks
+    ]
     case = {
         "case_id": f"retail-task-{sim.get('task_id')}-trial-{sim.get('trial', 0)}",
         "expected": expected,
         "actual": actual,
-        "unobserved_checks": unobserved_checks,
+        "unobserved_checks": unobserved_criterion_ids,
     }
     if costs:
         case["cost_usd"] = sum(costs)
@@ -416,7 +420,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "expected_write_observed": len(exchange_calls) == 1,
         "task_completed": bool(len(exchange_calls) == 1 and final_state_ok),
         "evaluation_completeness": "complete" if not unobserved_checks else "partial",
-        "unobserved_checks": unobserved_checks,
+        "unobserved_checks": unobserved_criterion_ids,
         "decision_note": (
             "The trace ended without an observed expected exchange write; dependent checks are "
             "not evaluable. The release gate remains closed."
