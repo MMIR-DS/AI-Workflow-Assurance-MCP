@@ -33,9 +33,10 @@ same normalizer without reading an arbitrary filesystem path. It validates the m
 version, 40-character source commit, exact check-name set, boolean check values,
 reconciled summary counts, decision/check consistency, SHA-256 fingerprint
 shape, write-count constraints, and tamper-probe consistency. Nested order and
-item snapshots are independently projected onto explicit allowlists; unknown
-customer fields, extra summary fields, and free-form limitation strings are not
-passed through. The normalized envelope preserves the simulator-only scope and
+item snapshots are independently projected onto explicit allowlists, with
+type/length checks on identifiers, exchange-item lists, prices and option
+strings; unknown customer fields, object-valued option payloads, extra summary
+fields, and free-form limitation strings are not passed through. The normalized envelope preserves the simulator-only scope and
 always marks the evidence unverified and ineligible for release. A simulator
 GO remains a replay result, not production authorization.
 
