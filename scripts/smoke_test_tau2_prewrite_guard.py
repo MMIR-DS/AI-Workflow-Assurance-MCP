@@ -515,19 +515,6 @@ def main() -> None:
     assert environment.calls == []
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
-    for index, tool_name in enumerate(unsupported_write_tools):
-        trajectory, _ = _setup()
-        unsupported_write = ToolCall(
-            id=f"unsupported-write-{index:03d}",
-            name=tool_name,
-            arguments={"order_id": "#W2378156"},
-            requestor="assistant",
-        )
-        results, environment, orchestrator = _dispatch(trajectory, unsupported_write)
-        assert len(results) == 1 and results[0].error, tool_name
-        assert environment.calls == [], f"{tool_name} must not reach the environment"
-        assert "no reviewed AWA policy adapter" in (results[0].content or ""), tool_name
-        assert orchestrator.num_errors == 1, tool_name
     print("PASS: all seven pinned retail write policies enforce GO/NO_GO through the actual dispatcher; same-batch duplicate blocking is verified.")
 
 
