@@ -132,6 +132,52 @@ def test_tau2_adapter_blocks_qualified_yes_that_changes_payment_method() -> None
     assert result["evidence_summary"]["user_affirmed_after_disclosure"] is False
 
 
+def test_tau2_adapter_blocks_when_order_was_written_after_the_snapshot() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. Use payment method "
+        "credit_card_9513926 for any price difference. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+    # Place a successful write immediately after the order-read result, before confirmation.
+    read_call_index = next(
+        index for index, message in enumerate(trajectory)
+        if any(
+            tool.get("name") == "get_order_details"
+            and tool.get("arguments", {}).get("order_id") == "#W2378156"
+            for tool in message.get("tool_calls", [])
+        )
+    )
+    read_call_id = trajectory[read_call_index]["tool_calls"][0]["id"]
+    read_result_index = next(
+        index for index, message in enumerate(trajectory)
+        if message.get("role") == "tool" and message.get("id") == read_call_id
+    )
+    trajectory.insert(read_result_index + 1, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "prior-write-001",
+            "name": "modify_pending_order_address",
+            "arguments": {"order_id": "#W2378156", "city": "Updated City"},
+        }],
+    })
+    trajectory.insert(read_result_index + 2, {
+        "role": "tool",
+        "id": "prior-write-001",
+        "content": "{\"status\": \"ok\"}",
+    })
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert "order_snapshot_stale_after_prior_write_attempt" in result["blocking_checks"]
+    assert result["evidence_summary"]["order_snapshot_fresh"] is False
+
+
 def test_tau2_adapter_fails_closed_without_matching_identity_lookup() -> None:
     trajectory, call = _trajectory_and_call()
     trajectory[:] = [
