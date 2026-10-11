@@ -174,7 +174,7 @@ def _exchange_price_difference(
     if not isinstance(new_items, list) or len(old_items) != len(new_items):
         return None
     total = 0.0
-    for old_item_id, new_item_id in zip(old_items, new_items):
+    for old_item_id, new_item_id in zip(old_items, new_items, strict=True):
         old_item = next(
             (
                 item for item in order_items
@@ -340,7 +340,7 @@ def evaluate_tau2_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
             )) is not None
             and new_item_id in variants
             and old_item.get("product_id") == variants[new_item_id].get("product_id")
-            for old_item_id, new_item_id in zip(old_items, new_items)
+            for old_item_id, new_item_id in zip(old_items, new_items, strict=True)
         )
     )
     price_difference = _exchange_price_difference(order_items, old_items, new_items, variants)
