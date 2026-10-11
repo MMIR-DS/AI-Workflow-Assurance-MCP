@@ -15,6 +15,11 @@ on:
         type: choice
         options: ["20", "40", "60"]
 
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/tau2-retail-smoke.yml"
+
 permissions:
   contents: read
 
@@ -24,6 +29,10 @@ concurrency:
 
 jobs:
   smoke:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       contains(github.event.head_commit.message, 'tau2-once-temp0-6b72c1'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -75,11 +84,12 @@ jobs:
             --domain retail \
             --agent llm_agent \
             --agent-llm "$MODEL" \
-            --agent-llm-args '{"max_tokens": 2048}' \
+            --agent-llm-args '{"max_tokens": 2048, "temperature": 0.0}' \
             --user-llm "$MODEL" \
-            --user-llm-args '{"max_tokens": 2048}' \
+            --user-llm-args '{"max_tokens": 2048, "temperature": 0.0}' \
             --num-trials 1 \
             --task-ids 0 \
+            --seed 300 \
             --max-concurrency 1 \
             --max-steps "$MAX_STEPS" \
             --max-errors 4 \
