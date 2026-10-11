@@ -56,7 +56,22 @@ ai-workflow-assurance-mcp
 python -m ai_workflow_assurance_mcp.server
 ```
 
-Tools: `validate_workflow_spec`, `run_eval_suite`, `compare_eval_runs`, `explain_failures`, `generate_release_report`, `inspect_tau2_evidence_manifest`. The evidence tool accepts JSON text and returns a strict normalized projection; it does not authenticate the source or make simulator evidence release-eligible.
+Tools: `validate_workflow_spec`, `run_eval_suite`, `compare_eval_runs`, `explain_failures`, `generate_release_report`, `inspect_tau2_evidence_manifest`, and `inspect_github_actions_run`.
+
+The evidence inspection tools are read-only and return bounded, allowlisted evidence envelopes. `inspect_tau2_evidence_manifest` accepts manifest JSON text and validates the simulator evidence contract. `inspect_github_actions_run` reads metadata for one explicitly selected GitHub Actions run; set `GH_TOKEN` (preferred) or `GITHUB_TOKEN` in the MCP server process with read-only Actions access. It requires a repository (`owner/name`), run ID, expected 40-character head SHA, and optional freshness window in seconds.
+
+Example MCP arguments for `inspect_github_actions_run`:
+
+```json
+{
+  "repository": "owner/repository",
+  "run_id": 123456789,
+  "expected_head_sha": "0123456789abcdef0123456789abcdef01234567",
+  "max_age_seconds": 3600
+}
+```
+
+A successful GitHub Actions run is not proof that a production workflow or underlying business operation was correct. Both evidence tools always preserve `source_authenticity=not_verified`; neither makes evidence release-eligible. Review [the GitHub Actions evidence source trust boundary](docs/GITHUB_ACTIONS_EVIDENCE_SOURCE.md) before using this adapter.
 
 ## Tests
 
