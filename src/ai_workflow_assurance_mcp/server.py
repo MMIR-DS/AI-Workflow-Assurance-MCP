@@ -20,6 +20,7 @@ from ai_workflow_assurance_mcp.core import (
     summarize_workflow_metadata,
     validate_spec,
 )
+from ai_workflow_assurance_mcp.evidence_sources import MAX_MANIFEST_BYTES, Tau2ManifestFileSource
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -53,6 +54,34 @@ def _parse_and_validate_spec(workflow_spec_json: str) -> dict[str, Any]:
     if errors:
         raise AssuranceInputError("Invalid workflow specification: " + " ".join(errors))
     return spec
+
+
+@mcp.tool()
+@_map_input_errors_to_tool_errors
+def inspect_tau2_evidence_manifest(manifest_json: str) -> dict[str, Any]:
+    """Validate and normalize a supplied tau2 simulator manifest; does not authenticate it."""
+    if not isinstance(manifest_json, str):
+        raise AssuranceInputError("manifest_json must be JSON text.")
+    if len(manifest_json.encode("utf-8", errors="replace")) > MAX_MANIFEST_BYTES:
+        raise AssuranceInputError(
+            f"manifest_json exceeds the {MAX_MANIFEST_BYTES}-byte size limit."
+        )
+    manifest = parse_json_text(manifest_json, "manifest_json")
+    try:
+        envelope = Tau2ManifestFileSource.normalize_manifest(manifest)
+    except ValueError as exc:
+        raise AssuranceInputError(f"Could not inspect evidence manifest: {exc}") from exc
+    return {
+        "source_name": envelope.source_name,
+        "source_version": envelope.source_version,
+        "assurance_scope": envelope.assurance_scope,
+        "source_authenticity": envelope.source_authenticity,
+        "release_eligible": envelope.release_eligible,
+        "collected_at": (
+            envelope.collected_at.isoformat() if envelope.collected_at is not None else None
+        ),
+        "evidence": envelope.evidence,
+    }
 
 
 @mcp.tool()
