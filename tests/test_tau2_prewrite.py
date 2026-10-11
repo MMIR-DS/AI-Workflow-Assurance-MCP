@@ -251,8 +251,8 @@ def test_tau2_adapter_recovers_after_blocked_attempt_and_fresh_confirmation() ->
             "role": "assistant",
             "content": (
                 "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-                "and old item 4983901480 for 7747408585. Use payment method "
-                "credit_card_9513926 for any price difference. Please confirm."
+                "and old item 4983901480 for 7747408585. The total price difference is "
+                "a $16.63 refund to credit_card_9513926. Please confirm."
             ),
         },
         {
@@ -303,7 +303,7 @@ def test_tau2_adapter_blocks_old_item_not_present_in_order() -> None:
     result = evaluate_tau2_prewrite(trajectory, call)
 
     assert result["decision"] == "NO_GO"
-    assert "old_items_belong_to_order_and_are_unique" in result["blocking_checks"]
+    assert "old_item_multiplicity_does_not_exceed_order_quantity" in result["blocking_checks"]
 
 
 def test_tau2_adapter_blocks_payment_method_not_in_order_history() -> None:
@@ -333,7 +333,7 @@ def test_tau2_adapter_blocks_new_variant_not_verified_available() -> None:
     result = evaluate_tau2_prewrite(trajectory, call)
 
     assert result["decision"] == "NO_GO"
-    assert "new_items_are_verified_available_variants_and_unique" in result["blocking_checks"]
+    assert "new_items_are_verified_available_variants" in result["blocking_checks"]
 
 
 def test_tau2_adapter_does_not_rely_on_stale_available_variant_snapshot() -> None:
