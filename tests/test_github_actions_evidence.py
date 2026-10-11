@@ -104,7 +104,13 @@ def test_missing_token_fails_closed():
         ({"head_sha": "b" * 40}, "head SHA does not match"),
         ({"status": "in_progress", "conclusion": None}, "completed successfully"),
         ({"status": "completed", "conclusion": "failure"}, "completed successfully"),
-        ({"updated_at": (NOW - timedelta(hours=2)).isoformat()}, "stale"),
+        (
+            {
+                "created_at": (NOW - timedelta(hours=3)).isoformat(),
+                "updated_at": (NOW - timedelta(hours=2)).isoformat(),
+            },
+            "stale",
+        ),
         ({"updated_at": (NOW + timedelta(hours=1)).isoformat()}, "future"),
         ({"workflow_id": True}, "workflow_id"),
         ({"run_attempt": 0}, "run attempt"),
