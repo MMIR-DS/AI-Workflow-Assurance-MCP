@@ -1,3 +1,32 @@
+from __future__ import annotations
+
+import json
+import sys
+
+import pytest
+
+from ai_workflow_assurance_mcp.cli import main
+
+
+def _manifest() -> dict:
+    return {
+        "manifest_type": "awa-tau2-source-evidence-v1",
+        "assurance_scope": "pinned_simulator_replay_evidence_only",
+        "production_ready": False,
+        "release_eligible": False,
+        "decision": "GO",
+        "simulation_task_id": "0",
+        "order_id": "#synthetic",
+        "source_provenance": {
+            "checked_out_commit": "b" * 40,
+            "source_authenticity": "not_verified",
+        },
+        "database_evidence": {"write_count_in_trace": 1},
+        "checks": {"check_a": True},
+        "summary": {"passed_checks": 1, "total_checks": 1},
+        "limitations": ["simulator only"],
+        "data_minimization": {"raw_order_snapshots_included": False},
+    }
 
 
 def test_inspect_evidence_cli_refuses_to_overwrite_source_manifest(
