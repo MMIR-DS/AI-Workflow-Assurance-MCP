@@ -4,16 +4,17 @@
 
 Deterministic evaluation logic for AI workflow observations, exposed as an MCP server and a local CLI. Reports include run-specific metadata.
 
-**Version:** 0.1.6
+**Version:** 0.1.7
 
-This repository contains the source for **AI Workflow Assurance MCP v0.1.6**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
+This repository contains the source for **AI Workflow Assurance MCP v0.1.7**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI.
 
 ## What it does
 
 Given a workflow specification (criteria + thresholds) and normalized expected/actual observations, AWA:
 
 - validates the specification
-- evaluates cases deterministically
+- evaluates cases deterministically with explicit `PASS`, `FAIL`, and `NOT_EVALUABLE` outcomes
+- keeps unknown evidence distinct from a proven failure; unknown-only release gates return `HOLD`, while observed failures remain `NO_GO`
 - groups failures by criterion/severity
 - compares baseline vs candidate runs
 - produces a threshold-based release decision (`GO` / `HOLD` / `NO_GO`)

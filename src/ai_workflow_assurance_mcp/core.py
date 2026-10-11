@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-SCHEMA_VERSION = "0.3"
+SCHEMA_VERSION = "0.4"
 MAX_JSON_CHARS = 2_000_000
 MAX_JSON_DEPTH = 64
 MAX_PATH_PARTS = 32

@@ -4,6 +4,7 @@ import json
 import unittest
 
 from ai_workflow_assurance_mcp.core import (
+    SCHEMA_VERSION,
     AssuranceInputError,
     compare_reports,
     create_release_report,
@@ -465,10 +466,6 @@ class WorkflowAssuranceTests(unittest.TestCase):
         self.assertEqual(summarize_unknown_thresholds({"min_pass_rate": 0.9, "max_custom_metric": 5}), ["max_custom_metric"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 
 class NotEvaluableStatusTests(unittest.TestCase):
     def test_unobserved_check_is_not_counted_as_a_definite_failure(self):
@@ -524,3 +521,16 @@ class NotEvaluableStatusTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(AssuranceInputError, "unknown criterion id"):
             evaluate_suite(SPEC, [case])
+
+
+class ReportSchemaVersionTests(unittest.TestCase):
+    def test_explicit_evaluation_status_uses_report_schema_04(self):
+        report = evaluate_suite(SPEC, BASE_CASES)
+        self.assertEqual(SCHEMA_VERSION, "0.4")
+        self.assertEqual(report["schema_version"], SCHEMA_VERSION)
+        self.assertIn("status", report["case_results"][0]["checks"][0])
+        self.assertIn("not_evaluable_checks", report["summary"])
+
+
+if __name__ == "__main__":
+    unittest.main()
