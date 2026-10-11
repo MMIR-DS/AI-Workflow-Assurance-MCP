@@ -2,7 +2,7 @@
 
 ## Status
 
-The manual retail smoke workflow now applies a narrow patch to the pinned Tau2 orchestrator so the actual `exchange_delivered_order_items` dispatch path consults AWA before calling the environment. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
+The manual retail smoke workflow applies a narrow patch to the pinned Tau2 orchestrator so the actual `exchange_delivered_order_items` and `cancel_pending_order` dispatch paths consult AWA before calling the environment. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
 
 Pinned upstream Tau2 revision: `4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699`.
 
@@ -28,6 +28,10 @@ The dispatcher reserves the order ID on the first exchange attempt in a batch, i
 
 When the decision is `NO_GO`, the patched dispatcher returns an error `ToolMessage` and does **not** call `environment.get_response` for the exchange. The agent can then ask the user to confirm the complete details and retry. On `GO`, the normal Tau2 environment dispatch executes exactly once.
 
+## Pending-order cancellation
+
+The separate `evaluate_tau2_cancel_prewrite` policy permits cancellation only when the latest order snapshot matches the requested order and shows `pending`, the identity lookup matches the order owner, and the cancellation reason is one of Tau2's two supported values. It also requires the order's payment history to contain only supported payment transactions, and requires the assistant to disclose the exact total refund, each payment-method ID, the cancellation reason, and the appropriate refund timing (gift-card refunds immediately; other payment methods take 5–7 business days) before a fresh affirmative user response. A missing or unsupported detail returns `NO_GO` before environment dispatch.
+
 ## Fail-closed patching
 
 `scripts/install_tau2_prewrite_guard.py` verifies the checked-out Tau2 commit before patching. It replaces exactly one known dispatch-loop snippet and refuses to modify unknown or ambiguous source layouts. This avoids silently applying a brittle patch to a different upstream version.
@@ -42,7 +46,8 @@ The runtime smoke test uses Tau2's actual patched `BaseOrchestrator._execute_too
 - the saved baseline, whose final confirmation omits the order ID and old item IDs, returns `NO_GO` and makes zero environment calls;
 - a synthetic complete disclosure followed by an affirmative reply returns `GO` and makes exactly one fake environment call;
 - a second exchange for the same order in one batch is blocked, so only the first approved exchange reaches the fake environment callback;
-- an unreviewed write tool is denied by default and makes zero environment calls.
+- a valid pending-order cancellation reaches the fake callback only after exact refund disclosure, while missing disclosure is blocked before callback;
+- each of the five remaining unreviewed write tools is denied by default and makes zero environment calls.
 
 The full AWA test suite separately tests the evidence adapter and patcher's idempotency/source-layout checks.
 
@@ -50,7 +55,7 @@ The full AWA test suite separately tests the evidence adapter and patcher's idem
 
 This is a **simulator-specific enforcement experiment**, not a production authorization system.
 
-- The dispatcher recognizes all seven write tools in the pinned Tau2 retail toolkit. Only `exchange_delivered_order_items` has a reviewed policy adapter; the other six write tools fail closed before environment dispatch until their own policy adapters and tests are added. Read-only and generic non-write tools continue through the normal dispatch path.
+- The dispatcher recognizes all seven write tools in the pinned Tau2 retail toolkit. `exchange_delivered_order_items` and `cancel_pending_order` have simulator-specific reviewed adapters; the other five write tools fail closed before environment dispatch until their own policy adapters and tests are added. Read-only and generic non-write tools continue through the normal dispatch path.
 - Tau2's simulated identity lookup and in-memory database are benchmark evidence, not production authentication or trusted payment authorization.
 - The normalized trajectory is not cryptographically authenticated; the adapter must not be used as proof of real customer identity.
 - This source patch is applied in the workflow checkout and is not automatically installed into the upstream Tau2 repository or a user's local environment.
