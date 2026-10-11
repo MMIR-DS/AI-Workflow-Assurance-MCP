@@ -24,7 +24,7 @@ The preflight validates simulator evidence against the requested operation rathe
 - a fresh order snapshot: any intervening write attempt against the same order forces a new read before retry;
 - at most one exchange write for a given order in a single dispatcher batch, because every call in that batch otherwise observes the same pre-write trajectory snapshot.
 
-The dispatcher reserves the order ID on the first exchange attempt in a batch, including when that attempt is blocked. A second same-order exchange in that batch returns `NO_GO` and must be retried only after a new turn and fresh order read.
+The dispatcher reserves the order ID on the first exchange attempt in a batch, including when that attempt is blocked. A second same-order exchange in that batch returns `NO_GO` and must be retried only after a new turn and fresh order read. A blocked attempt also invalidates the earlier confirmation for retry purposes: the assistant must disclose the action again and receive a new affirmative user response before another attempt can be approved.
 
 When the decision is `NO_GO`, the patched dispatcher returns an error `ToolMessage` and does **not** call `environment.get_response` for the exchange. The agent can then ask the user to confirm the complete details and retry. On `GO`, the normal Tau2 environment dispatch executes exactly once.
 
