@@ -67,6 +67,9 @@ jobs:
       - name: Install AWA pre-write guard into pinned Tau2 dispatch path
         working-directory: tau2-bench
         run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
+      - name: Verify NO_GO blocks the actual Tau2 dispatch callback (no model calls)
+        working-directory: tau2-bench
+        run: PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_test_tau2_prewrite_guard.py
       - name: Validate benchmark data
         working-directory: tau2-bench
         run: uv run tau2 check-data
