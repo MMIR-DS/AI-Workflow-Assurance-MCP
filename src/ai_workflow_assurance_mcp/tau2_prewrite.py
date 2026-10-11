@@ -519,13 +519,13 @@ def _cancel_confirmation_references_consistent(
     if not isinstance(order_id, str) or not order_id or not isinstance(reason, str):
         return False
     folded = text.casefold()
-    order_pattern = r"([a-z][a-z0-9_-]*\\d[a-z0-9_-]*)"
-    order_refs = re.findall(r"\\border\\s*#?\\s*" + order_pattern + r"\\b", folded)
-    order_refs += re.findall(r"#" + order_pattern + r"\\b", folded)
+    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
+    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
+    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
     if any(reference != order_id.casefold() for reference in order_refs):
         return False
     payment_refs = re.findall(
-        r"\\b(?:credit_card|gift_card|paypal|payment_method)[_-][a-z0-9_-]+\\b",
+        r"\b(?:credit_card|gift_card|paypal|payment_method)[_-][a-z0-9_-]+\b",
         folded,
     )
     if any(reference not in {item.casefold() for item in payment_ids} for reference in payment_refs):
