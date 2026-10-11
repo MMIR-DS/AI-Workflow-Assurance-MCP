@@ -290,7 +290,33 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "one_expected_write_only": len(writes) == 1 and writes[0]["name"] == "exchange_delivered_order_items",
         "final_order_status": after.get("status") if isinstance(after, dict) else None,
     }
-    actual["policy_violation_count"] = sum(value is False for value in actual.values() if isinstance(value, bool))
+    termination_reason = str(sim.get("termination_reason") or "").lower()
+    execution_complete = termination_reason == "user_stop"
+    # A trace that ends before the expected write cannot prove downstream checks
+    # either passed or failed. Preserve NO_GO at the suite level, but represent
+    # those checks as unobserved instead of mislabeling missing evidence as a
+    # demonstrated policy violation.
+    unobserved_checks = []
+    if not execution_complete and not exchange_calls:
+        dependent_checks = (
+            "confirmation_policy_respected",
+            "exchange_eligibility_policy_respected",
+            "selected_variants_match_product_and_request",
+            "payment_policy_respected",
+            "multi_item_scope_respected",
+            "final_state_matches_expected",
+            "no_unrelated_state_mutation",
+            "price_difference_reconciles",
+            "notification_claim_matches_contract",
+            "one_expected_write_only",
+            "final_order_status",
+        )
+        for key in dependent_checks:
+            actual[key] = None
+            unobserved_checks.append(key)
+        actual["policy_violation_count"] = None
+    else:
+        actual["policy_violation_count"] = sum(value is False for value in actual.values() if isinstance(value, bool))
     expected = {
         key: (0 if key == "policy_violation_count" else "exchange requested" if key == "final_order_status" else True)
         for key in actual
@@ -312,6 +338,14 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     metadata = {
         "task_id": str(sim.get("task_id")), "trial": sim.get("trial"),
         "termination_reason": sim.get("termination_reason"),
+        "execution_complete": execution_complete,
+        "evaluation_completeness": "complete" if execution_complete else "incomplete_or_unconfirmed",
+        "unobserved_checks": unobserved_checks,
+        "decision_note": (
+            "Trace ended before the expected write; dependent checks are unobserved. "
+            "Release remains NO_GO until a complete trace supplies sufficient evidence."
+            if unobserved_checks else None
+        ),
         "model": ((results.get("info") or {}).get("agent_info") or {}).get("llm"),
         "evidence_sources": {
             "identity": "authentication tool result and user_id from initial order response",
