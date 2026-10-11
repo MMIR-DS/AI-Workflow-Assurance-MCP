@@ -788,3 +788,87 @@ def test_tau2_pending_items_adapter_blocks_prior_attempt_even_after_fresh_read()
 
     assert result["decision"] == "NO_GO"
     assert "pending_order_item_modification_already_attempted" in result["blocking_checks"]
+
+
+def _user_address_trajectory_and_call() -> tuple[list[dict], dict]:
+    trajectory, _ = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    owner_id = order["user_id"]
+    user_details = {
+        "user_id": owner_id,
+        "name": "Customer Example",
+        "email": "customer@example.com",
+        "address": order["address"],
+        "payment_methods": {},
+    }
+    trajectory.insert(16, {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "user-profile-read-1",
+            "name": "get_user_details",
+            "arguments": {"user_id": owner_id},
+        }],
+    })
+    trajectory.insert(17, {
+        "role": "tool",
+        "id": "user-profile-read-1",
+        "content": json.dumps(user_details),
+    })
+    call = {
+        "id": "user-address-call-001",
+        "name": "modify_user_address",
+        "arguments": {
+            "user_id": owner_id,
+            "address1": "100 Main Street",
+            "address2": "Unit 4",
+            "city": "Boston",
+            "state": "MA",
+            "country": "USA",
+            "zip": "02108",
+        },
+    }
+    trajectory[-1]["tool_calls"] = [call]
+    trajectory[18]["content"] = (
+        "For Customer Example, update your default address to 100 Main Street, Unit 4, "
+        "Boston, MA, USA, ZIP 02108. Please confirm."
+    )
+    trajectory[19]["content"] = "Yes, update my default address as stated."
+    return trajectory, call
+
+
+def test_tau2_user_address_adapter_allows_verified_default_address_change() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_user_address_prewrite
+
+    trajectory, call = _user_address_trajectory_and_call()
+
+    result = evaluate_tau2_user_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["identity_matches_user_details"] is True
+
+
+def test_tau2_user_address_adapter_blocks_conflicting_postal_code() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_user_address_prewrite
+
+    trajectory, call = _user_address_trajectory_and_call()
+    trajectory[19]["content"] = "Yes, use postal code 99999 instead."
+
+    result = evaluate_tau2_user_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "user_confirmed_after_disclosure" in result["blocking_checks"]
+
+
+def test_tau2_user_address_adapter_blocks_identity_mismatch() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_user_address_prewrite
+
+    trajectory, call = _user_address_trajectory_and_call()
+    user = _tool_result_json(trajectory, "user-profile-read-1")
+    user["user_id"] = "different_user_id"
+    _replace_tool_result_json(trajectory, "user-profile-read-1", user)
+
+    result = evaluate_tau2_user_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "identity_matches_user_details" in result["blocking_checks"]
