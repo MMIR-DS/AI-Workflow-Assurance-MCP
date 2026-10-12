@@ -27,7 +27,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       OPENROUTER_API_BASE: https://openrouter.ai/api/v1
       MODEL: ${{ inputs.model || 'openrouter/google/gemini-2.5-flash' }}
       MAX_STEPS: ${{ inputs.max_steps || '40' }}
@@ -64,6 +63,8 @@ jobs:
         working-directory: tau2-bench
         run: PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_test_tau2_prewrite_guard.py
       - name: Check required secret
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         shell: bash
         run: |
           if [ -z "$OPENROUTER_API_KEY" ]; then
@@ -75,6 +76,8 @@ jobs:
         run: uv run tau2 check-data
       - name: Run one retail task and one trial (bounded; tau2 only)
         working-directory: tau2-bench
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         shell: bash
         run: |
           set -o pipefail
