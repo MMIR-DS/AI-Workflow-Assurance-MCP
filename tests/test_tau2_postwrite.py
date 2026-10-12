@@ -382,3 +382,48 @@ def test_trace_audit_returns_not_evaluable_when_catalog_snapshot_is_missing() ->
 
     assert result["decision"] == "NOT_EVALUABLE"
     assert result["evidence_summary"]["catalog_product_ids_missing"] == ["product-shirt"]
+
+
+def _run_trace_cli(
+    tmp_path: Path, trajectory: list[dict], order_id: str
+) -> tuple[subprocess.CompletedProcess[str], dict]:
+    input_path = tmp_path / "tau2-trace.json"
+    input_path.write_text(
+        json.dumps({"trajectory": trajectory, "order_id": order_id}),
+        encoding="utf-8",
+    )
+    script_path = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "audit_tau2_order_postwrite.py"
+    )
+    completed = subprocess.run(
+        [sys.executable, str(script_path), "--input", str(input_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed, json.loads(completed.stdout)
+
+
+def test_postwrite_audit_cli_accepts_tau2_trace_input(tmp_path: Path) -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+
+    completed, result = _run_trace_cli(tmp_path, trajectory, "#W9348897")
+
+    assert completed.returncode == 0
+    assert result["decision"] == "PASS"
+    assert result["evidence_summary"]["post_write_snapshot_source"] == "successful_write_result"
+
+
+def test_postwrite_audit_cli_fails_on_corrupted_tau2_trace(tmp_path: Path) -> None:
+    order = _order_snapshot()
+    for item in order["items"][:2]:
+        item["price"] = 46.66
+        item["options"] = dict(_SHIRT_OPTIONS)
+    trajectory = _trace_with_write(order, _catalog_snapshots())
+
+    completed, result = _run_trace_cli(tmp_path, trajectory, "#W9348897")
+
+    assert completed.returncode == 1
+    assert result["decision"] == "FAIL"
