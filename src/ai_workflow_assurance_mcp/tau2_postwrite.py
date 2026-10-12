@@ -5,6 +5,7 @@ snapshots. It is intentionally separate from Tau2's replay-based reward/DB oracl
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
