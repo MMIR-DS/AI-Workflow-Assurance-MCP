@@ -44,6 +44,20 @@ The separate `evaluate_tau2_payment_prewrite` policy requires a fresh matching p
 
 The pure `evaluate_tau2_pending_items_prewrite` adapter reuses the exchange evidence checks but requires `pending` state and enforces Tau2's one-time-only rule. However, the dispatcher currently default-denies `modify_pending_order_items` before environment execution. Public reports [#317](https://github.com/sierra-research/tau2-bench/issues/317) and [#318](https://github.com/sierra-research/tau2-bench/issues/318) describe a possible upstream defect where multiple modified items inherit the final replacement variant's price/options; Tau2's replay-based DB oracle may not expose that corruption. We will re-enable this operation only after the pinned executor passes independent per-item post-state validation or the implementation is fixed and covered by regression tests.
 
+## Independent post-write catalog audit
+
+The pinned Tau2 implementation at revision `4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699` has a confirmed defect in `modify_pending_order_items`: the second update loop reuses the final `variant` variable from the validation loop, so earlier modified items can inherit the final item's price and options. The public reports [#317](https://github.com/sierra-research/tau2-bench/issues/317) and [#318](https://github.com/sierra-research/tau2-bench/issues/318) also explain why the replay-based DB reward can pass despite this state corruption.
+
+`audit_tau2_order_items_against_catalog` in `src/ai_workflow_assurance_mcp/tau2_postwrite.py` independently compares each persisted order row with its product's catalog variant. It checks that the item ID exists under the recorded product ID, the price matches to cents, and the full options mapping matches. A definite mismatch returns `FAIL`; missing or malformed catalog/order evidence returns `NOT_EVALUABLE`, never a false `PASS`.
+
+Run the CLI against a JSON file with an `order_snapshot` object and a `product_snapshots` list:
+
+```bash
+PYTHONPATH=src python scripts/audit_tau2_order_postwrite.py --input postwrite-snapshot.json
+```
+
+The CLI emits a structured JSON report and uses exit code `0` for `PASS`, `1` for `FAIL`, and `2` for `NOT_EVALUABLE`. Product snapshots should come from `get_product_details`; the order snapshot should be a post-write `get_order_details` result. The audit is currently a pure/offline check: it does not execute or roll back writes and does not re-enable `modify_pending_order_items`. That operation remains blocked at dispatch until the pinned implementation is fixed or its per-item post-state behavior is independently verified.
+
 ## User default-address changes
 
 The `evaluate_tau2_user_address_prewrite` policy binds the target to a fresh `get_user_details` result and the identity lookup, requires a complete address that differs from the stored default address, and requires the assistant to identify the customer and disclose the exact new address before confirmation. An explicitly conflicting postal code, stale user snapshot, or confirmation replay after a blocked attempt returns `NO_GO`.
