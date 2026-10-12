@@ -156,10 +156,14 @@ async def _run(server_executable: str) -> dict[str, Any]:
             )
             if _is_error(released):
                 raise AssertionError(_content_text(released))
-            release = _payload(released)
+            release_payload = _payload(released)
+            release = release_payload.get("release_report", {})
             checks["generate_release_report"] = release.get("decision") == "GO"
             if not checks["generate_release_report"]:
-                raise AssertionError(f"Smoke release decision was not GO: {release.get('decision')}")
+                raise AssertionError(
+                    "Smoke release decision was not GO: "
+                    f"{release.get('decision')!r}; payload keys={sorted(release_payload)}"
+                )
 
             evidence_names = (
                 "source_code_commit_matches_trace",
