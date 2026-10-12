@@ -511,7 +511,6 @@ def audit_tau2_trace_postwrite(
             latest_read_seen = True
             latest_read_snapshot = None
             call_id = _field(call, "id")
-            latest_read_call_id = call_id if isinstance(call_id, str) else None
             if not isinstance(call_id, str) or not call_id:
                 continue
             result_message = next(
