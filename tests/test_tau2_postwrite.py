@@ -9,7 +9,6 @@ from ai_workflow_assurance_mcp.tau2_postwrite import (
     audit_tau2_order_items_against_catalog,
 )
 
-
 _CAMERA_OPTIONS = {
     "resolution": "4K",
     "waterproof": "yes",
