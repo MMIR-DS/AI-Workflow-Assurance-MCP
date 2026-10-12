@@ -2,6 +2,7 @@
 
 ## 0.1.7 (Unreleased)
 
+- Reject ambiguous Tau2 trace correlation when tool-call IDs or tool-result IDs are duplicated; add regression coverage across catalog reads and write attempts.
 - Add operation-specific Tau2 preflight policy adapters for exchange, cancellation, order-address changes, payment-method changes, pending-item modifications, user default-address changes, and delivered-item returns. The dispatcher enables the six non-item-modification paths and explicitly denies pending-item modification until independent per-item post-state invariants are verified.
 - Explicitly default-deny Tau2 retail `create_order`, `modify_pending_order_items`, and any unrecognized/unreviewed tool name; prove blocked tools never reach the environment callback while an explicit known read-only tool still passes through in the no-model dispatcher smoke.
 - Add an independent catalog-backed post-write auditor that compares persisted order item IDs, prices-to-cents, and options with product variants; accept explicit snapshots, raw traces, or full Tau2 benchmark artifacts with aggregate per-simulation decisions; detect known mismatches even when replay-based reward passes, and return `NOT_EVALUABLE` when required evidence is missing.
