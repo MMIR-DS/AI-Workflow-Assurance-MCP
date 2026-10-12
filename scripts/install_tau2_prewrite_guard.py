@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
-PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V4"
+PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V5"
 
 ORIGINAL = """        tool_results = []
         for tool_call in tool_calls:
@@ -21,7 +21,7 @@ REPLACEMENT = """        tool_results = []
         # allow two writes for the same order to reuse that snapshot.
         awa_write_orders_seen = set()
         for tool_call in tool_calls:
-            # AWA_PREWRITE_GUARD_PATCH_V4: guard reviewed writes and deny unreviewed create_order.
+            # AWA_PREWRITE_GUARD_PATCH_V5: guard reviewed writes and deny unreviewed create_order.
             awa_write_tools = {
                 "cancel_pending_order",
                 "exchange_delivered_order_items",
@@ -169,8 +169,6 @@ REPLACEMENT = """        tool_results = []
                                 ),
                             )
                 elif tool_call.name == "modify_pending_order_items":
-                    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_pending_items_prewrite
-
                     raw_order_id = (
                         tool_call.arguments.get("order_id")
                         if isinstance(tool_call.arguments, dict)
@@ -195,24 +193,23 @@ REPLACEMENT = """        tool_results = []
                         )
                     else:
                         if normalized_order_id:
+                            # Reserve the order even though this operation is disabled.
+                            # A second write in this batch must not act on the same snapshot.
                             awa_write_orders_seen.add(normalized_order_id)
-                        preflight = evaluate_tau2_pending_items_prewrite(self.trajectory, tool_call)
-                        if preflight["decision"] == "GO":
-                            tool_result = self.environment.get_response(tool_call)
-                        else:
-                            blocking = ", ".join(preflight["blocking_checks"]) or "unspecified"
-                            tool_result = ToolMessage(
-                                id=tool_call.id,
-                                role="tool",
-                                requestor=tool_call.requestor,
-                                error=True,
-                                content=(
-                                    "AWA_PREWRITE_NO_GO: pending item modification blocked before "
-                                    "execution. Disclose the exact old/new item IDs, price delta, "
-                                    "payment method, and obtain fresh confirmation."
-                                    f" Blocking checks: {blocking}."
-                                ),
-                            )
+                        tool_result = ToolMessage(
+                            id=tool_call.id,
+                            role="tool",
+                            requestor=tool_call.requestor,
+                            error=True,
+                            content=(
+                                "AWA_PREWRITE_NO_GO: pending-order item modification is disabled "
+                                "before execution. Public reports describe a possible Tau2 bug "
+                                "that can copy the final replacement variant's price/options to "
+                                "other items in a multi-item update. The pinned executor has not "
+                                "passed independent per-item post-state verification; no write "
+                                "was executed."
+                            ),
+                        )
                 elif tool_call.name == "modify_pending_order_payment":
                     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_payment_prewrite
 
