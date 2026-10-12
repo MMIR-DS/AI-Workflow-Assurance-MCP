@@ -12,7 +12,9 @@ AWA evaluates the observations supplied to it; it does not know whether a missin
 
 A missing path does **not** automatically mean `NOT_EVALUABLE`. AWA intentionally does not guess why it is missing. For example, if a workflow is required to return `actual.decision` and it omits that output, that is ordinarily a failed observation of the workflow contract. Do not mark it unobserved merely because the expected output is absent.
 
-By contrast, if an upstream evidence collector or integration genuinely could not observe the decision (for example, the source was unavailable or the trace did not capture that event), the adapter may list the criterion ID in `unobserved_checks`. That explicit declaration produces `NOT_EVALUABLE`, which prevents an unsupported factual claim of failure and causes an otherwise unknown-only release gate to return `HOLD`.
+By contrast, if an upstream evidence collector or integration genuinely could not observe the decision (for example, the source was unavailable or the trace did not capture that event), the adapter may list the criterion ID in `unobserved_checks`. That explicit declaration produces `NOT_EVALUABLE`, which prevents an unsupported factual claim of failure.
+
+**Release-gate rule:** the current workflow-spec schema has no threshold that authorizes ignoring unobserved criteria. Therefore, any `NOT_EVALUABLE` check blocks `GO`, even when another low-severity check fails but the aggregate pass rate remains above its threshold. The release report emits a `not_evaluable_evidence` check: if it is the only blocker, the decision is `HOLD`; if another release-gate check has `FAIL`, the decision remains `NO_GO`. A `GO` requires no `NOT_EVALUABLE` checks.
 
 ## Case-authoring rules
 
