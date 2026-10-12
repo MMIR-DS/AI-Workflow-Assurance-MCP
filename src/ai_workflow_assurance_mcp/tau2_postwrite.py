@@ -580,8 +580,12 @@ def audit_tau2_trace_postwrite(
             "post_write_snapshot_source": snapshot_source,
             "catalog_product_count": len(product_snapshots),
             "catalog_product_ids_missing": sorted(
-                target_product_ids - set(latest_products.keys())
-                | {product_id for product_id, snapshot in latest_products.items() if snapshot is None}
+                (target_product_ids - set(latest_products.keys()))
+                | {
+                    product_id
+                    for product_id, snapshot in latest_products.items()
+                    if snapshot is None
+                }
             ),
         }
     )
