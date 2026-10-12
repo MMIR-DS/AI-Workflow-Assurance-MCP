@@ -55,7 +55,7 @@ jobs:
         run: uv sync --extra dev
       - name: Install missing runtime dependency used by tau2 data checks
         working-directory: tau2-bench
-        run: uv pip install --python .venv/bin/python 'websockets>=13.0'
+        run: uv pip install --python .venv/bin/python 'websockets==15.0.1'
       - name: Install AWA pre-write guard into pinned Tau2 dispatch path
         working-directory: tau2-bench
         run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
