@@ -386,6 +386,43 @@ def test_trace_audit_rejects_duplicate_tool_call_ids_even_when_one_result_exists
     assert "product-camera" in result["evidence_summary"]["catalog_product_ids_missing"]
 
 
+def test_trace_audit_rejects_ambiguous_write_call_id() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    # Reuse the same ID for a later write attempt and its tool result. The auditor
+    # must not accept either result as authoritative state for the target order.
+    trajectory.extend(
+        [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "pending-items-write",
+                        "name": "modify_pending_order_items",
+                        "arguments": {
+                            "order_id": "#W9348897",
+                            "item_ids": ["old-a"],
+                            "new_item_ids": ["camera-new"],
+                            "payment_method_id": "credit_card_test",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "id": "pending-items-write",
+                "content": json.dumps(_order_snapshot()),
+                "error": False,
+            },
+        ]
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["blocking_checks"] == ["successful_postwrite_order_snapshot_available"]
+    assert result["evidence_summary"]["latest_write_outcome"] == "missing_result"
+
+
 def test_trace_audit_rejects_duplicate_tool_results_for_same_call_id() -> None:
     trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
     # A duplicate result makes the ID-to-result relationship ambiguous.
