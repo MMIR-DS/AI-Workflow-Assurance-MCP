@@ -25,6 +25,12 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Testing",
 ]
+[project.urls]
+Homepage = "https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP"
+Repository = "https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP"
+Documentation = "https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/tree/main/docs"
+Issues = "https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/issues"
+
 dependencies = ["mcp>=2.0.0,<3.0.0"]
 
 [project.optional-dependencies]
