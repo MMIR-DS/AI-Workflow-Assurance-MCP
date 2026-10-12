@@ -732,6 +732,31 @@ def audit_tau2_benchmark_result_postwrite(
             ],
         }
 
+    if not selected:
+        return {
+            "decision": "NOT_EVALUABLE",
+            "checked": {"at_least_one_simulation_selected": "NOT_EVALUABLE"},
+            "blocking_checks": ["at_least_one_simulation_selected"],
+            "simulation_results": [],
+            "order_audits": [],
+            "evidence_summary": {
+                "simulation_count": 0,
+                "selected_simulation_indices": [],
+                "order_audit_count": 0,
+                "simulations_without_matching_write": 0,
+                "fail_count": 0,
+                "not_evaluable_count": 1,
+                "benchmark_reward_used_as_integrity_oracle": False,
+            },
+            "scope": "tau2_benchmark_artifact_postwrite_audit_not_production_data_integrity_proof",
+            "not_evaluable": [
+                {
+                    "check": "at_least_one_simulation_selected",
+                    "detail": "The benchmark artifact contains no simulations to audit.",
+                }
+            ],
+        }
+
     simulation_results: list[dict[str, Any]] = []
     order_audits: list[dict[str, Any]] = []
     simulation_decisions: list[str] = []
@@ -832,18 +857,25 @@ def audit_tau2_benchmark_result_postwrite(
         decision = "PASS"
 
     fail_count = sum(audit["decision"] == "FAIL" for audit in order_audits)
-    not_evaluable_count = sum(
+    not_evaluable_order_count = sum(
         audit["decision"] == "NOT_EVALUABLE" for audit in order_audits
+    )
+    simulations_without_usable_trace = sum(
+        item["decision"] == "NOT_EVALUABLE" and not item["order_audits"]
+        for item in simulation_results
+    )
+    not_evaluable_count = (
+        not_evaluable_order_count + simulations_without_usable_trace
+    )
+    not_evaluable_simulation_count = sum(
+        item["decision"] == "NOT_EVALUABLE" for item in simulation_results
     )
     blocking_checks: list[str] = []
     if fail_count:
         blocking_checks.append("one_or_more_order_audits_failed")
-    if not_evaluable_count or simulations_without_write:
+    if not_evaluable_count:
         blocking_checks.append("one_or_more_simulations_not_evaluable")
-    if any(
-        item["decision"] == "NOT_EVALUABLE" and not item["order_audits"]
-        for item in simulation_results
-    ):
+    if simulations_without_usable_trace:
         blocking_checks.append("one_or_more_simulations_have_no_usable_write_trace")
 
     return {
@@ -862,6 +894,8 @@ def audit_tau2_benchmark_result_postwrite(
             "selected_simulation_indices": [index for index, _ in selected],
             "order_audit_count": len(order_audits),
             "simulations_without_matching_write": simulations_without_write,
+            "not_evaluable_simulation_count": not_evaluable_simulation_count,
+            "simulations_without_usable_trace": simulations_without_usable_trace,
             "fail_count": fail_count,
             "not_evaluable_count": not_evaluable_count,
             "benchmark_reward_used_as_integrity_oracle": False,
