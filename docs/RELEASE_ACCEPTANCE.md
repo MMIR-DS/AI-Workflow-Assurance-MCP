@@ -47,13 +47,9 @@ Review the JSON outputs rather than relying only on process exit codes. In parti
 
 CI launches the MCP server executable from a wheel installed in a clean virtual environment. The child process receives a temporary startup hook on `PYTHONPATH`, not the checkout's source tree, so package imports still resolve from the installed wheel. The smoke test requires an activation sentinel from that hook before it trusts the counter, preventing a missing hook from looking like zero network attempts. The hook blocks and counts Python socket-level IPv4/IPv6 connection attempts; any attempt observed through those hooks fails the smoke test. This is test instrumentation, not an OS-level network sandbox and not a complete defense against native code or direct syscalls. The stdio smoke test checks the versioned initialize handshake, the exact inventory of eight exposed tools, representative response contracts for all eight tools, and critical evidence-trust and sensitive-write preflight behavior. It uses synthetic local input and makes no model calls.
 
-For manual integration, launch the installed server:
+For manual integration on Windows with VS Code, follow the [MCP client acceptance guide](MCP_CLIENT_ACCEPTANCE_WINDOWS.md). It builds a wheel, installs it in a separate virtual environment, configures VS Code to launch the installed console entry point, and records tool-discovery and invocation results. Do not mark manual client acceptance complete until the record has been filled from an actual client run.
 
-```bash
-ai-workflow-assurance-mcp
-```
-
-Connect using the target MCP client's stdio configuration and verify that client's actual initialization, tool discovery, and invocation behavior. The automated smoke is protocol-level coverage; it does not prove compatibility with every MCP client or deployment configuration. Do not expose the process as a network service without a separate threat model and deployment review.
+For other MCP clients, launch the installed server using its `ai-workflow-assurance-mcp` entry point and verify that client's actual initialization, tool discovery, and invocation behavior. The automated smoke is protocol-level coverage; it does not prove compatibility with every MCP client or deployment configuration. Do not expose the process as a network service without a separate threat model and deployment review.
 
 ## 5. Verify the built artifact and CI
 
