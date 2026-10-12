@@ -773,11 +773,13 @@ def audit_tau2_benchmark_result_postwrite(
     order_audits: list[dict[str, Any]] = []
     simulation_decisions: list[str] = []
     simulations_without_write = 0
+    all_simulations_well_formed = True
 
     for index, simulation in selected:
         task_id = _field(simulation, "task_id")
         messages = _trace_messages(_field(simulation, "messages"))
         if messages is None:
+            all_simulations_well_formed = False
             audit = _trace_not_evaluable(
                 None,
                 "simulation_messages_are_well_formed",
@@ -893,7 +895,9 @@ def audit_tau2_benchmark_result_postwrite(
     return {
         "decision": decision,
         "checked": {
-            "benchmark_simulations_are_well_formed": "PASS",
+            "benchmark_simulations_are_well_formed": (
+                "PASS" if all_simulations_well_formed else "NOT_EVALUABLE"
+            ),
             "all_target_order_audits_passed": (
                 "PASS" if decision == "PASS" else decision
             ),

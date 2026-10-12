@@ -607,6 +607,18 @@ def test_benchmark_artifact_audit_is_not_evaluable_without_a_target_write() -> N
     assert result["blocking_checks"]
 
 
+def test_benchmark_artifact_marks_missing_messages_as_not_well_formed() -> None:
+    payload = _benchmark_result_with_orders([_order_snapshot()])
+    payload["simulations"].append({"task_id": "missing-messages"})
+
+    result = audit_tau2_benchmark_result_postwrite(payload)
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["checked"]["benchmark_simulations_are_well_formed"] == "NOT_EVALUABLE"
+    assert result["simulation_results"][0]["decision"] == "PASS"
+    assert result["simulation_results"][1]["decision"] == "NOT_EVALUABLE"
+
+
 def test_benchmark_artifact_audit_can_select_one_simulation() -> None:
     valid_order = _order_snapshot()
     corrupted_order = _order_snapshot()
