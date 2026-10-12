@@ -840,12 +840,13 @@ def audit_tau2_benchmark_result_postwrite(
     for index, simulation in selected:
         task_id = _field(simulation, "task_id")
         messages = _trace_messages(_field(simulation, "messages"))
-        if messages is None:
+        if not _trace_messages_are_well_formed(messages):
             all_simulations_well_formed = False
             audit = _trace_not_evaluable(
                 None,
                 "simulation_messages_are_well_formed",
-                "This simulation does not contain a messages list.",
+                "This simulation's messages list or an individual message/tool-call "
+                "record is missing or malformed.",
             )
             entry = {
                 "simulation_index": index,
