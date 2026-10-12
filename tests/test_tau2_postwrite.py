@@ -120,6 +120,8 @@ def test_postwrite_audit_detects_tau2_last_variant_price_and_options_corruption(
     assert result["checked"]["item_prices_match_catalog"] == "FAIL"
     assert result["checked"]["item_options_match_catalog"] == "FAIL"
     assert result["evidence_summary"]["violation_count"] == 4
+    # Only the unaffected shirt matches its catalog price and options completely.
+    assert result["evidence_summary"]["validated_item_count"] == 1
     assert {
         (violation["item_index"], violation["check"])
         for violation in result["violations"]
@@ -165,6 +167,8 @@ def test_postwrite_audit_treats_malformed_catalog_price_as_not_evaluable() -> No
     assert result["decision"] == "NOT_EVALUABLE"
     assert result["checked"]["item_prices_match_catalog"] == "NOT_EVALUABLE"
     assert result["checked"]["item_options_match_catalog"] == "PASS"
+    # The camera's price is unknown, so only the lamp and shirt are fully validated.
+    assert result["evidence_summary"]["validated_item_count"] == 2
 
 
 def test_postwrite_audit_compares_prices_to_cents_and_options_by_mapping_value() -> None:

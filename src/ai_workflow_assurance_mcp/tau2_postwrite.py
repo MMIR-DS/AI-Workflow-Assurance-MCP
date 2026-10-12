@@ -245,6 +245,10 @@ def audit_tau2_order_items_against_catalog(
                 )
                 continue
 
+            # Count an item as validated only if every catalog invariant is evaluable
+            # and matches. The decision already fails closed; this keeps the summary
+            # metric from overstating the number of fully verified items.
+            item_validated = True
             expected_price = _money(_field(variant, "price"))
             if expected_price is None:
                 record_unknown(
@@ -254,6 +258,7 @@ def audit_tau2_order_items_against_catalog(
                     product_id=product_id,
                     item_id=item_id,
                 )
+                item_validated = False
             else:
                 actual_price = _money(actual_price_value)
                 if actual_price is None:
@@ -265,6 +270,7 @@ def audit_tau2_order_items_against_catalog(
                         expected=str(expected_price),
                         actual=actual_price_value,
                     )
+                    item_validated = False
                 elif actual_price != expected_price:
                     record_violation(
                         "item_prices_match_catalog",
@@ -274,6 +280,7 @@ def audit_tau2_order_items_against_catalog(
                         expected=str(expected_price),
                         actual=str(actual_price),
                     )
+                    item_validated = False
 
             expected_options = _field(variant, "options")
             if not isinstance(expected_options, Mapping):
@@ -284,6 +291,7 @@ def audit_tau2_order_items_against_catalog(
                     product_id=product_id,
                     item_id=item_id,
                 )
+                item_validated = False
             elif not isinstance(actual_options, Mapping):
                 record_violation(
                     "item_options_match_catalog",
@@ -293,6 +301,7 @@ def audit_tau2_order_items_against_catalog(
                     expected=dict(expected_options),
                     actual=actual_options,
                 )
+                item_validated = False
             elif dict(actual_options) != dict(expected_options):
                 record_violation(
                     "item_options_match_catalog",
@@ -302,7 +311,10 @@ def audit_tau2_order_items_against_catalog(
                     expected=dict(expected_options),
                     actual=dict(actual_options),
                 )
-            validated_item_count += 1
+                item_validated = False
+
+            if item_validated:
+                validated_item_count += 1
 
     if any(status == "FAIL" for status in checked.values()):
         decision = "FAIL"
