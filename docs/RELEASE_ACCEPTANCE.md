@@ -45,7 +45,7 @@ Review the JSON outputs rather than relying only on process exit codes. In parti
 
 ## 4. Verify the MCP boundary
 
-CI launches the MCP server executable from a wheel installed in a clean virtual environment, with `PYTHONPATH` removed so the checkout cannot mask packaging/import defects. The stdio smoke test checks the versioned initialize handshake, the exact inventory of eight exposed tools, representative response contracts for all eight tools, and critical evidence-trust and sensitive-write preflight behavior. It uses synthetic local input and asserts zero model calls and zero external API calls.
+CI launches the MCP server executable from a wheel installed in a clean virtual environment. The child process receives only a temporary startup hook on `PYTHONPATH` (not the checkout's source tree), so the installed package must still resolve from the wheel while outbound IP-network connections are blocked and counted. Any attempted connection fails the smoke test. The stdio smoke test checks the versioned initialize handshake, the exact inventory of eight exposed tools, representative response contracts for all eight tools, and critical evidence-trust and sensitive-write preflight behavior. It uses synthetic local input and makes no model calls.
 
 For manual integration, launch the installed server:
 
