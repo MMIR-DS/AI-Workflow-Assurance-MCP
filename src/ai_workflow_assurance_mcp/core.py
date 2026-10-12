@@ -12,6 +12,7 @@ import math
 import re
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 SCHEMA_VERSION = "0.4"
@@ -159,6 +160,21 @@ def _is_number(value: Any) -> bool:
         return math.isfinite(float(value))
     except (OverflowError, ValueError):
         return False
+
+
+def _decimal_total(values: list[int | float]) -> Decimal:
+    """Sum validated numeric observations in decimal representation, avoiding binary-float drift."""
+    return sum((Decimal(str(value)) for value in values), Decimal("0"))
+
+
+def _precise_sum(values: list[int | float]) -> float:
+    return float(_decimal_total(values))
+
+
+def _precise_average(values: list[int | float]) -> float | None:
+    if not values:
+        return None
+    return float(_decimal_total(values) / Decimal(len(values)))
 
 
 def _valid_path(path: Any) -> bool:
@@ -534,8 +550,8 @@ def evaluate_suite(spec: dict[str, Any], cases: list[dict[str, Any]]) -> dict[st
         "review_observation_coverage": len(review_observations) / total_cases,
         "review_rate": review_count / len(review_observations) if review_observations else None,
         "cost_observation_coverage": len(costs) / total_cases,
-        "total_cost_usd_observed": sum(costs) if costs else None,
-        "avg_cost_usd_per_observed_case": sum(costs) / len(costs) if costs else None,
+        "total_cost_usd_observed": _precise_sum(costs) if costs else None,
+        "avg_cost_usd_per_observed_case": _precise_average(costs),
         "max_cost_usd_observed": max(costs) if costs else None,
         "latency_observation_coverage": len(latencies) / total_cases,
         "avg_latency_ms_observed": sum(latencies) / len(latencies) if latencies else None,
@@ -703,8 +719,8 @@ def _validate_report(report: Any, label: str) -> list[str]:
                 "review_observation_coverage": len(reviews) / total_cases if total_cases else 0,
                 "review_rate": sum(reviews) / len(reviews) if reviews else None,
                 "cost_observation_coverage": len(costs) / total_cases if total_cases else 0,
-                "total_cost_usd_observed": sum(costs) if costs else None,
-                "avg_cost_usd_per_observed_case": sum(costs) / len(costs) if costs else None,
+                "total_cost_usd_observed": _precise_sum(costs) if costs else None,
+                "avg_cost_usd_per_observed_case": _precise_average(costs),
                 "max_cost_usd_observed": max(costs) if costs else None,
                 "latency_observation_coverage": len(latencies) / total_cases if total_cases else 0,
                 "avg_latency_ms_observed": sum(latencies) / len(latencies) if latencies else None,
@@ -971,6 +987,33 @@ def create_release_report(spec: dict[str, Any], report: dict[str, Any]) -> dict[
             passed = observed >= limit if comparator == ">=" else observed <= limit
             status = "PASS" if passed else "FAIL"
         checks.append({"metric": name, "observed": observed, "comparator": comparator, "threshold": limit, "status": status, "passed": passed, "note": note})
+
+    # Missing observations must never disappear behind another passing aggregate
+    # (for example, a high overall pass rate when an unrelated low-severity check fails).
+    # The current spec schema has no explicit allowance for NOT_EVALUABLE checks, so any
+    # such check prevents GO; independent release-gate FAILs still take precedence as NO_GO.
+    not_evaluable_count = summary.get("not_evaluable_checks", 0)
+    if not_evaluable_count > 0:
+        checks.append({
+            "metric": "not_evaluable_evidence",
+            "observed": not_evaluable_count,
+            "comparator": "<=",
+            "threshold": 0,
+            "status": "NOT_EVALUABLE",
+            "passed": None,
+            "note": (
+                "At least one criterion could not be evaluated. No policy in the current "
+                "spec schema authorizes ignoring unobserved evidence for a GO decision."
+            ),
+        })
+    else:
+        add_check(
+            "not_evaluable_evidence",
+            0,
+            "<=",
+            0,
+            "No criterion was marked NOT_EVALUABLE.",
+        )
 
     if summary.get("not_evaluable_cases", 0) > 0 and summary.get("failed_checks", 0) == 0:
         add_check(

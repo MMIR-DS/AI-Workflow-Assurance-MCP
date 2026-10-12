@@ -568,6 +568,55 @@ class NotEvaluableStatusTests(unittest.TestCase):
         self.assertEqual(report["summary"]["critical_failures"], 1)
         self.assertEqual(decision["decision"], "NO_GO")
 
+    def test_critical_unobserved_check_cannot_be_masked_by_minor_failure(self):
+        spec = json.loads(json.dumps(SPEC))
+        spec["thresholds"]["min_pass_rate"] = 0.5
+        spec["criteria"][0]["severity"] = "low"
+
+        cases = []
+        for index in range(10):
+            actual = {
+                "decision": "approve",
+                "requires_human_review": False,
+                "amount_variance": 0.0,
+            }
+            case = {
+                "case_id": f"case-{index}",
+                "expected": {
+                    "decision": "approve",
+                    "requires_human_review": False,
+                    "amount_variance": 0.0,
+                },
+                "actual": actual,
+                "human_review_observed": False,
+                "cost_usd": 0.01,
+                "latency_ms": 100,
+            }
+            if index == 0:
+                # The observed value is a critical violation, but the adapter incorrectly
+                # marks it unobserved. AWA must not allow the aggregate pass rate to hide it.
+                actual["requires_human_review"] = True
+                case["unobserved_checks"] = ["review_flag_matches"]
+            elif index == 1:
+                # A separate low-severity failure leaves the 80% pass rate above threshold.
+                actual["decision"] = "deny"
+            cases.append(case)
+
+        report = evaluate_suite(spec, cases)
+        decision = create_release_report(spec, report)
+
+        self.assertEqual(report["summary"]["passed_cases"], 8)
+        self.assertEqual(report["summary"]["failed_cases"], 1)
+        self.assertEqual(report["summary"]["not_evaluable_checks"], 1)
+        self.assertEqual(report["summary"]["critical_failures"], 0)
+        self.assertEqual(report["summary"]["pass_rate"], 0.8)
+        self.assertEqual(decision["decision"], "HOLD")
+        evidence_check = next(
+            check for check in decision["checks"] if check["metric"] == "not_evaluable_evidence"
+        )
+        self.assertEqual(evidence_check["status"], "NOT_EVALUABLE")
+        self.assertIn("not_evaluable_evidence", decision["blocking_checks"])
+
     def test_rejects_unknown_unobserved_criterion_id(self):
         case = {
             "case_id": "bad-unobserved-id",
@@ -577,6 +626,27 @@ class NotEvaluableStatusTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(AssuranceInputError, "unknown criterion id"):
             evaluate_suite(SPEC, [case])
+
+
+class DecimalCostAggregationTests(unittest.TestCase):
+    def test_three_ten_cent_cases_meet_exact_ten_cent_average_cost_cap(self):
+        cases = []
+        for index in range(3):
+            case = json.loads(json.dumps(BASE_CASES[0]))
+            case["case_id"] = f"ten-cent-case-{index}"
+            case["cost_usd"] = 0.10
+            cases.append(case)
+
+        report = evaluate_suite(SPEC, cases)
+        decision = create_release_report(SPEC, report)
+
+        self.assertEqual(report["summary"]["total_cost_usd_observed"], 0.30)
+        self.assertEqual(report["summary"]["avg_cost_usd_per_observed_case"], 0.10)
+        cost_check = next(
+            check for check in decision["checks"] if check["metric"] == "avg_cost_usd_per_case"
+        )
+        self.assertEqual(cost_check["status"], "PASS")
+        self.assertEqual(decision["decision"], "GO")
 
 
 class ReportSchemaVersionTests(unittest.TestCase):
