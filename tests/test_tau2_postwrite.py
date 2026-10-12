@@ -427,3 +427,83 @@ def test_postwrite_audit_cli_fails_on_corrupted_tau2_trace(tmp_path: Path) -> No
 
     assert completed.returncode == 1
     assert result["decision"] == "FAIL"
+
+
+def _append_blocked_write_attempt(
+    trajectory: list[dict], order_id: str
+) -> list[dict]:
+    trajectory = list(trajectory)
+    trajectory.extend(
+        [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "pending-items-write-2",
+                        "name": "modify_pending_order_items",
+                        "arguments": {
+                            "order_id": order_id,
+                            "item_ids": ["old-a"],
+                            "new_item_ids": ["camera-new"],
+                            "payment_method_id": "credit_card_test",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "id": "pending-items-write-2",
+                "content": "AWA_PREWRITE_NO_GO: disabled",
+                "error": True,
+            },
+        ]
+    )
+    return trajectory
+
+
+def test_trace_audit_does_not_reuse_previous_success_after_later_blocked_write() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    trajectory = _append_blocked_write_attempt(trajectory, "#W9348897")
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["blocking_checks"] == [
+        "latest_write_attempt_has_a_valid_postwrite_snapshot"
+    ]
+    assert result["evidence_summary"]["latest_write_outcome"] == "blocked"
+
+
+def test_trace_audit_accepts_fresh_read_after_later_blocked_write() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    trajectory = _append_blocked_write_attempt(trajectory, "#W9348897")
+    current_order = _order_snapshot()
+    trajectory.extend(
+        [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "order-read-after-block",
+                        "name": "get_order_details",
+                        "arguments": {"order_id": "#W9348897"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "id": "order-read-after-block",
+                "content": json.dumps(current_order),
+                "error": False,
+            },
+        ]
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "PASS"
+    assert (
+        result["evidence_summary"]["post_write_snapshot_source"]
+        == "get_order_details_after_latest_write_attempt"
+    )
+    assert result["evidence_summary"]["latest_write_outcome"] == "blocked"
