@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """Smoke-test the MCP stdio boundary from the installed wheel.
 
 This deliberately runs without PYTHONPATH so the server executable must import the
