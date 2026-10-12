@@ -202,6 +202,38 @@ def test_tau2_adapter_blocks_affirmative_reply_that_names_another_payment_id() -
     assert result["evidence_summary"]["user_affirmed_after_disclosure"] is False
 
 
+def test_tau2_adapter_blocks_affirmative_reply_that_names_a_different_gift_card() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    # No "instead" or other negative language: the conflicting instrument ID alone
+    # must be enough to reject the confirmation.
+    trajectory[17]["content"] = "Yes, use gift_card_1234567 for this exchange."
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["evidence_summary"]["user_affirmed_after_disclosure"] is False
+
+
+def test_tau2_adapter_blocks_confirmation_for_other_order_number_wording() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = "Yes, for order number W9999999, proceed with the exchange."
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["evidence_summary"]["user_affirmed_after_disclosure"] is False
+
+
 def test_tau2_adapter_blocks_affirmative_reply_that_names_another_order() -> None:
     trajectory, call = _trajectory_and_call()
     trajectory[16]["content"] = (
@@ -603,6 +635,18 @@ def test_tau2_cancel_adapter_allows_pending_order_after_exact_refund_disclosure(
     assert result["evidence_summary"]["identity_and_order_ownership_verified"] is True
 
 
+def test_tau2_cancel_adapter_blocks_confirmation_for_other_order_number_wording() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+    trajectory[17]["content"] = "Yes, for order number W9999999, proceed as described."
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "user_confirmed_after_disclosure" in result["blocking_checks"]
+
+
 def test_tau2_cancel_adapter_blocks_non_pending_order() -> None:
     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
 
@@ -660,6 +704,18 @@ def test_tau2_address_adapter_allows_pending_order_after_exact_address_disclosur
     assert result["evidence_summary"]["identity_and_order_ownership_verified"] is True
 
 
+def test_tau2_address_adapter_blocks_confirmation_for_other_order_id_wording() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_address_prewrite
+
+    trajectory, call = _address_trajectory_and_call()
+    trajectory[17]["content"] = "Yes, use the stated address for order ID: W9999999."
+
+    result = evaluate_tau2_address_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "user_confirmed_after_disclosure" in result["blocking_checks"]
+
+
 def test_tau2_address_adapter_blocks_non_pending_order() -> None:
     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_address_prewrite
 
@@ -715,6 +771,20 @@ def test_tau2_payment_adapter_allows_known_new_method_after_disclosure() -> None
     assert result["allowed"] is True
     assert result["evidence_summary"]["old_payment_method_id"] == "credit_card_9513926"
     assert result["evidence_summary"]["new_payment_method_id"] == "credit_card_1234567"
+
+
+def test_tau2_payment_adapter_blocks_confirmation_for_other_order_number_wording() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_payment_prewrite
+
+    trajectory, call = _payment_trajectory_and_call()
+    trajectory[19]["content"] = (
+        "Yes, proceed with the payment method for order number W9999999 as described."
+    )
+
+    result = evaluate_tau2_payment_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "user_confirmed_after_disclosure" in result["blocking_checks"]
 
 
 def test_tau2_payment_adapter_blocks_method_not_in_user_details() -> None:
@@ -982,6 +1052,20 @@ def test_tau2_return_adapter_allows_verified_return_request() -> None:
     assert result["decision"] == "GO"
     assert result["allowed"] is True
     assert result["evidence_summary"]["order_status"] == "delivered"
+
+
+def test_tau2_return_adapter_blocks_confirmation_for_other_order_number_wording() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_return_prewrite
+
+    trajectory, call = _return_trajectory_and_call()
+    trajectory[19]["content"] = (
+        "Yes, submit the return request for order number W9999999 as described."
+    )
+
+    result = evaluate_tau2_return_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "user_confirmed_after_disclosure" in result["blocking_checks"]
 
 
 def test_tau2_return_adapter_blocks_unrelated_non_gift_card_payment_method() -> None:

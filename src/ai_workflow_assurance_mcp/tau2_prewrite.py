@@ -60,6 +60,18 @@ def _contains_all(text: str, values: list[str]) -> bool:
     return all(value in text for value in values)
 
 
+def _mentioned_order_ids(text: str) -> list[str]:
+    """Extract explicit order references, including common 'order number/ID' wording."""
+    folded = text.casefold()
+    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
+    explicit = re.findall(
+        r"\border(?:\s+(?:number|no\.?|id))?\s*[:#-]?\s*" + order_pattern + r"\b",
+        folded,
+    )
+    hash_references = re.findall(r"#" + order_pattern + r"\b", folded)
+    return [*explicit, *hash_references]
+
+
 def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bool:
     """Require the customer-facing disclosure to state the exact ordered old→new pairs."""
     if (
@@ -260,15 +272,15 @@ def _confirmation_references_consistent(
         return False
 
     folded = text.casefold()
-    payment_refs = re.findall(r"\b(?:credit_card|payment_method)[_-][a-z0-9_-]+\b", folded)
+    payment_refs = re.findall(
+        r"\b(?:credit_card|gift_card|paypal|payment_method)[_-][a-z0-9_-]+\b",
+        folded,
+    )
     if any(reference != expected_payment_id.casefold() for reference in payment_refs):
         return False
 
-    # Order IDs in Tau2 use an alphabetic prefix (e.g. W2378156). Only compare
-    # explicit order/hash references; ordinary prose is not interpreted as an ID.
-    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
-    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
-    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
+    # Catch common explicit aliases such as "order number W..." and "order ID: W...".
+    order_refs = _mentioned_order_ids(folded)
     expected_order_reference = expected_order_id.casefold().lstrip("#")
     if any(reference != expected_order_reference for reference in order_refs):
         return False
@@ -567,9 +579,7 @@ def _cancel_confirmation_references_consistent(
     if not isinstance(order_id, str) or not order_id or not isinstance(reason, str):
         return False
     folded = text.casefold()
-    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
-    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
-    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
+    order_refs = _mentioned_order_ids(folded)
     expected_order_reference = order_id.casefold().lstrip("#")
     if any(reference != expected_order_reference for reference in order_refs):
         return False
@@ -736,9 +746,7 @@ def _address_confirmation_references_consistent(
     if not isinstance(order_id, str) or not order_id or not isinstance(expected_zip, str):
         return False
     folded = text.casefold()
-    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
-    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
-    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
+    order_refs = _mentioned_order_ids(folded)
     expected_order_reference = order_id.casefold().lstrip("#")
     if any(reference != expected_order_reference for reference in order_refs):
         return False
@@ -899,9 +907,7 @@ def _order_and_payment_references_consistent(
     if not isinstance(order_id, str) or not order_id:
         return False
     folded = text.casefold()
-    order_pattern = r"([a-z][a-z0-9_-]*\d[a-z0-9_-]*)"
-    order_refs = re.findall(r"\border\s*#?\s*" + order_pattern + r"\b", folded)
-    order_refs += re.findall(r"#" + order_pattern + r"\b", folded)
+    order_refs = _mentioned_order_ids(folded)
     if any(reference != order_id.casefold().lstrip("#") for reference in order_refs):
         return False
     payment_refs = re.findall(
