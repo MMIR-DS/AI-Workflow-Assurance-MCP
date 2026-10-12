@@ -1,10 +1,9 @@
 """Audit a Tau2 order snapshot against its product/variant catalog snapshots.
 
-Input JSON shape:
-{
-  "order_snapshot": {"order_id": "...", "items": [...]},
-  "product_snapshots": [{"product_id": "...", "variants": {...}}]
-}
+Input JSON may contain either:
+- "order_snapshot" plus "product_snapshots" for an explicit snapshot audit; or
+- "trajectory" plus "order_id" (and optionally "write_tool_name") to extract the
+  successful post-write state and catalog reads directly from a Tau2 message trace.
 
 Exit codes: 0=PASS, 1=FAIL, 2=NOT_EVALUABLE.
 """
@@ -17,6 +16,7 @@ from typing import Any
 
 from ai_workflow_assurance_mcp.tau2_postwrite import (
     audit_tau2_order_items_against_catalog,
+    audit_tau2_trace_postwrite,
 )
 
 
@@ -56,6 +56,14 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not isinstance(payload, dict):
             result = _not_evaluable("The top-level JSON value must be an object.")
+        elif "trajectory" in payload:
+            result = audit_tau2_trace_postwrite(
+                payload.get("trajectory"),
+                payload.get("order_id"),
+                write_tool_name=payload.get(
+                    "write_tool_name", "modify_pending_order_items"
+                ),
+            )
         else:
             result = audit_tau2_order_items_against_catalog(
                 payload.get("order_snapshot"),
