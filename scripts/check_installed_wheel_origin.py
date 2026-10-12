@@ -59,7 +59,8 @@ def main() -> int:
     parser.add_argument("--server", type=Path, required=True, help="Installed MCP server script.")
     args = parser.parse_args()
 
-    python = args.python.resolve()
+    # Keep the virtualenv executable path: resolve() follows its symlink to the base interpreter.
+    python = args.python.absolute()
     cli = args.cli.resolve()
     server = args.server.resolve()
     for label, path in (("python", python), ("cli", cli), ("server", server)):
