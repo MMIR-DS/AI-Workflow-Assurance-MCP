@@ -2,7 +2,7 @@
 
 ## Status
 
-The manual retail smoke workflow applies a narrow patch to the pinned Tau2 orchestrator so the actual exchange, cancellation, order-address, payment-method, pending-item, user-default-address, and delivered-item-return dispatch paths consult AWA before calling the environment. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
+The manual retail smoke workflow applies a narrow patch to the pinned Tau2 orchestrator so the seven reviewed exchange, cancellation, order-address, payment-method, pending-item, user-default-address, and delivered-item-return paths consult AWA before calling the environment. The known `create_order` write is explicitly default-denied until it has a reviewed policy adapter. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
 
 Pinned upstream Tau2 revision: `4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699`.
 
@@ -64,6 +64,7 @@ PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_te
 
 The runtime smoke test uses Tau2's actual patched `BaseOrchestrator._execute_tool_calls` method with a counting fake environment, not a model and not a real database. It proves:
 - the saved baseline, whose final confirmation omits the order ID and old item IDs, returns `NO_GO` and makes zero environment calls;
+- an unreviewed `create_order` request is denied by the dispatcher and makes zero environment calls;
 - a synthetic complete disclosure followed by an affirmative reply returns `GO` and makes exactly one fake environment call;
 - a second exchange for the same order in one batch is blocked, so only the first approved exchange reaches the fake environment callback;
 - a valid pending-order cancellation reaches the fake callback only after exact refund disclosure, while missing disclosure is blocked before callback;
@@ -79,7 +80,7 @@ The full AWA test suite separately tests the evidence adapter and patcher's idem
 
 This is a **simulator-specific enforcement experiment**, not a production authorization system.
 
-- The dispatcher recognizes all seven write tools in the pinned Tau2 retail toolkit, and all seven now have simulator-specific reviewed adapters: `exchange_delivered_order_items`, `cancel_pending_order`, `modify_pending_order_address`, `modify_pending_order_payment`, `modify_pending_order_items`, `modify_user_address`, and `return_delivered_order_items`. Read-only and generic non-write tools continue through the normal dispatch path.
+- Seven write tools in the pinned Tau2 retail toolkit have simulator-specific reviewed adapters: `exchange_delivered_order_items`, `cancel_pending_order`, `modify_pending_order_address`, `modify_pending_order_payment`, `modify_pending_order_items`, `modify_user_address`, and `return_delivered_order_items`. The separately recognized `create_order` write is blocked because it has no reviewed adapter. Read-only and generic non-write tools continue through the normal dispatch path.
 - Tau2's simulated identity lookup and in-memory database are benchmark evidence, not production authentication or trusted payment authorization.
 - The normalized trajectory is not cryptographically authenticated; the adapter must not be used as proof of real customer identity.
 - This source patch is applied in the workflow checkout and is not automatically installed into the upstream Tau2 repository or a user's local environment.
