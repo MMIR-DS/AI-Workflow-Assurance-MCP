@@ -29,7 +29,7 @@ Given a workflow specification (criteria + thresholds) and normalized expected/a
 - compares baseline vs candidate runs
 - produces a threshold-based release decision (`GO` / `HOLD` / `NO_GO`)
 
-Determinism applies to evaluation results and decision logic for identical inputs; `run_id` and `executed_at` intentionally vary between reports. It does **not** run agents, call model APIs, or manage environments. An adapter must convert traces and final state into the observation contract.
+Determinism applies to evaluation results and decision logic for identical inputs; `run_id` and `executed_at` intentionally vary between reports. It does **not** run agents, call model APIs, or manage environments. An adapter must convert traces and final state into the observation contract and distinguish an absent required workflow output from evidence that its collector could not observe. See the [observation and adapter contract](docs/OBSERVATION_ADAPTER_CONTRACT.md) for the `FAIL` versus `NOT_EVALUABLE` rules.
 
 ## Quick demo
 
