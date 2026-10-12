@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+from pathlib import Path
+
 from ai_workflow_assurance_mcp.tau2_postwrite import (
     audit_tau2_order_items_against_catalog,
 )
@@ -173,3 +178,53 @@ def test_postwrite_audit_compares_prices_to_cents_and_options_by_mapping_value()
     result = audit_tau2_order_items_against_catalog(order, _catalog_snapshots())
 
     assert result["decision"] == "PASS"
+
+
+def _run_cli(tmp_path: Path, order: dict, catalogs: list[dict]) -> tuple[subprocess.CompletedProcess[str], dict]:
+    input_path = tmp_path / "postwrite-audit.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "order_snapshot": order,
+                "product_snapshots": catalogs,
+            }
+        ),
+        encoding="utf-8",
+    )
+    script_path = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "audit_tau2_order_postwrite.py"
+    )
+    completed = subprocess.run(
+        [sys.executable, str(script_path), "--input", str(input_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed, json.loads(completed.stdout)
+
+
+def test_postwrite_audit_cli_returns_zero_for_pass(tmp_path: Path) -> None:
+    completed, result = _run_cli(tmp_path, _order_snapshot(), _catalog_snapshots())
+
+    assert completed.returncode == 0
+    assert result["decision"] == "PASS"
+
+
+def test_postwrite_audit_cli_returns_one_for_catalog_mismatch(tmp_path: Path) -> None:
+    order = _order_snapshot()
+    order["items"][0]["price"] = 46.66
+    order["items"][0]["options"] = dict(_SHIRT_OPTIONS)
+
+    completed, result = _run_cli(tmp_path, order, _catalog_snapshots())
+
+    assert completed.returncode == 1
+    assert result["decision"] == "FAIL"
+
+
+def test_postwrite_audit_cli_returns_two_when_evidence_is_incomplete(tmp_path: Path) -> None:
+    completed, result = _run_cli(tmp_path, _order_snapshot(), _catalog_snapshots()[:2])
+
+    assert completed.returncode == 2
+    assert result["decision"] == "NOT_EVALUABLE"
