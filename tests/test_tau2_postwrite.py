@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from ai_workflow_assurance_mcp.tau2_postwrite import (
+    audit_tau2_benchmark_result_postwrite,
     audit_tau2_order_items_against_catalog,
     audit_tau2_trace_postwrite,
 )
@@ -531,3 +532,142 @@ def test_trace_audit_does_not_reuse_catalog_result_from_before_duplicate_call_id
     assert result["decision"] == "NOT_EVALUABLE"
     assert result["checked"]["every_item_has_a_catalog_product_snapshot"] == "NOT_EVALUABLE"
     assert result["evidence_summary"]["catalog_product_ids_missing"] == ["product-camera"]
+
+
+def _benchmark_result_with_orders(orders: list[dict]) -> dict:
+    return {
+        "simulations": [
+            {
+                "task_id": f"task-{index}",
+                "trial": 0,
+                "reward_info": {"reward": 1.0},
+                "messages": _trace_with_write(order, _catalog_snapshots()),
+            }
+            for index, order in enumerate(orders)
+        ]
+    }
+
+
+def test_benchmark_artifact_audit_passes_all_simulations() -> None:
+    first_order = _order_snapshot()
+    second_order = _order_snapshot()
+    second_order["order_id"] = "#W1234567"
+    payload = _benchmark_result_with_orders([first_order, second_order])
+
+    result = audit_tau2_benchmark_result_postwrite(payload)
+
+    assert result["decision"] == "PASS"
+    assert result["evidence_summary"]["simulation_count"] == 2
+    assert result["evidence_summary"]["order_audit_count"] == 2
+    assert result["evidence_summary"]["fail_count"] == 0
+    assert result["evidence_summary"]["benchmark_reward_used_as_integrity_oracle"] is False
+    assert [item["decision"] for item in result["simulation_results"]] == [
+        "PASS",
+        "PASS",
+    ]
+
+
+def test_benchmark_artifact_audit_detects_corruption_even_when_reward_is_one() -> None:
+    valid_order = _order_snapshot()
+    corrupted_order = _order_snapshot()
+    for item in corrupted_order["items"][:2]:
+        item["price"] = 46.66
+        item["options"] = dict(_SHIRT_OPTIONS)
+    payload = _benchmark_result_with_orders([valid_order, corrupted_order])
+
+    result = audit_tau2_benchmark_result_postwrite(payload)
+
+    assert result["decision"] == "FAIL"
+    assert result["simulation_results"][0]["decision"] == "PASS"
+    assert result["simulation_results"][1]["decision"] == "FAIL"
+    assert result["simulation_results"][1]["order_audits"][0]["decision"] == "FAIL"
+    # reward_info is intentionally ignored as a data-integrity oracle.
+    assert payload["simulations"][1]["reward_info"]["reward"] == 1.0
+    assert result["evidence_summary"]["benchmark_reward_used_as_integrity_oracle"] is False
+
+
+def test_benchmark_artifact_audit_is_not_evaluable_without_a_target_write() -> None:
+    payload = {
+        "simulations": [
+            {
+                "task_id": "read-only-task",
+                "messages": [{"role": "assistant", "content": "No write operation."}],
+            }
+        ]
+    }
+
+    result = audit_tau2_benchmark_result_postwrite(payload)
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["evidence_summary"]["simulations_without_matching_write"] == 1
+    assert result["blocking_checks"]
+
+
+def test_benchmark_artifact_audit_can_select_one_simulation() -> None:
+    valid_order = _order_snapshot()
+    corrupted_order = _order_snapshot()
+    for item in corrupted_order["items"][:2]:
+        item["price"] = 46.66
+        item["options"] = dict(_SHIRT_OPTIONS)
+    payload = _benchmark_result_with_orders([valid_order, corrupted_order])
+
+    result = audit_tau2_benchmark_result_postwrite(payload, simulation_index=0)
+
+    assert result["decision"] == "PASS"
+    assert result["evidence_summary"]["simulation_count"] == 1
+    assert result["evidence_summary"]["selected_simulation_indices"] == [0]
+
+
+def _run_benchmark_cli(
+    tmp_path: Path, payload: dict, *, extra_args: list[str] | None = None
+) -> tuple[subprocess.CompletedProcess[str], dict]:
+    input_path = tmp_path / "tau2-benchmark-result.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    script_path = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "audit_tau2_order_postwrite.py"
+    )
+    command = [sys.executable, str(script_path), "--input", str(input_path)]
+    if extra_args:
+        command.extend(extra_args)
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed, json.loads(completed.stdout)
+
+
+def test_postwrite_audit_cli_accepts_complete_tau2_benchmark_artifact(
+    tmp_path: Path,
+) -> None:
+    payload = _benchmark_result_with_orders([_order_snapshot()])
+
+    completed, result = _run_benchmark_cli(tmp_path, payload)
+
+    assert completed.returncode == 0
+    assert result["decision"] == "PASS"
+    assert result["evidence_summary"]["simulation_count"] == 1
+
+
+def test_postwrite_audit_cli_accepts_simulation_index_for_full_artifact(
+    tmp_path: Path,
+) -> None:
+    valid_order = _order_snapshot()
+    corrupted_order = _order_snapshot()
+    for item in corrupted_order["items"][:2]:
+        item["price"] = 46.66
+        item["options"] = dict(_SHIRT_OPTIONS)
+    payload = _benchmark_result_with_orders([valid_order, corrupted_order])
+
+    completed, result = _run_benchmark_cli(
+        tmp_path,
+        payload,
+        extra_args=["--simulation-index", "1"],
+    )
+
+    assert completed.returncode == 1
+    assert result["decision"] == "FAIL"
+    assert result["evidence_summary"]["selected_simulation_indices"] == [1]
