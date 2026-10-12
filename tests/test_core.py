@@ -468,11 +468,67 @@ class WorkflowAssuranceTests(unittest.TestCase):
 
 
 class NotEvaluableStatusTests(unittest.TestCase):
+    def test_missing_required_actual_path_is_a_failure_unless_explicitly_unobserved(self):
+        case = {
+            "case_id": "workflow-omitted-required-decision",
+            "expected": {
+                "decision": "approve",
+                "requires_human_review": False,
+                "amount_variance": 0.0,
+            },
+            "actual": {"requires_human_review": False, "amount_variance": 0.0},
+            "human_review_observed": False,
+            "cost_usd": 0.01,
+            "latency_ms": 100,
+        }
+
+        report = evaluate_suite(SPEC, [case])
+        result = report["case_results"][0]
+        check = next(item for item in result["checks"] if item["criterion_id"] == "decision_matches")
+        decision = create_release_report(SPEC, report)
+
+        self.assertEqual(check["status"], "FAIL")
+        self.assertIn("path 'decision' is missing", check["message"])
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(report["summary"]["failed_checks"], 1)
+        self.assertEqual(report["summary"]["not_evaluable_checks"], 0)
+        self.assertEqual(report["summary"]["high_failures"], 1)
+        self.assertEqual(decision["decision"], "NO_GO")
+
+    def test_explicit_null_is_an_observed_value_not_an_observation_gap(self):
+        case = {
+            "case_id": "explicit-null-decision",
+            "expected": {
+                "decision": "approve",
+                "requires_human_review": False,
+                "amount_variance": 0.0,
+            },
+            "actual": {
+                "decision": None,
+                "requires_human_review": False,
+                "amount_variance": 0.0,
+            },
+            "human_review_observed": False,
+            "cost_usd": 0.01,
+            "latency_ms": 100,
+        }
+
+        report = evaluate_suite(SPEC, [case])
+        result = report["case_results"][0]
+        check = next(item for item in result["checks"] if item["criterion_id"] == "decision_matches")
+
+        self.assertEqual(check["status"], "FAIL")
+        self.assertEqual(check["message"], "Values do not match.")
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(report["summary"]["failed_checks"], 1)
+        self.assertEqual(report["summary"]["not_evaluable_checks"], 0)
+        self.assertEqual(create_release_report(SPEC, report)["decision"], "NO_GO")
+
     def test_unobserved_check_is_not_counted_as_a_definite_failure(self):
         case = {
             "case_id": "missing-decision-evidence",
             "expected": {"decision": "approve", "requires_human_review": False, "amount_variance": 0.0},
-            "actual": {"decision": None, "requires_human_review": False, "amount_variance": 0.0},
+            "actual": {"requires_human_review": False, "amount_variance": 0.0},
             "unobserved_checks": ["decision_matches"],
             "human_review_observed": False,
             "cost_usd": 0.01,
