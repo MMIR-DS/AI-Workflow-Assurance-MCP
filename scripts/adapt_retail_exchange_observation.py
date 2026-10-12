@@ -419,7 +419,8 @@ def main() -> int:
         "decision": release["decision"],
         "blocking_checks": release["blocking_checks"],
     }, indent=2))
-    return 0 if release["decision"] == "GO" else 2
+    # 0 means GO, 1 means a valid non-GO decision, and argparse/input errors stay at 2.
+    return 0 if release["decision"] == "GO" else 1
 
 
 if __name__ == "__main__":
