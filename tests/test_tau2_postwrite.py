@@ -671,3 +671,11 @@ def test_postwrite_audit_cli_accepts_simulation_index_for_full_artifact(
     assert completed.returncode == 1
     assert result["decision"] == "FAIL"
     assert result["evidence_summary"]["selected_simulation_indices"] == [1]
+
+
+def test_benchmark_artifact_with_empty_simulations_is_not_evaluable() -> None:
+    result = audit_tau2_benchmark_result_postwrite({"simulations": []})
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["blocking_checks"] == ["at_least_one_simulation_selected"]
+    assert result["evidence_summary"]["not_evaluable_count"] == 1
