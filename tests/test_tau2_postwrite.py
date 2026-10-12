@@ -469,7 +469,7 @@ def test_trace_audit_does_not_reuse_previous_success_after_later_blocked_write()
 
     assert result["decision"] == "NOT_EVALUABLE"
     assert result["blocking_checks"] == [
-        "latest_write_attempt_has_a_valid_postwrite_snapshot"
+        "successful_postwrite_order_snapshot_available"
     ]
     assert result["evidence_summary"]["latest_write_outcome"] == "blocked"
 
