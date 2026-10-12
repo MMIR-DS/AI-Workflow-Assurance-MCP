@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +22,56 @@ def _load() -> tuple[dict, dict]:
         json.loads(OBSERVATION_PATH.read_text(encoding="utf-8")),
         json.loads(SPEC_PATH.read_text(encoding="utf-8")),
     )
+
+
+def _run_adapter_cli(observation_path: Path, spec_path: Path, output_dir: Path) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    src = str(ROOT / "src")
+    env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    return subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "adapt_retail_exchange_observation.py"),
+            "--observation", str(observation_path),
+            "--spec", str(spec_path),
+            "--output-dir", str(output_dir),
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_adapter_cli_returns_one_for_a_valid_non_go_decision(tmp_path: Path) -> None:
+    observation, spec = _load()
+    # An absent expected field is a validly formed spec but makes the evaluation NO_GO.
+    spec["criteria"][0]["expected_path"] = "missing_expected_value"
+    observation_path = tmp_path / "observation.json"
+    spec_path = tmp_path / "spec.json"
+    output_dir = tmp_path / "output"
+    observation_path.write_text(json.dumps(observation), encoding="utf-8")
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    result = _run_adapter_cli(observation_path, spec_path, output_dir)
+
+    assert result.returncode == 1, result.stderr
+    assert json.loads(result.stdout)["decision"] == "NO_GO"
+    assert (output_dir / "awa_release_report.json").exists()
+
+
+def test_adapter_cli_keeps_two_for_invalid_input(tmp_path: Path) -> None:
+    observation_path = tmp_path / "invalid-observation.json"
+    spec_path = tmp_path / "spec.json"
+    output_dir = tmp_path / "output"
+    observation_path.write_text("{not-json", encoding="utf-8")
+    spec_path.write_text(json.dumps(_load()[1]), encoding="utf-8")
+
+    result = _run_adapter_cli(observation_path, spec_path, output_dir)
+
+    assert result.returncode == 2
+    assert "usage:" in result.stderr.lower()
 
 
 def test_valid_evidence_bundle_passes_release_gate() -> None:
