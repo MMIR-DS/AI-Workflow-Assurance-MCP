@@ -13,10 +13,9 @@ import os
 from pathlib import Path
 from typing import Any
 
+from ai_workflow_assurance_mcp import __version__
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
-from ai_workflow_assurance_mcp import __version__
 
 
 SPEC: dict[str, Any] = {
