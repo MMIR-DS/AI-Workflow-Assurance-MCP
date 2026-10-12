@@ -492,7 +492,7 @@ class NotEvaluableStatusTests(unittest.TestCase):
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(report["summary"]["failed_checks"], 1)
         self.assertEqual(report["summary"]["not_evaluable_checks"], 0)
-        self.assertEqual(report["summary"]["critical_failures"], 1)
+        self.assertEqual(report["summary"]["high_failures"], 1)
         self.assertEqual(decision["decision"], "NO_GO")
 
     def test_explicit_null_is_an_observed_value_not_an_observation_gap(self):
