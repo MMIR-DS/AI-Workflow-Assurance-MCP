@@ -467,6 +467,64 @@ class WorkflowAssuranceTests(unittest.TestCase):
 
 
 
+class OperatorPresenceSemanticsTests(unittest.TestCase):
+    @staticmethod
+    def _spec(operator):
+        return {
+            "id": "presence-check",
+            "name": "Presence semantics",
+            "version": "1",
+            "criteria": [{"id": "value_check", "operator": operator, "actual_path": "value"}],
+            "thresholds": {"min_pass_rate": 1.0, "max_critical_failures": 0},
+        }
+
+    def test_exists_means_path_presence_even_for_null_or_empty_values(self):
+        spec = self._spec("exists")
+        for index, value in enumerate((None, "", " ", [], {})):
+            with self.subTest(value=value):
+                report = evaluate_suite(
+                    spec,
+                    [{
+                        "case_id": f"present-{index}",
+                        "expected": {},
+                        "actual": {"value": value},
+                    }],
+                )
+                self.assertEqual(report["case_results"][0]["checks"][0]["status"], "PASS")
+
+    def test_non_empty_rejects_missing_null_and_empty_values(self):
+        spec = self._spec("non_empty")
+        test_cases = [
+            ("missing", {}),
+            ("null", {"value": None}),
+            ("empty-string", {"value": ""}),
+            ("whitespace-string", {"value": "  \t "}),
+            ("empty-list", {"value": []}),
+            ("empty-object", {"value": {}}),
+        ]
+        for case_id, actual in test_cases:
+            with self.subTest(case_id=case_id):
+                report = evaluate_suite(
+                    spec,
+                    [{"case_id": case_id, "expected": {}, "actual": actual}],
+                )
+                self.assertEqual(report["case_results"][0]["checks"][0]["status"], "FAIL")
+
+    def test_non_empty_accepts_non_empty_strings_and_present_scalar_values(self):
+        spec = self._spec("non_empty")
+        for index, value in enumerate(("rationale", 0, False, [None], {"key": None})):
+            with self.subTest(value=value):
+                report = evaluate_suite(
+                    spec,
+                    [{
+                        "case_id": f"non-empty-{index}",
+                        "expected": {},
+                        "actual": {"value": value},
+                    }],
+                )
+                self.assertEqual(report["case_results"][0]["checks"][0]["status"], "PASS")
+
+
 class NotEvaluableStatusTests(unittest.TestCase):
     def test_missing_required_actual_path_is_a_failure_unless_explicitly_unobserved(self):
         case = {

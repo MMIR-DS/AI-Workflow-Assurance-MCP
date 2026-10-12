@@ -9,7 +9,7 @@ python -m pip install -e ".[dev]"
 ai-workflow-assurance validate-spec --spec examples/invoice_matching/workflow.json
 ```
 
-The workflow specification defines what must be true: the decision and human-review flag must match the reviewed expected values, the amount variance must be within tolerance, and a rationale must exist.
+The workflow specification defines what must be true: the decision and human-review flag must match the reviewed expected values, the amount variance must be within tolerance, and the rationale must be non-empty.
 
 ## 2. Evaluate a candidate that passes
 

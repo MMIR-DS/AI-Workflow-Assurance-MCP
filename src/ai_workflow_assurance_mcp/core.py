@@ -27,7 +27,7 @@ MAX_ERROR_CHARS = 300
 SMALL_SAMPLE_WARNING_SIZE = 20
 MAX_EVALUATION_CHECKS = 5_000
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-OPERATORS = {"equals", "approx", "exists", "is_true", "is_false", "contains", "in_set"}
+OPERATORS = {"equals", "approx", "exists", "non_empty", "is_true", "is_false", "contains", "in_set"}
 _SLUG = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _PATH_PART = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -410,8 +410,22 @@ def _evaluate_criterion(
     message = ""
 
     if operator == "exists":
+        # Existence means that path lookup found a value; null/empty values are still present.
         passed = actual_exists
         message = "Path exists." if passed else f"Required path '{criterion['actual_path']}' is missing."
+    elif operator == "non_empty":
+        if isinstance(actual_value, str):
+            has_content = bool(actual_value.strip())
+        elif isinstance(actual_value, (list, dict)):
+            has_content = bool(actual_value)
+        else:
+            has_content = actual_value is not None
+        passed = actual_exists and has_content
+        message = (
+            "Value is present and non-empty."
+            if passed
+            else f"Required path '{criterion['actual_path']}' is missing, null, or empty."
+        )
     elif operator == "is_true":
         passed = actual_exists and actual_value is True
         message = "Value is true." if passed else f"Expected '{criterion['actual_path']}' to be true."

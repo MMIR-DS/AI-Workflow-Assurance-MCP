@@ -28,7 +28,7 @@
     },
     {
       "id": "rationale_present",
-      "operator": "exists",
+      "operator": "non_empty",
       "actual_path": "rationale",
       "severity": "low"
     }
@@ -36,6 +36,7 @@
   "thresholds": {
     "min_pass_rate": 0.95,
     "max_critical_failures": 0,
+    "max_high_failures": 0,
     "max_review_rate": 0.8,
     "max_avg_cost_usd": 0.1,
     "max_avg_latency_ms": 2500,

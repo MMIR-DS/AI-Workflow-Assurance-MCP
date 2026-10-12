@@ -16,6 +16,14 @@ By contrast, if an upstream evidence collector or integration genuinely could no
 
 **Release-gate rule:** the current workflow-spec schema has no threshold that authorizes ignoring unobserved criteria. Therefore, any `NOT_EVALUABLE` check blocks `GO`, even when another low-severity check fails but the aggregate pass rate remains above its threshold. The release report emits a `not_evaluable_evidence` check: if it is the only blocker, the decision is `HOLD`; if another release-gate check has `FAIL`, the decision remains `NO_GO`. A `GO` requires no `NOT_EVALUABLE` checks.
 
+## Presence operators
+
+- `exists` checks **path presence only**. If the key/index is present, it passes even when the value is JSON `null`, an empty string, an empty array, or an empty object. This is intentional: a field can be present and explicitly empty.
+- `non_empty` checks that a path is present and has content. It fails for a missing path, `null`, empty or whitespace-only strings, empty arrays, and empty objects.
+- `non_empty` treats scalar values such as `false` and `0` as present values. Use `is_true`, `is_false`, or `equals` when the business rule depends on the scalar's actual value.
+
+For example, use `exists` to assert that an optional field was captured, but use `non_empty` for a required explanation, ID, or other value that must contain content. The bundled invoice demo uses `non_empty` for `rationale_present`.
+
 ## Case-authoring rules
 
 1. **Preserve observed values faithfully.** Do not omit or rewrite a value to make a check easier to pass. A present JSON `null` is still a present, observed value; it is not automatically treated as unavailable evidence.
