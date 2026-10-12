@@ -1,6 +1,10 @@
-"""Fail-closed reference preflight for sensitive retail writes.
+"""Fail-closed, exchange-specific reference preflight for delivered retail orders.
 
-This module evaluates normalized intent/evidence only. It does not execute or
+This policy validates replacement of old item IDs with new item IDs, including
+payment-method disclosure. It is not a generic policy for arbitrary sensitive
+writes such as cancellation or address changes.
+
+The module evaluates normalized intent/evidence only. It does not execute or
 intercept a write; the calling application must enforce an allow decision.
 """
 from __future__ import annotations
@@ -23,7 +27,11 @@ def _nonempty_string_list(value: Any) -> bool:
 def evaluate_prewrite(
     action: Any, evidence: Any, *, expected_order_status: str = "delivered"
 ) -> dict[str, Any]:
-    """Return GO only when action, identity, status, and prior confirmation match."""
+    """Return GO only for a fully evidenced retail item exchange.
+
+    Do not reuse this evaluator for other write types; each operation needs its
+    own action schema and operation-specific policy.
+    """
     failures: list[str] = []
 
     if not isinstance(action, dict):
