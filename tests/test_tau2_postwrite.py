@@ -106,6 +106,35 @@ def test_postwrite_audit_passes_when_each_item_matches_its_catalog_variant() -> 
     assert result["evidence_summary"]["validated_item_count"] == 3
 
 
+def test_postwrite_audit_accepts_catalog_snapshots_keyed_by_product_id() -> None:
+    keyed_catalogs = {
+        snapshot["product_id"]: {
+            key: value for key, value in snapshot.items() if key != "product_id"
+        }
+        for snapshot in _catalog_snapshots()
+    }
+
+    result = audit_tau2_order_items_against_catalog(_order_snapshot(), keyed_catalogs)
+
+    assert result["decision"] == "PASS"
+    assert result["evidence_summary"]["catalog_product_count"] == 3
+    assert result["evidence_summary"]["validated_item_count"] == 3
+
+
+def test_postwrite_audit_does_not_override_conflicting_product_id_in_keyed_snapshot() -> None:
+    catalogs = _catalog_snapshots()
+    keyed_catalogs = {
+        "product-camera": {**catalogs[0], "product_id": "different-product"},
+        "product-lamp": catalogs[1],
+        "product-shirt": catalogs[2],
+    }
+
+    result = audit_tau2_order_items_against_catalog(_order_snapshot(), keyed_catalogs)
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["checked"]["every_item_has_a_catalog_product_snapshot"] == "NOT_EVALUABLE"
+
+
 def test_postwrite_audit_detects_tau2_last_variant_price_and_options_corruption() -> None:
     order = _order_snapshot()
     # Reproduce the confirmed pinned Tau2 defect: camera and lamp retain their
