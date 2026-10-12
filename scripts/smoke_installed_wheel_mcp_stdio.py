@@ -1,9 +1,10 @@
 # ruff: noqa: I001
-"""Smoke-test the MCP stdio boundary from the installed wheel.
+"""Smoke-test MCP stdio from a wheel installed in a clean virtual environment.
 
-This deliberately runs without PYTHONPATH so the server executable must import the
-installed package, not this checkout's source tree. All observations are synthetic;
-no model API or external service is called.
+The child process has no source-tree override on PYTHONPATH. A temporary
+sitecustomize hook blocks and counts Python socket-level IPv4/IPv6 connection
+attempts. This is a test guard, not an OS-level network sandbox. Inputs are
+synthetic, and the smoke itself makes no model calls.
 """
 from __future__ import annotations
 
@@ -339,10 +340,10 @@ socket.socket.connect_ex = _guard_socket_connect_ex
                 if attempts_path.exists()
                 else []
             )
-            report["external_api_calls"] = len(network_attempts)
+            report["blocked_network_attempts"] = len(network_attempts)
             if network_attempts:
                 raise AssertionError(
-                    "Unexpected outbound network connection attempt(s) were blocked "
+                    "Unexpected Python socket-level IP connection attempt(s) were blocked "
                     f"during MCP smoke: {len(network_attempts)}"
                 )
             return report
