@@ -41,6 +41,12 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/awa-wheel-venv"
           "$RUNNER_TEMP/awa-wheel-venv/bin/python" -m pip install dist/*.whl
+          "$RUNNER_TEMP/awa-wheel-venv/bin/python" scripts/check_installed_wheel_origin.py \
+            --python "$RUNNER_TEMP/awa-wheel-venv/bin/python" \
+            --cli "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" \
+            --server "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance-mcp" \
+            > "$RUNNER_TEMP/awa-wheel-origin.json"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-wheel-origin.json').read_text()); assert p['status'] == 'passed' and p['import_from_installed_package'] is True and p['metadata_version'] == p['package_version'], p"
           "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" --help
           "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" validate-spec --spec examples/invoice_matching/workflow.json
       - name: Smoke-test MCP stdio from the installed wheel
