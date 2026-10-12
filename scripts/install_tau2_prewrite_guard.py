@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
-PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V3"
+PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V4"
 
 ORIGINAL = """        tool_results = []
         for tool_call in tool_calls:
@@ -21,7 +21,7 @@ REPLACEMENT = """        tool_results = []
         # allow two writes for the same order to reuse that snapshot.
         awa_write_orders_seen = set()
         for tool_call in tool_calls:
-            # AWA_PREWRITE_GUARD_PATCH_V3: guard reviewed writes and deny unreviewed create_order.
+            # AWA_PREWRITE_GUARD_PATCH_V4: guard reviewed writes and deny unreviewed create_order.
             awa_write_tools = {
                 "cancel_pending_order",
                 "exchange_delivered_order_items",
