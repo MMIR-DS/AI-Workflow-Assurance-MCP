@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.metadata
 import json
 import os
-from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +69,7 @@ def _payload(result: object) -> dict[str, Any]:
 
 
 async def _run(server_executable: str) -> dict[str, Any]:
-    expected_version = version("ai-workflow-assurance-mcp")
+    expected_version = importlib.metadata.version("ai-workflow-assurance-mcp")
     env = os.environ.copy()
     # Force the child server to use the installed wheel instead of a source override.
     env.pop("PYTHONPATH", None)
