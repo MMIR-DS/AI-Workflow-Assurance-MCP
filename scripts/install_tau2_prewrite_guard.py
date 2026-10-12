@@ -21,7 +21,7 @@ REPLACEMENT = """        tool_results = []
         # allow two writes for the same order to reuse that snapshot.
         awa_write_orders_seen = set()
         for tool_call in tool_calls:
-            # AWA_PREWRITE_GUARD_PATCH_V3: fail closed for every retail write tool.
+            # AWA_PREWRITE_GUARD_PATCH_V3: guard reviewed writes and deny unreviewed create_order.
             awa_write_tools = {
                 "cancel_pending_order",
                 "exchange_delivered_order_items",
@@ -30,6 +30,8 @@ REPLACEMENT = """        tool_results = []
                 "modify_pending_order_payment",
                 "modify_user_address",
                 "return_delivered_order_items",
+                # No reviewed policy exists for new-order creation; deny it below.
+                "create_order",
             }
             if tool_call.name in awa_write_tools:
                 if tool_call.name == "exchange_delivered_order_items":
