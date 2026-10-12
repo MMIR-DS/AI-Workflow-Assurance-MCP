@@ -2,6 +2,8 @@
 
 This procedure verifies AWA from a real VS Code MCP client using the freshly built wheel, not an editable install. It complements CI; it does not claim that every MCP client has been tested or that AWA is production-certified.
 
+**No access to a Windows desktop?** Use the automated [Windows installed-wheel MCP smoke in CI](../.github/workflows/ci.yml) as a documented fallback for Windows package and stdio-protocol coverage. It runs on a GitHub-hosted Windows runner and checks the handshake, exact tool inventory, and representative calls across all eight MCP tools. It does **not** launch the VS Code GUI. Keep manual VS Code acceptance recorded as **NOT RUN** and follow the fallback guidance in [the release checklist](RELEASE_ACCEPTANCE.md).
+
 Official references:
 - [VS Code: Add and manage MCP servers](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
 - [VS Code: MCP configuration reference](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)
