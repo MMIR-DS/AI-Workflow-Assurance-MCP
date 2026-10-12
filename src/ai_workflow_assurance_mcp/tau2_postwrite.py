@@ -491,7 +491,6 @@ def audit_tau2_trace_postwrite(
     snapshot_source = "successful_write_result"
     latest_read_seen = False
     latest_read_snapshot: Mapping[str, Any] | None = None
-    latest_read_call_id: str | None = None
     read_start_index = (
         latest_attempt["result_index"]
         if latest_attempt["result_index"] >= 0
