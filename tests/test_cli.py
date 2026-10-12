@@ -51,6 +51,7 @@ def test_cli_release_writes_json_file(tmp_path: Path):
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["decision"] == "GO"
     assert "warnings" in report
+    assert not any(warning["code"] == "NO_HIGH_FAILURE_CAP" for warning in report["warnings"])
 
 
 
