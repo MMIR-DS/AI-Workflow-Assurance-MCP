@@ -409,6 +409,37 @@ def _trace_messages_are_well_formed(messages: list[Any] | None) -> bool:
     return True
 
 
+def _trace_ambiguous_correlation_ids(messages: list[Any]) -> set[str]:
+    """Return IDs that cannot safely correlate calls with results.
+
+    Tau2 traces are expected to use one unique ID per tool call and one result per
+    call. If either side repeats an ID, a later result could be attributed to the
+    wrong call (or reused for multiple calls). Treat every occurrence of that ID as
+    unavailable evidence instead of guessing which call a result belongs to.
+    """
+    call_counts: dict[str, int] = {}
+    result_counts: dict[str, int] = {}
+    for message in messages:
+        for call in _trace_tool_calls(message):
+            call_id = _field(call, "id")
+            if isinstance(call_id, str) and call_id:
+                call_counts[call_id] = call_counts.get(call_id, 0) + 1
+        if _field(message, "role") == "tool":
+            result_id = _field(message, "id")
+            if isinstance(result_id, str) and result_id:
+                result_counts[result_id] = result_counts.get(result_id, 0) + 1
+
+    return {
+        call_id
+        for call_id, count in call_counts.items()
+        if count != 1 or result_counts.get(call_id, 0) > 1
+    } | {
+        result_id
+        for result_id, count in result_counts.items()
+        if count != 1 or call_counts.get(result_id, 0) > 1
+    }
+
+
 def _json_object(value: Any) -> Mapping[str, Any] | None:
     if isinstance(value, Mapping):
         return value
@@ -486,6 +517,7 @@ def audit_tau2_trace_postwrite(
             "A non-empty write_tool_name is required.",
         )
 
+    ambiguous_correlation_ids = _trace_ambiguous_correlation_ids(messages)
     write_attempts: list[dict[str, Any]] = []
     for message_index, message in enumerate(messages):
         for call in _trace_tool_calls(message):
@@ -511,15 +543,16 @@ def audit_tau2_trace_postwrite(
 
             result_message = None
             result_index = -1
-            for candidate_index in range(message_index + 1, len(messages)):
-                candidate = messages[candidate_index]
-                if (
-                    _field(candidate, "role") == "tool"
-                    and _field(candidate, "id") == call_id
-                ):
-                    result_message = candidate
-                    result_index = candidate_index
-                    break
+            if call_id not in ambiguous_correlation_ids:
+                for candidate_index in range(message_index + 1, len(messages)):
+                    candidate = messages[candidate_index]
+                    if (
+                        _field(candidate, "role") == "tool"
+                        and _field(candidate, "id") == call_id
+                    ):
+                        result_message = candidate
+                        result_index = candidate_index
+                        break
 
             outcome = "missing_result"
             order_result: Mapping[str, Any] | None = None
@@ -586,14 +619,18 @@ def audit_tau2_trace_postwrite(
             call_id = _field(call, "id")
             if not isinstance(call_id, str) or not call_id:
                 continue
-            result_message = next(
-                (
-                    candidate
-                    for candidate in messages[message_index + 1 :]
-                    if _field(candidate, "role") == "tool"
-                    and _field(candidate, "id") == call_id
-                ),
-                None,
+            result_message = (
+                next(
+                    (
+                        candidate
+                        for candidate in messages[message_index + 1 :]
+                        if _field(candidate, "role") == "tool"
+                        and _field(candidate, "id") == call_id
+                    ),
+                    None,
+                )
+                if call_id not in ambiguous_correlation_ids
+                else None
             )
             if result_message is None or _field(result_message, "error", False) is True:
                 continue
@@ -661,7 +698,11 @@ def audit_tau2_trace_postwrite(
                 continue
             call_id = _field(call, "id")
             result_message = None
-            if isinstance(call_id, str) and call_id:
+            if (
+                isinstance(call_id, str)
+                and call_id
+                and call_id not in ambiguous_correlation_ids
+            ):
                 result_message = next(
                     (
                         candidate
