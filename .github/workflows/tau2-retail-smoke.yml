@@ -32,13 +32,6 @@ jobs:
       MODEL: ${{ inputs.model || 'openrouter/google/gemini-2.5-flash' }}
       MAX_STEPS: ${{ inputs.max_steps || '40' }}
     steps:
-      - name: Check required secret
-        shell: bash
-        run: |
-          if [ -z "$OPENROUTER_API_KEY" ]; then
-            echo "::error::Missing repository secret OPENROUTER_API_KEY"
-            exit 1
-          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -70,6 +63,13 @@ jobs:
       - name: Verify NO_GO blocks the actual Tau2 dispatch callback (no model calls)
         working-directory: tau2-bench
         run: PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_test_tau2_prewrite_guard.py
+      - name: Check required secret
+        shell: bash
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::Missing repository secret OPENROUTER_API_KEY"
+            exit 1
+          fi
       - name: Validate benchmark data
         working-directory: tau2-bench
         run: uv run tau2 check-data
