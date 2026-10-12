@@ -1,10 +1,12 @@
-# Pre-write authorization preflight (reference control)
+# Exchange-specific pre-write authorization preflight (reference control)
 
 ## Why this exists
 
 The 2026-10-11 Tau2 retail run reached the expected exchange state but AWA correctly returned `NO_GO`: the assistant had not disclosed the exact stored payment-method identifier in its customer-facing confirmation before the write. A post-run evaluator can detect that policy failure, but detection after a mutation is not prevention.
 
-This module introduces a deterministic preflight contract for a calling application to check before a sensitive write.
+This module introduces a deterministic, **exchange-specific** preflight contract for a calling application to check before a retail item-exchange write.
+
+**Scope warning:** despite the broad name of the MCP tool (`preflight_sensitive_write`), this implementation is not a general policy for every sensitive operation. Its action schema requires old/new item IDs and a payment-method ID for an exchange on a delivered order. Do not use its `GO` result to authorize a cancellation, address change, payment-method change, or any other operation type. A different operation needs its own schema, evidence requirements, evaluator, and negative tests. The public tool name is retained for compatibility; its description explicitly limits the supported operation.
 
 ## Contract
 

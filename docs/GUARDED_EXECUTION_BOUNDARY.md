@@ -2,7 +2,9 @@
 
 ## Purpose
 
-The preflight evaluator in `prewrite_guard.py` returns a deterministic `GO` or `NO_GO`. That alone cannot stop an application from proceeding. `guarded_executor.py` adds a callback boundary: it invokes the supplied write operation only after the preflight returns `GO`.
+The preflight evaluator in `prewrite_guard.py` returns a deterministic `GO` or `NO_GO` for **retail item exchange on a delivered order only**. That alone cannot stop an application from proceeding. `guarded_executor.py` adds a generic callback boundary: it invokes the supplied callback only after this exchange-specific preflight returns `GO`.
+
+The callback wrapper is generic plumbing; the policy inside it is not. Do not pair this preflight with a cancellation, address change, payment-method change, or another write type. Define and test an operation-specific evaluator before using the wrapper for a different action.
 
 ## Host integration contract
 
