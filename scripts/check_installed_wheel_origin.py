@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """Verify that a clean virtual environment imports AWA from its installed package.
 
 Run after CI installs the freshly built wheel. The probe runs from a temporary
