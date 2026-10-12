@@ -8,15 +8,7 @@ Deterministic evaluation logic for AI workflow observations, exposed as an MCP s
 
 This repository contains the current source for development version **AI Workflow Assurance MCP 0.1.7**: core evaluation logic, MCP stdio adapter, CLI, tests, examples, and CI. The release remains pending its acceptance checklist.
 
-## Project ownership and AI-assisted development
-
-This project is developed through a **human-led, AI-assisted engineering process**. We disclose these roles so readers can distinguish project ownership, AI contributions, and verification evidence.
-
-**Human project owner — Mohammad Mir (MMIR-DS).** Sets the project direction and priorities, defines the problem and acceptance goals, provides context and feedback, and decides which trade-offs are appropriate. Mohammad owns the repository and retains responsibility for release decisions, credentials, deployment, and any real-world use. This disclosure does not imply that the human owner personally wrote every line of code.
-
-**AI engineering copilot — OpenAI ChatGPT (GPT-6).** At the owner's direction, ChatGPT has played a substantial hands-on role in engineering work: exploring design choices; drafting and editing implementation and tests; diagnosing failures; improving CI and regression checks; reviewing changes for edge cases and trust boundaries; and preparing technical documentation. Authorized GitHub integration has also been used to carry out requested branch, pull-request, and repository-file operations. Recent examples include the [fail-closed trace checks](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/pull/72), [assurance-harness CI controls](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/pull/74), [installed-wheel MCP protocol smoke test](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/pull/76), [least-privilege CI hardening](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/pull/79), [installed-wheel origin verification](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/pull/80), and the [Windows/VS Code client acceptance guide](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/pull/81).
-
-**Verification and accountability.** ChatGPT is an AI collaborator, not an independent human maintainer, and AI-generated or AI-edited work is not assumed to be correct merely because it was produced by an AI. Changes are checked through the repository's tests, lint/build checks, and CI where applicable; those checks only establish what the configured automated tests actually cover. They do not prove production safety or replace human judgment and real-client testing. In particular, the manual Windows/VS Code MCP client acceptance described in [the acceptance guide](docs/MCP_CLIENT_ACCEPTANCE_WINDOWS.md) must be recorded as not run until it has actually been performed. Version 0.1.7 remains unreleased until the release-acceptance checklist is satisfied.
+**Project ownership and AI assistance:** Human-led by Mohammad Mir, with substantial hands-on engineering-copilot contributions from OpenAI ChatGPT. See [roles, contributions, and verification boundaries](docs/AI_ASSISTED_DEVELOPMENT.md).
 
 ## What it does
 
@@ -30,35 +22,30 @@ Given a workflow specification (criteria + thresholds) and normalized expected/a
 - compares baseline vs candidate runs
 - produces a threshold-based release decision (`GO` / `HOLD` / `NO_GO`)
 
-Determinism applies to evaluation results and decision logic for identical inputs; `run_id` and `executed_at` intentionally vary between reports. It does **not** run agents, call model APIs, or manage environments. An adapter must convert traces and final state into the observation contract and distinguish an absent required workflow output from evidence that its collector could not observe. See the [observation and adapter contract](docs/OBSERVATION_ADAPTER_CONTRACT.md) for the `FAIL` versus `NOT_EVALUABLE` rules.
+Determinism applies to evaluation results and decision logic for identical inputs; `run_id` and `executed_at` intentionally vary between reports. The **core evaluation path** consumes supplied observations; it does not run agents, call model APIs, or manage their environments. Separate optional Tau2 simulator tooling and a manually triggered model-backed workflow are documented below and are not production integrations. An adapter must preserve the distinction between an absent required workflow output and a genuine observation gap; see the [observation and adapter contract](docs/OBSERVATION_ADAPTER_CONTRACT.md).
 
-## Quick demo
+## Quickstart (synthetic data; no model calls)
 
-Try the [reproducible invoice-matching demo](docs/QUICK_DEMO.md). It compares a passing synthetic candidate with a deliberately failing baseline and demonstrates how `--fail-on-non-go` can block a CI release gate without making model calls. For a business-workflow example, see the [retail exchange evidence contract and adapter](docs/RETAIL_EXCHANGE_ADAPTER_CONTRACT.md); its bundled observation is synthetic and the contract requires a trusted source adapter for live use. Review the [retail adapter threat model](docs/THREAT_MODEL_RETAIL_EXCHANGE.md) before designing a live integration.
-
-## Install
+Create an environment and install the development version:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install -e ".[dev]"
+source .venv/bin/activate  # macOS/Linux; PowerShell: .\\.venv\\Scripts\\Activate.ps1
+python -m pip install -e ".[dev]"
 ```
 
-Requires Python 3.10+.
-
-## CLI
+Validate the included invoice workflow and run its passing candidate through the release gate:
 
 ```bash
-ai-workflow-assurance validate-spec --spec path/to/workflow.json
-ai-workflow-assurance evaluate --spec path/to/workflow.json --cases path/to/cases.json
-ai-workflow-assurance explain --spec path/to/workflow.json --cases path/to/cases.json
-ai-workflow-assurance compare --spec path/to/workflow.json --baseline base.json --candidate cand.json
-ai-workflow-assurance release --spec path/to/workflow.json --cases path/to/cases.json
-# Optional: return exit code 1 when the decision is HOLD or NO_GO
-ai-workflow-assurance release --spec path/to/workflow.json --cases path/to/cases.json --fail-on-non-go
-# Validate and normalize a saved tau2 simulator evidence manifest (not production evidence)
-ai-workflow-assurance inspect-evidence --manifest artifacts/awa-source-evidence-manifest.json
+ai-workflow-assurance validate-spec --spec examples/invoice_matching/workflow.json
+ai-workflow-assurance release --spec examples/invoice_matching/workflow.json --cases examples/invoice_matching/cases_candidate.json --fail-on-non-go
 ```
+
+The expected candidate result is `GO` with exit code `0`. To see a deliberately failing baseline, replace `cases_candidate.json` with `cases_baseline.json`; the non-`GO` gate emits its report and exits `1`. Invalid input returns `2`. See the [full quick demo](docs/QUICK_DEMO.md) for interpretation and limitations.
+
+Useful commands are `evaluate`, `explain`, `compare`, and `release`; `inspect-evidence` validates and normalizes a saved Tau2 manifest. **It is an evidence-inspection command, not a release gate:** a syntactically and semantically valid manifest may describe a `HOLD` or `NO_GO` simulator result and still exit `0`. Invalid inputs return `2`.
+
+Requires Python 3.10+.
 
 ## MCP server
 
@@ -70,22 +57,9 @@ python -m ai_workflow_assurance_mcp.server
 
 Tools: `validate_workflow_spec`, `run_eval_suite`, `compare_eval_runs`, `explain_failures`, `generate_release_report`, `inspect_tau2_evidence_manifest`, `inspect_github_actions_run`, and `preflight_sensitive_write`.
 
-The `preflight_sensitive_write` tool is an **exchange-specific** reference check for replacing items on a delivered retail order; it is not a general authorization policy for cancellations, address changes, payment-method changes, or other write types. It evaluates normalized action and confirmation evidence and returns `GO`/`NO_GO`, but it does not execute, authorize, or intercept writes. The caller must enforce `NO_GO` and must not treat `GO` as sufficient for any other operation type. See [the exchange-specific preflight contract](docs/PREWRITE_AUTHORIZATION_PREFLIGHT.md). The application-side helper `execute_if_prewrite_allowed` adds a callback boundary and is tested to leave the write callback uncalled on `NO_GO`; see [the guarded execution boundary](docs/GUARDED_EXECUTION_BOUNDARY.md). The generic callback helper is separate from the simulator-specific Tau2 patch documented below. The manual Tau2 retail smoke workflow pins an upstream commit and applies operation-specific pre-write policies to six enabled retail write paths. Pending-item modifications are currently default-denied until the pinned Tau2 implementation's multi-item state updates are independently verified; public reports describe possible price/options corruption ([#317](https://github.com/sierra-research/tau2-bench/issues/317), [#318](https://github.com/sierra-research/tau2-bench/issues/318)). Unreviewed `create_order` and any unknown/unreviewed tool name are also blocked. Only an explicit passthrough allowlist of known read and escalation tools bypasses write-policy evaluation. No-model tests prove denied calls never reach the environment callback and known read passthrough still works; see [Tau2 pre-write enforcement](docs/TAU2_PREWRITE_ENFORCEMENT.md). A separate [post-write catalog auditor](docs/TAU2_PREWRITE_ENFORCEMENT.md#independent-post-write-catalog-audit) checks persisted item IDs, prices, and options against catalog variants without trusting the benchmark reward as a correctness oracle; its CLI accepts explicit snapshots, one raw Tau2 trace, or a complete Tau2 benchmark result with multiple simulations.
+The `preflight_sensitive_write` tool is an **exchange-specific reference check** for replacing items on a delivered retail order—not a general policy for cancellations, address changes, payment-method changes, or other writes. It does not execute or intercept a write; the caller must enforce `NO_GO`. The generic callback wrapper is not itself a policy, and the current preflight is not wired into a production Tau2 path. See [preflight scope](docs/PREWRITE_AUTHORIZATION_PREFLIGHT.md), [guarded execution boundary](docs/GUARDED_EXECUTION_BOUNDARY.md), and [Tau2 enforcement limits](docs/TAU2_PREWRITE_ENFORCEMENT.md).
 
-The evidence inspection tools are read-only and return bounded, allowlisted evidence envelopes. `inspect_tau2_evidence_manifest` accepts manifest JSON text and validates the simulator evidence contract. `inspect_github_actions_run` reads metadata for one explicitly selected GitHub Actions run; set `GH_TOKEN` (preferred) or `GITHUB_TOKEN` in the MCP server process with read-only Actions access. It requires a repository (`owner/name`), run ID, expected 40-character head SHA, and optional freshness window in seconds.
-
-Example MCP arguments for `inspect_github_actions_run`:
-
-```json
-{
-  "repository": "owner/repository",
-  "run_id": 123456789,
-  "expected_head_sha": "0123456789abcdef0123456789abcdef01234567",
-  "max_age_seconds": 3600
-}
-```
-
-A successful GitHub Actions run is not proof that a production workflow or underlying business operation was correct. Both evidence tools always preserve `source_authenticity=not_verified`; neither makes evidence release-eligible. Review [the GitHub Actions evidence source trust boundary](docs/GITHUB_ACTIONS_EVIDENCE_SOURCE.md) before using this adapter.
+Evidence inspection tools return bounded, allowlisted fields and always retain `source_authenticity=not_verified` and `release_eligible=false`. `inspect_github_actions_run` reads metadata for one explicitly selected run and requires a read-only Actions token, repository, run ID, expected commit SHA, and optional freshness limit. A successful CI run is not production proof. See [GitHub Actions evidence contract](docs/GITHUB_ACTIONS_EVIDENCE_SOURCE.md) and [simulator manifest contract](docs/READ_ONLY_EVIDENCE_SOURCE_CONTRACT.md).
 
 ## Tests
 
@@ -121,17 +95,13 @@ Pinned pack checksum (when using the published ZIP):
 
 `34e08942fba2da825b42b5a91394425a1fc5dbd348093bf40374478677de4af8`
 
-## Optional: tau2 + AWA prototype benchmark
+## Optional Tau2 simulator showcase
 
-`.github/workflows/tau2-retail-smoke.yml` is a **manual-only** OpenRouter-backed run against public `sierra-research/tau2-bench` retail task 0. It makes a model call only when manually started and requires repository secret `OPENROUTER_API_KEY`. Output is capped at 2,048 tokens per model request. Model calls may incur charges.
+This repository also contains Tau2-specific pre-write and post-write tooling. It currently ships in the same Python distribution as the generic evaluator; a separately installable `awa-tau2` package has **not** been created. The generic evaluator itself only assesses supplied observations. Tau2-specific guards are simulator integrations, not a production control plane.
 
-The trace adapter `scripts/adapt_tau2_results.py` evaluates recorded order/product payloads and does **not** use tau2's reward, `db_match`, or action-check fields to make the release decision. The task-0 workflow pack has 16 checks, including pre/post order-field comparison, variant availability/options, original-payment consistency, and price-difference reconciliation.
+The workflow `.github/workflows/tau2-retail-smoke.yml` is **manual-only** and can call OpenRouter against a pinned public Tau2 retail task when deliberately triggered. It requires `OPENROUTER_API_KEY`, may incur model charges, and must not be run unintentionally. The adapter evaluates recorded observations and does not use Tau2 reward, `db_match`, or action-check fields as its release oracle.
 
-A read-only [evidence-manifest adapter](docs/TAU2_SOURCE_EVIDENCE_MANIFEST.md) packages the independent replay report without making model calls or database writes. The [read-only evidence source contract](docs/READ_ONLY_EVIDENCE_SOURCE_CONTRACT.md) defines a normalized provenance envelope and a reference file adapter for the simulator manifest; the `inspect-evidence` CLI command validates and prints that normalized envelope with a 1 MiB input limit. The optional [GitHub Actions read-only evidence adapter](docs/GITHUB_ACTIONS_EVIDENCE_SOURCE.md) reads metadata for one explicitly selected run, checks repository/commit/status/freshness, and returns only allowlisted fields. The MCP tool `inspect_github_actions_run` exposes this adapter without accepting arbitrary URLs or filesystem paths; it uses `GH_TOKEN`/`GITHUB_TOKEN` from the server environment. It requires a read-only token and always sets `source_authenticity=not_verified` and `release_eligible=false`; CI success alone is not production proof. It is an interface contract, not a live commerce connector or a production trust boundary. A separate no-model [workflow](.github/workflows/awa-independent-db-check.yml) runs `scripts/verify_tau2_independent_db.py` and adds an independent **replay-time** state read. It checks out the expected tau2-bench commit pinned to match the trace's recorded `git_commit` and fails closed on a mismatch, loads a clean RetailDB, and verifies that its initial order matches the recorded pre-write read, replays only the saved exchange write, discards the write method's return value, and reads the resulting order directly from `RetailDB.orders`. It compares that state with the recorded exchange response, checks the selected method against the loaded user payment profile and original transaction, recalculates the price delta, verifies that no other orders/users/products changed, and includes a tampered-response negative control. This is independent corroboration from a separate deterministic replay—not a forensic snapshot of the original model run's live in-memory database. The notification criterion still checks assistant wording, not actual email-provider delivery.
-
-On the saved 2026-10-10 task-0 run, AWA returned `GO` with **16/16 checks passing**. A no-model replay then applied six independent mutations to copies of the recorded trace/tool payloads. All six were rejected with `NO_GO` while the recorded tau2 reward, database-match flag and expected-action checks stayed unchanged. The mutations cover missing confirmation, unavailable selected variant, unrelated order-state change, price-difference mismatch, payment-method mismatch, and product-family mismatch. This is controlled evidence mutation on one public simulated task—not six new environment runs or a broad reliability study.
-
-See the [original tau2 run](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343), [successful six-mutation replay](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38059062409), [CI for Python 3.10–3.13](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38059062398), [adapter report](docs/AWA_ADAPTER_RESULT_TASK0_2026-10-10.md), and [mutation-test report](docs/AWA_MUTATION_TEST_RESULT_2026-10-10.md). Per-call usage metadata from the original trace totals approximately $0.01660; verify the final charge in OpenRouter's billing/activity view. The replay workflow is manual-only, reuses a saved result or committed fixture, makes no fresh model calls, and is currently left manual-only after the verified run.
+Evidence is limited to the saved task-0 run and deterministic replay/mutation checks: these are not fresh model runs or a general reliability estimate. See the [pre-write enforcement boundary](docs/TAU2_PREWRITE_ENFORCEMENT.md), [source evidence contract](docs/TAU2_SOURCE_EVIDENCE_MANIFEST.md), [independent replay workflow](.github/workflows/awa-independent-db-check.yml), [recorded adapter result](docs/AWA_ADAPTER_RESULT_TASK0_2026-10-10.md), and [mutation report](docs/AWA_MUTATION_TEST_RESULT_2026-10-10.md). The [original Tau2 run](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38047957343) and [saved-trace mutation replay](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP/actions/runs/38059062409) provide the underlying evidence.
 
 ## Release acceptance
 
