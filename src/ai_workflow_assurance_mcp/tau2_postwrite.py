@@ -574,7 +574,7 @@ def audit_tau2_trace_postwrite(
         and item.get("product_id")
     }
     latest_products: dict[str, Mapping[str, Any] | None] = {}
-    for message in messages:
+    for message_index, message in enumerate(messages):
         for call in _trace_tool_calls(message):
             arguments = _field(call, "arguments", {})
             if (
@@ -591,7 +591,7 @@ def audit_tau2_trace_postwrite(
                 result_message = next(
                     (
                         candidate
-                        for candidate in messages
+                        for candidate in messages[message_index + 1 :]
                         if _field(candidate, "role") == "tool"
                         and _field(candidate, "id") == call_id
                     ),
