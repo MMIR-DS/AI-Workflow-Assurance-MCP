@@ -533,7 +533,22 @@ def main() -> None:
     assert environment.calls == []
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
-    print("PASS: all seven pinned retail write policies enforce GO/NO_GO through the actual dispatcher; same-batch duplicate blocking is verified.")
+    # New-order creation is a write but has no reviewed AWA policy; it must fail closed.
+    trajectory, _ = _setup()
+    create_order_call = ToolCall(
+        id="unreviewed-create-order",
+        name="create_order",
+        arguments={},
+        requestor="assistant",
+    )
+    results, environment, orchestrator = _dispatch(trajectory, create_order_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == [], "unreviewed create_order must never reach the environment"
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert "no reviewed AWA policy adapter" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
+    print("PASS: seven reviewed retail write policies enforce GO/NO_GO; unreviewed create_order is denied; same-batch duplicate blocking is verified.")
 
 
 if __name__ == "__main__":
