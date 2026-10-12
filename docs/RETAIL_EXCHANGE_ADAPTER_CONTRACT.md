@@ -48,6 +48,12 @@ The adapter rejects non-increasing collector sequence values instead of silently
 
 **Trust boundary:** these checks validate the internal consistency of the supplied bundle; they do not cryptographically prove who produced it or whether the source system was truthful. A production integration should authenticate the collector, authorize each source, preserve immutable source event IDs and sequence/timestamp metadata, and verify signed receipts or source attestations where available. A self-reported `source_system` label or a hash alone is not proof of authenticity.
 
+## Missing evidence versus a failed workflow output
+
+For the general `PASS` / `FAIL` / `NOT_EVALUABLE` semantics, see the [observation and adapter contract](OBSERVATION_ADAPTER_CONTRACT.md). In this retail contract, a required event or final-state field omitted by the workflow is a failed criterion when that omission is the behavior being checked. Do not label it unobserved just because the field is absent from `order_after` or the event trace.
+
+Use `unobserved_checks` only when the evidence collection process genuinely did not observe the criterion (for example, a source outage prevented a read and the absence is not itself a workflow violation). The generic evaluator cannot independently establish whether that declaration is truthful, so adapter-specific tests must cover both omitted required workflow outputs and actual source-collection gaps. A known mismatch in the supplied before/after state must remain a failure, not be downgraded to unobserved.
+
 ## Decisions derived by the adapter
 
 The adapter derives the same 16 fields used by the current retail acceptance specification: identity, status verification, explicit confirmation, eligibility, product/variant/request match, payment policy, item scope, final state, unrelated-state preservation, price reconciliation, notification claim consistency, no new order, escalation policy, one expected write, final order status, and policy-violation count.
