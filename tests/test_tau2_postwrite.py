@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ai_workflow_assurance_mcp.tau2_postwrite import (
     audit_tau2_order_items_against_catalog,
+    audit_tau2_trace_postwrite,
 )
 
 _CAMERA_OPTIONS = {
@@ -229,3 +230,280 @@ def test_postwrite_audit_cli_returns_two_when_evidence_is_incomplete(tmp_path: P
 
     assert completed.returncode == 2
     assert result["decision"] == "NOT_EVALUABLE"
+
+
+def _trace_with_write(
+    order: dict,
+    catalogs: list[dict],
+    *,
+    postwrite_read: dict | None = None,
+    blocked: bool = False,
+) -> list[dict]:
+    trajectory: list[dict] = []
+    for index, catalog in enumerate(catalogs):
+        call_id = f"product-read-{index}"
+        trajectory.append(
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": call_id,
+                        "name": "get_product_details",
+                        "arguments": {"product_id": catalog["product_id"]},
+                    }
+                ],
+            }
+        )
+        trajectory.append(
+            {
+                "role": "tool",
+                "id": call_id,
+                "content": json.dumps(catalog),
+                "error": False,
+            }
+        )
+
+    trajectory.append(
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "id": "pending-items-write",
+                    "name": "modify_pending_order_items",
+                    "arguments": {
+                        "order_id": order["order_id"],
+                        "item_ids": ["old-a", "old-b", "old-c"],
+                        "new_item_ids": ["camera-new", "lamp-new", "shirt-new"],
+                        "payment_method_id": "credit_card_test",
+                    },
+                }
+            ],
+        }
+    )
+    trajectory.append(
+        {
+            "role": "tool",
+            "id": "pending-items-write",
+            "content": (
+                "AWA_PREWRITE_NO_GO: disabled"
+                if blocked
+                else json.dumps(order)
+            ),
+            "error": blocked,
+        }
+    )
+
+    if postwrite_read is not None:
+        trajectory.append(
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "postwrite-order-read",
+                        "name": "get_order_details",
+                        "arguments": {"order_id": order["order_id"]},
+                    }
+                ],
+            }
+        )
+        trajectory.append(
+            {
+                "role": "tool",
+                "id": "postwrite-order-read",
+                "content": json.dumps(postwrite_read),
+                "error": False,
+            }
+        )
+    return trajectory
+
+
+def test_trace_audit_extracts_write_result_and_catalog_snapshots() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "PASS"
+    assert result["evidence_summary"]["write_call_id"] == "pending-items-write"
+    assert result["evidence_summary"]["post_write_snapshot_source"] == "successful_write_result"
+    assert result["evidence_summary"]["catalog_product_count"] == 3
+
+
+def test_trace_audit_fails_on_corrupted_multi_item_write_result() -> None:
+    order = _order_snapshot()
+    for item in order["items"][:2]:
+        item["price"] = 46.66
+        item["options"] = dict(_SHIRT_OPTIONS)
+    trajectory = _trace_with_write(order, _catalog_snapshots())
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "FAIL"
+    assert result["checked"]["item_prices_match_catalog"] == "FAIL"
+    assert result["checked"]["item_options_match_catalog"] == "FAIL"
+
+
+def test_trace_audit_prefers_order_read_after_write_result() -> None:
+    write_result = _order_snapshot()
+    later_read = _order_snapshot()
+    later_read["items"][0]["price"] = 46.66
+    later_read["items"][0]["options"] = dict(_SHIRT_OPTIONS)
+    trajectory = _trace_with_write(
+        write_result,
+        _catalog_snapshots(),
+        postwrite_read=later_read,
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "FAIL"
+    assert (
+        result["evidence_summary"]["post_write_snapshot_source"]
+        == "get_order_details_after_latest_write_attempt"
+    )
+
+
+def test_trace_audit_returns_not_evaluable_when_write_was_blocked() -> None:
+    trajectory = _trace_with_write(
+        _order_snapshot(),
+        _catalog_snapshots(),
+        blocked=True,
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["blocking_checks"] == ["successful_postwrite_order_snapshot_available"]
+
+
+def test_trace_audit_returns_not_evaluable_when_catalog_snapshot_is_missing() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots()[:2])
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["evidence_summary"]["catalog_product_ids_missing"] == ["product-shirt"]
+
+
+def _run_trace_cli(
+    tmp_path: Path, trajectory: list[dict], order_id: str
+) -> tuple[subprocess.CompletedProcess[str], dict]:
+    input_path = tmp_path / "tau2-trace.json"
+    input_path.write_text(
+        json.dumps({"trajectory": trajectory, "order_id": order_id}),
+        encoding="utf-8",
+    )
+    script_path = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "audit_tau2_order_postwrite.py"
+    )
+    completed = subprocess.run(
+        [sys.executable, str(script_path), "--input", str(input_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed, json.loads(completed.stdout)
+
+
+def test_postwrite_audit_cli_accepts_tau2_trace_input(tmp_path: Path) -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+
+    completed, result = _run_trace_cli(tmp_path, trajectory, "#W9348897")
+
+    assert completed.returncode == 0
+    assert result["decision"] == "PASS"
+    assert result["evidence_summary"]["post_write_snapshot_source"] == "successful_write_result"
+
+
+def test_postwrite_audit_cli_fails_on_corrupted_tau2_trace(tmp_path: Path) -> None:
+    order = _order_snapshot()
+    for item in order["items"][:2]:
+        item["price"] = 46.66
+        item["options"] = dict(_SHIRT_OPTIONS)
+    trajectory = _trace_with_write(order, _catalog_snapshots())
+
+    completed, result = _run_trace_cli(tmp_path, trajectory, "#W9348897")
+
+    assert completed.returncode == 1
+    assert result["decision"] == "FAIL"
+
+
+def _append_blocked_write_attempt(
+    trajectory: list[dict], order_id: str
+) -> list[dict]:
+    trajectory = list(trajectory)
+    trajectory.extend(
+        [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "pending-items-write-2",
+                        "name": "modify_pending_order_items",
+                        "arguments": {
+                            "order_id": order_id,
+                            "item_ids": ["old-a"],
+                            "new_item_ids": ["camera-new"],
+                            "payment_method_id": "credit_card_test",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "id": "pending-items-write-2",
+                "content": "AWA_PREWRITE_NO_GO: disabled",
+                "error": True,
+            },
+        ]
+    )
+    return trajectory
+
+
+def test_trace_audit_does_not_reuse_previous_success_after_later_blocked_write() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    trajectory = _append_blocked_write_attempt(trajectory, "#W9348897")
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["blocking_checks"] == [
+        "successful_postwrite_order_snapshot_available"
+    ]
+    assert result["evidence_summary"]["latest_write_outcome"] == "blocked"
+
+
+def test_trace_audit_accepts_fresh_read_after_later_blocked_write() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    trajectory = _append_blocked_write_attempt(trajectory, "#W9348897")
+    current_order = _order_snapshot()
+    trajectory.extend(
+        [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "order-read-after-block",
+                        "name": "get_order_details",
+                        "arguments": {"order_id": "#W9348897"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "id": "order-read-after-block",
+                "content": json.dumps(current_order),
+                "error": False,
+            },
+        ]
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "PASS"
+    assert (
+        result["evidence_summary"]["post_write_snapshot_source"]
+        == "get_order_details_after_latest_write_attempt"
+    )
+    assert result["evidence_summary"]["latest_write_outcome"] == "blocked"

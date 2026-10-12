@@ -56,7 +56,21 @@ Run the CLI against a JSON file with an `order_snapshot` object and a `product_s
 PYTHONPATH=src python scripts/audit_tau2_order_postwrite.py --input postwrite-snapshot.json
 ```
 
-The CLI emits a structured JSON report and uses exit code `0` for `PASS`, `1` for `FAIL`, and `2` for `NOT_EVALUABLE`. Product snapshots should come from `get_product_details`; the order snapshot should be a post-write `get_order_details` result. The audit is currently a pure/offline check: it does not execute or roll back writes and does not re-enable `modify_pending_order_items`. That operation remains blocked at dispatch until the pinned implementation is fixed or its per-item post-state behavior is independently verified.
+Example raw-trace input shape:
+
+```json
+{
+  "order_id": "#W9348897",
+  "write_tool_name": "modify_pending_order_items",
+  "trajectory": []
+}
+```
+
+Use the complete Tau2 `messages` array in `trajectory`; the empty array above is only a schema illustration.
+
+The CLI emits a structured JSON report and uses exit code `0` for `PASS`, `1` for `FAIL`, and `2` for `NOT_EVALUABLE`. You may supply the snapshots directly, or pass a raw Tau2 message trace using a top-level `trajectory` array plus `order_id` (and optionally `write_tool_name`). In trace mode, the adapter correlates tool calls to their results by call ID, uses the successful write result as the post-write state unless a later matching `get_order_details` read exists, and selects the latest catalog result per product. A blocked/missing write result, failed latest read, or missing product snapshot returns `NOT_EVALUABLE`.
+
+The audit is currently a pure/offline check: it does not execute or roll back writes and does not re-enable `modify_pending_order_items`. That operation remains blocked at dispatch until the pinned implementation is fixed or its per-item post-state behavior is independently verified.
 
 ## User default-address changes
 
