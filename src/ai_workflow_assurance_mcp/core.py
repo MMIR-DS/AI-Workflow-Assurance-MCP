@@ -10,9 +10,9 @@ import hashlib
 import json
 import math
 import re
-from decimal import Decimal
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 SCHEMA_VERSION = "0.4"
