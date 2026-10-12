@@ -328,3 +328,262 @@ def audit_tau2_order_items_against_catalog(
         },
         "scope": "tau2_order_snapshot_vs_product_catalog_not_production_data_integrity_proof",
     }
+
+
+def _trace_messages(trajectory: Any) -> list[Any] | None:
+    if isinstance(trajectory, (list, tuple)):
+        return list(trajectory)
+    return None
+
+
+def _trace_tool_calls(message: Any) -> list[Any]:
+    calls = _field(message, "tool_calls", []) or []
+    return list(calls) if isinstance(calls, (list, tuple)) else []
+
+
+def _json_object(value: Any) -> Mapping[str, Any] | None:
+    if isinstance(value, Mapping):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        decoded = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return decoded if isinstance(decoded, Mapping) else None
+
+
+def _trace_not_evaluable(
+    order_id: Any,
+    check: str,
+    detail: str,
+    *,
+    write_call_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "decision": "NOT_EVALUABLE",
+        "checked": {check: "NOT_EVALUABLE"},
+        "blocking_checks": [check],
+        "violations": [],
+        "not_evaluable": [{"check": check, "detail": detail}],
+        "evidence_summary": {
+            "order_id": order_id if isinstance(order_id, str) else None,
+            "write_call_id": write_call_id,
+            "post_write_snapshot_source": None,
+            "catalog_product_count": 0,
+            "validated_item_count": 0,
+            "violation_count": 0,
+            "not_evaluable_count": 1,
+        },
+        "scope": "tau2_trace_postwrite_audit_not_production_data_integrity_proof",
+    }
+
+
+def audit_tau2_trace_postwrite(
+    trajectory: Any,
+    order_id: str,
+    *,
+    write_tool_name: str = "modify_pending_order_items",
+) -> dict[str, Any]:
+    """Extract the post-write order and catalog evidence from a Tau2 message trace.
+
+    The successful write result is treated as a post-write order snapshot unless a
+    later matching get_order_details result exists. The latest catalog read for each
+    product is used; a later failed or mismatched read supersedes older catalog data.
+    """
+    messages = _trace_messages(trajectory)
+    if messages is None:
+        return _trace_not_evaluable(
+            order_id,
+            "trajectory_is_well_formed",
+            "Expected a list of Tau2 messages.",
+        )
+    if not isinstance(order_id, str) or not order_id.strip():
+        return _trace_not_evaluable(
+            order_id,
+            "order_id_is_valid",
+            "A non-empty target order_id is required.",
+        )
+    if not isinstance(write_tool_name, str) or not write_tool_name:
+        return _trace_not_evaluable(
+            order_id,
+            "write_tool_name_is_valid",
+            "A non-empty write_tool_name is required.",
+        )
+
+    successful_writes: list[dict[str, Any]] = []
+    for message_index, message in enumerate(messages):
+        for call in _trace_tool_calls(message):
+            arguments = _field(call, "arguments", {})
+            if (
+                _field(call, "name") != write_tool_name
+                or not isinstance(arguments, Mapping)
+                or arguments.get("order_id") != order_id
+            ):
+                continue
+            call_id = _field(call, "id")
+            if not isinstance(call_id, str) or not call_id:
+                continue
+
+            result_message = None
+            result_index = -1
+            for candidate_index in range(message_index + 1, len(messages)):
+                candidate = messages[candidate_index]
+                if (
+                    _field(candidate, "role") == "tool"
+                    and _field(candidate, "id") == call_id
+                ):
+                    result_message = candidate
+                    result_index = candidate_index
+                    break
+            if result_message is None:
+                continue
+            content = _field(result_message, "content")
+            if _field(result_message, "error", False) is True:
+                continue
+            if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:
+                continue
+            order_result = _json_object(content)
+            if (
+                isinstance(order_result, Mapping)
+                and order_result.get("order_id") == order_id
+                and isinstance(order_result.get("items"), (list, tuple))
+            ):
+                successful_writes.append(
+                    {
+                        "call_id": call_id,
+                        "result_index": result_index,
+                        "order_snapshot": order_result,
+                    }
+                )
+
+    if not successful_writes:
+        return _trace_not_evaluable(
+            order_id,
+            "successful_postwrite_order_snapshot_available",
+            "No successful matching write result containing the target order was found. "
+            "The write may have been blocked, failed, or omitted from the trace.",
+        )
+
+    write = successful_writes[-1]
+    post_order = write["order_snapshot"]
+    snapshot_source = "successful_write_result"
+
+    # Prefer a subsequent matching order read, if present. A later malformed/failed
+    # read supersedes the write result because it is the newest requested evidence.
+    latest_read_seen = False
+    latest_read_snapshot: Mapping[str, Any] | None = None
+    for message_index in range(write["result_index"] + 1, len(messages)):
+        message = messages[message_index]
+        for call in _trace_tool_calls(message):
+            arguments = _field(call, "arguments", {})
+            if (
+                _field(call, "name") != "get_order_details"
+                or not isinstance(arguments, Mapping)
+                or arguments.get("order_id") != order_id
+            ):
+                continue
+            latest_read_seen = True
+            latest_read_snapshot = None
+            call_id = _field(call, "id")
+            if not isinstance(call_id, str) or not call_id:
+                continue
+            result_message = next(
+                (
+                    candidate
+                    for candidate in messages[message_index + 1 :]
+                    if _field(candidate, "role") == "tool"
+                    and _field(candidate, "id") == call_id
+                ),
+                None,
+            )
+            if result_message is None or _field(result_message, "error", False) is True:
+                continue
+            candidate_order = _json_object(_field(result_message, "content"))
+            if (
+                isinstance(candidate_order, Mapping)
+                and candidate_order.get("order_id") == order_id
+                and isinstance(candidate_order.get("items"), (list, tuple))
+            ):
+                latest_read_snapshot = candidate_order
+
+    if latest_read_seen:
+        if latest_read_snapshot is None:
+            return _trace_not_evaluable(
+                order_id,
+                "latest_postwrite_order_read_is_valid",
+                "A later order read was attempted but the latest result is missing, "
+                "failed, malformed, or does not match the requested order.",
+                write_call_id=write["call_id"],
+            )
+        post_order = latest_read_snapshot
+        snapshot_source = "get_order_details_after_write"
+
+    # Product catalog data is unaffected by order writes. Use the latest observed
+    # result for each product in the post-write order; failed latest reads invalidate
+    # earlier reads instead of silently reusing stale data.
+    target_product_ids = {
+        item.get("product_id")
+        for item in post_order.get("items", [])
+        if isinstance(item, Mapping)
+        and isinstance(item.get("product_id"), str)
+        and item.get("product_id")
+    }
+    latest_products: dict[str, Mapping[str, Any] | None] = {}
+    for message in messages:
+        for call in _trace_tool_calls(message):
+            arguments = _field(call, "arguments", {})
+            if (
+                _field(call, "name") != "get_product_details"
+                or not isinstance(arguments, Mapping)
+            ):
+                continue
+            product_id = arguments.get("product_id")
+            if not isinstance(product_id, str) or product_id not in target_product_ids:
+                continue
+            call_id = _field(call, "id")
+            result_message = None
+            if isinstance(call_id, str) and call_id:
+                result_message = next(
+                    (
+                        candidate
+                        for candidate in messages
+                        if _field(candidate, "role") == "tool"
+                        and _field(candidate, "id") == call_id
+                    ),
+                    None,
+                )
+            snapshot = (
+                _json_object(_field(result_message, "content"))
+                if result_message is not None
+                and _field(result_message, "error", False) is not True
+                else None
+            )
+            latest_products[product_id] = (
+                snapshot
+                if isinstance(snapshot, Mapping)
+                and snapshot.get("product_id") == product_id
+                and isinstance(snapshot.get("variants"), Mapping)
+                else None
+            )
+
+    product_snapshots = [
+        snapshot
+        for product_id, snapshot in latest_products.items()
+        if product_id in target_product_ids and snapshot is not None
+    ]
+    result = audit_tau2_order_items_against_catalog(post_order, product_snapshots)
+    result.setdefault("evidence_summary", {}).update(
+        {
+            "write_call_id": write["call_id"],
+            "write_tool_name": write_tool_name,
+            "post_write_snapshot_source": snapshot_source,
+            "catalog_product_count": len(product_snapshots),
+            "catalog_product_ids_missing": sorted(
+                target_product_ids - set(latest_products.keys())
+                | {product_id for product_id, snapshot in latest_products.items() if snapshot is None}
+            ),
+        }
+    )
+    result["scope"] = "tau2_trace_postwrite_audit_not_production_data_integrity_proof"
+    return result
