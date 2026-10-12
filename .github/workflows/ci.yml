@@ -20,6 +20,11 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Run tests
         run: python -m pytest
+      - name: Run deterministic assurance mutation harness
+        run: |
+          python scripts/run_assurance_mutation_harness.py > "$RUNNER_TEMP/awa-harness.json"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-harness.json').read_text()); assert p['overall_passed'] is True, p"
+          python -m unittest tests.test_mutation_harness
       - name: Lint
         run: ruff check src tests scripts
       - name: Build wheel
