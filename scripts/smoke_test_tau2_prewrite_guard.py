@@ -551,7 +551,36 @@ def main() -> None:
     assert "no reviewed AWA policy adapter" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    print("PASS: six write policies are enforced; pending-item updates and unreviewed create_order are denied; same-batch duplicate blocking is verified.")
+    # A known read tool remains explicitly allowed through the normal dispatcher.
+    trajectory, _ = _setup()
+    read_call = ToolCall(
+        id="known-read-only-probe",
+        name="get_order_details",
+        arguments={"order_id": "#W2378156"},
+        requestor="assistant",
+    )
+    results, environment, orchestrator = _dispatch(trajectory, read_call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["get_order_details"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # Unknown/new tool names are default-denied rather than falling through to environment.
+    trajectory, _ = _setup()
+    unknown_call = ToolCall(
+        id="unknown-write-probe",
+        name="future_unreviewed_write",
+        arguments={"order_id": "#W2378156"},
+        requestor="assistant",
+    )
+    results, environment, orchestrator = _dispatch(trajectory, unknown_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == [], "unreviewed tool names must never reach the environment"
+    assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert "unrecognized or unreviewed tool name" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
+    print("PASS: six reviewed write policies are enforced; pending-item updates, create_order, and unknown tool names are denied; explicit read passthrough works.")
 
 
 if __name__ == "__main__":
