@@ -55,9 +55,9 @@ Use a local MCP client configured for stdio. Do not expose the process as a netw
 
 ## 5. Verify the built artifact and CI
 
-The CI workflow builds a wheel, installs it outside the source tree, checks the installed CLI entry point, runs the test suite and lint, and executes the source mutation smoke test on Python 3.10–3.13.
+The CI workflow builds a wheel, installs it outside the source tree, checks the installed CLI entry point, runs the test suite and lint, validates the deterministic assurance harness report (including its `overall_passed` flag), runs the harness unit tests, and executes the source mutation smoke test on Python 3.10–3.13.
 
-Before tagging, confirm the latest workflow run for the exact commit is green. Do not infer success from an earlier commit's run.
+Before tagging, confirm the latest workflow run for the exact commit is green. Do not infer success from an earlier commit's run. CI does not replace the manual MCP client handshake or review of the example CLI JSON outputs above.
 
 ## 6. Review scope and release notes
 
