@@ -15,9 +15,11 @@ def register_prewrite_tool(mcp: Any) -> None:
 
     @mcp.tool()
     def preflight_sensitive_write(action_json: str, evidence_json: str) -> dict[str, Any]:
-        """Check normalized intent and prior evidence before a caller invokes a sensitive write.
+        """Exchange-specific preflight for an item replacement on a delivered retail order.
 
-        A NO_GO must be enforced by the caller. This tool does not execute or intercept writes.
+        This is not a generic policy for arbitrary sensitive writes (for example, cancellation,
+        address changes, or payment-method changes). A NO_GO must be enforced by the caller.
+        This tool does not execute, authorize, or intercept writes.
         """
         try:
             action = parse_json_text(action_json, "action_json")
