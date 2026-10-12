@@ -507,3 +507,27 @@ def test_trace_audit_accepts_fresh_read_after_later_blocked_write() -> None:
         == "get_order_details_after_latest_write_attempt"
     )
     assert result["evidence_summary"]["latest_write_outcome"] == "blocked"
+
+
+def test_trace_audit_does_not_reuse_catalog_result_from_before_duplicate_call_id() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    # Reuse an old call ID but omit its result: a global ID search could accidentally
+    # find the earlier successful result and claim the latest catalog evidence is valid.
+    trajectory.append(
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "id": "product-read-0",
+                    "name": "get_product_details",
+                    "arguments": {"product_id": "product-camera"},
+                }
+            ],
+        }
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["checked"]["every_item_has_a_catalog_product_snapshot"] == "NOT_EVALUABLE"
+    assert result["evidence_summary"]["catalog_product_ids_missing"] == ["product-camera"]
