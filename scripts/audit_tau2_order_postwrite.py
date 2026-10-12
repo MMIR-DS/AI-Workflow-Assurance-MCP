@@ -1,9 +1,10 @@
 """Audit a Tau2 order snapshot against its product/variant catalog snapshots.
 
-Input JSON may contain either:
-- "order_snapshot" plus "product_snapshots" for an explicit snapshot audit; or
-- "trajectory" plus "order_id" (and optionally "write_tool_name") to extract the
-  successful post-write state and catalog reads directly from a Tau2 message trace.
+Input JSON may contain one of:
+- "order_snapshot" plus "product_snapshots" for an explicit snapshot audit;
+- "trajectory" plus "order_id" for a single Tau2 message trace; or
+- a full Tau2 benchmark artifact with a "simulations" list, auditing every matching
+  write/order in each simulation (or one zero-based simulation index).
 
 Exit codes: 0=PASS, 1=FAIL, 2=NOT_EVALUABLE.
 """
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_workflow_assurance_mcp.tau2_postwrite import (
+    audit_tau2_benchmark_result_postwrite,
     audit_tau2_order_items_against_catalog,
     audit_tau2_trace_postwrite,
 )
@@ -45,7 +47,18 @@ def main(argv: list[str] | None = None) -> int:
         "--input",
         type=Path,
         required=True,
-        help="JSON file containing order_snapshot and product_snapshots",
+        help="JSON file containing snapshots, a trajectory, or a full Tau2 benchmark artifact",
+    )
+    parser.add_argument(
+        "--write-tool-name",
+        default=None,
+        help="Target write tool name (default: modify_pending_order_items)",
+    )
+    parser.add_argument(
+        "--simulation-index",
+        type=int,
+        default=None,
+        help="Optional zero-based simulation index when the input has a simulations list",
     )
     args = parser.parse_args(argv)
 
@@ -56,12 +69,22 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not isinstance(payload, dict):
             result = _not_evaluable("The top-level JSON value must be an object.")
+        elif "simulations" in payload:
+            result = audit_tau2_benchmark_result_postwrite(
+                payload,
+                write_tool_name=(
+                    args.write_tool_name
+                    or payload.get("write_tool_name", "modify_pending_order_items")
+                ),
+                simulation_index=args.simulation_index,
+            )
         elif "trajectory" in payload:
             result = audit_tau2_trace_postwrite(
                 payload.get("trajectory"),
                 payload.get("order_id"),
-                write_tool_name=payload.get(
-                    "write_tool_name", "modify_pending_order_items"
+                write_tool_name=(
+                    args.write_tool_name
+                    or payload.get("write_tool_name", "modify_pending_order_items")
                 ),
             )
         else:

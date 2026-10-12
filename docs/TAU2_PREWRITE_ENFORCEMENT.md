@@ -56,6 +56,15 @@ Run the CLI against a JSON file with an `order_snapshot` object and a `product_s
 PYTHONPATH=src python scripts/audit_tau2_order_postwrite.py --input postwrite-snapshot.json
 ```
 
+Example full Tau2 benchmark artifact input:
+
+```bash
+PYTHONPATH=src python scripts/audit_tau2_order_postwrite.py --input tau2-result.json
+PYTHONPATH=src python scripts/audit_tau2_order_postwrite.py --input tau2-result.json --simulation-index 3
+```
+
+When the JSON has a top-level `simulations` list, the CLI audits each unique target order touched by the selected write tool in every selected simulation. The aggregate is `FAIL` if any order has a definite mismatch, `NOT_EVALUABLE` if one or more simulations lack usable post-write/catalog evidence, and `PASS` only when all selected order audits pass. Tau2 reward fields are retained only in the input and are not used as an integrity oracle.
+
 Example raw-trace input shape:
 
 ```json
@@ -68,7 +77,7 @@ Example raw-trace input shape:
 
 Use the complete Tau2 `messages` array in `trajectory`; the empty array above is only a schema illustration.
 
-The CLI emits a structured JSON report and uses exit code `0` for `PASS`, `1` for `FAIL`, and `2` for `NOT_EVALUABLE`. You may supply the snapshots directly, or pass a raw Tau2 message trace using a top-level `trajectory` array plus `order_id` (and optionally `write_tool_name`). In trace mode, the adapter correlates tool calls to their results by call ID, uses the successful write result as the post-write state unless a later matching `get_order_details` read exists, and selects the latest catalog result per product. A blocked/missing write result, failed latest read, or missing product snapshot returns `NOT_EVALUABLE`.
+The CLI emits a structured JSON report and uses exit code `0` for `PASS`, `1` for `FAIL`, and `2` for `NOT_EVALUABLE`. You may supply explicit snapshots, a raw Tau2 message trace using a top-level `trajectory` array plus `order_id`, or a full benchmark artifact with a top-level `simulations` list. The `--write-tool-name` flag selects the write path; `--simulation-index` limits a full-artifact audit to one zero-based simulation. In trace mode, the adapter correlates tool calls to their results by call ID, uses the successful write result as the post-write state unless a later matching `get_order_details` read exists, and selects the latest catalog result per product. A blocked/missing write result, failed latest read, or missing product snapshot returns `NOT_EVALUABLE`.
 
 The audit is currently a pure/offline check: it does not execute or roll back writes and does not re-enable `modify_pending_order_items`. That operation remains blocked at dispatch until the pinned implementation is fixed or its per-item post-state behavior is independently verified.
 
