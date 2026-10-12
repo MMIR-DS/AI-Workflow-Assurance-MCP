@@ -35,6 +35,18 @@ jobs:
           "$RUNNER_TEMP/awa-wheel-venv/bin/python" -m pip install dist/*.whl
           "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" --help
           "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance" validate-spec --spec examples/invoice_matching/workflow.json
+      - name: Verify documented CLI acceptance commands
+        run: |
+          CLI="$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance"
+          SPEC="examples/invoice_matching/workflow.json"
+          "$CLI" validate-spec --spec "$SPEC" --output "$RUNNER_TEMP/awa-validate.json"
+          "$CLI" evaluate --spec "$SPEC" --cases examples/invoice_matching/cases_candidate.json --summary-only --output "$RUNNER_TEMP/awa-evaluate.json"
+          "$CLI" compare --spec "$SPEC" --baseline examples/invoice_matching/cases_baseline.json --candidate examples/invoice_matching/cases_candidate.json --output "$RUNNER_TEMP/awa-compare.json"
+          "$CLI" explain --spec "$SPEC" --cases examples/invoice_matching/cases_baseline.json --max-items 10 --output "$RUNNER_TEMP/awa-explain.json"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-validate.json').read_text()); assert p['valid'] is True, p"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-evaluate.json').read_text()); assert p['case_results_omitted'] is True and 'case_results' not in p and p['summary']['pass_rate'] == 1.0, p"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-compare.json').read_text()); assert p['workflow_id'] == 'invoice-match' and 'overall_trend' in p, p"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-explain.json').read_text()); assert p['failures_returned'] <= 10 and 'failure_groups' in p, p"
       - name: Verify release gate accepts GO and rejects non-GO
         run: |
           CLI="$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance"
