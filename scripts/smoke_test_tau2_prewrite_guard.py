@@ -477,25 +477,28 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    # A valid pending-order item modification must pass through the actual dispatcher.
+    # Pending item modifications remain disabled until the pinned Tau2 multi-item
+    # executor is independently shown to preserve each replacement's catalog state.
     trajectory, pending_items_call = _setup_pending_items()
-    results, environment, orchestrator = _dispatch(trajectory, pending_items_call)
-    assert len(results) == 1 and not results[0].error
-    assert environment.calls == ["modify_pending_order_items"]
-    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
-    assert orchestrator.num_errors == 0
-
-    # Missing exact price disclosure blocks pending item modification.
-    trajectory, pending_items_call = _setup_pending_items()
-    trajectory[16]["content"] = (
-        "To confirm order #W2378156, exchange the selected items and use "
-        "credit_card_9513926. Please confirm."
-    )
     results, environment, orchestrator = _dispatch(trajectory, pending_items_call)
     assert len(results) == 1 and results[0].error
-    assert environment.calls == []
+    assert environment.calls == [], "unverified pending-item updates must never reach the environment"
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
+    assert "pending-order item modification is disabled" in (results[0].content or "")
     assert orchestrator.num_errors == 1
+
+    # A denied pending-item update reserves the order for this batch; a second write
+    # cannot reuse the same pre-write trajectory snapshot.
+    trajectory, pending_items_call = _setup_pending_items()
+    _, exchange_call = _setup()
+    results, environment, orchestrator = _dispatch_many(
+        trajectory, [pending_items_call, exchange_call]
+    )
+    assert len(results) == 2 and all(result.error for result in results)
+    assert environment.calls == []
+    assert "pending-order item modification is disabled" in (results[0].content or "")
+    assert "second write for the same order" in (results[1].content or "")
+    assert orchestrator.num_errors == 2
 
     # A verified user default-address change must pass through the actual dispatcher.
     trajectory, user_address_call = _setup_user_address()
@@ -548,7 +551,7 @@ def main() -> None:
     assert "no reviewed AWA policy adapter" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    print("PASS: seven reviewed retail write policies enforce GO/NO_GO; unreviewed create_order is denied; same-batch duplicate blocking is verified.")
+    print("PASS: six write policies are enforced; pending-item updates and unreviewed create_order are denied; same-batch duplicate blocking is verified.")
 
 
 if __name__ == "__main__":
