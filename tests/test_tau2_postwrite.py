@@ -180,7 +180,9 @@ def test_postwrite_audit_compares_prices_to_cents_and_options_by_mapping_value()
     assert result["decision"] == "PASS"
 
 
-def _run_cli(tmp_path: Path, order: dict, catalogs: list[dict]) -> tuple[subprocess.CompletedProcess[str], dict]:
+def _run_cli(
+    tmp_path: Path, order: dict, catalogs: list[dict]
+) -> tuple[subprocess.CompletedProcess[str], dict]:
     input_path = tmp_path / "postwrite-audit.json"
     input_path.write_text(
         json.dumps(
