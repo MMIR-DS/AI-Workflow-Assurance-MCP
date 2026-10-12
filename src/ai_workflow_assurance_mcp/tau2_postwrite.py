@@ -412,7 +412,7 @@ def audit_tau2_trace_postwrite(
             "A non-empty write_tool_name is required.",
         )
 
-    successful_writes: list[dict[str, Any]] = []
+    write_attempts: list[dict[str, Any]] = []
     for message_index, message in enumerate(messages):
         for call in _trace_tool_calls(message):
             arguments = _field(call, "arguments", {})
@@ -424,6 +424,15 @@ def audit_tau2_trace_postwrite(
                 continue
             call_id = _field(call, "id")
             if not isinstance(call_id, str) or not call_id:
+                write_attempts.append(
+                    {
+                        "call_id": None,
+                        "call_index": message_index,
+                        "result_index": -1,
+                        "outcome": "malformed_call_id",
+                        "order_snapshot": None,
+                    }
+                )
                 continue
 
             result_message = None
@@ -437,44 +446,59 @@ def audit_tau2_trace_postwrite(
                     result_message = candidate
                     result_index = candidate_index
                     break
-            if result_message is None:
-                continue
-            content = _field(result_message, "content")
-            if _field(result_message, "error", False) is True:
-                continue
-            if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:
-                continue
-            order_result = _json_object(content)
-            if (
-                isinstance(order_result, Mapping)
-                and order_result.get("order_id") == order_id
-                and isinstance(order_result.get("items"), (list, tuple))
-            ):
-                successful_writes.append(
-                    {
-                        "call_id": call_id,
-                        "result_index": result_index,
-                        "order_snapshot": order_result,
-                    }
-                )
 
-    if not successful_writes:
+            outcome = "missing_result"
+            order_result: Mapping[str, Any] | None = None
+            if result_message is not None:
+                content = _field(result_message, "content")
+                if _field(result_message, "error", False) is True:
+                    outcome = "tool_error"
+                elif isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:
+                    outcome = "blocked"
+                else:
+                    parsed_result = _json_object(content)
+                    if (
+                        isinstance(parsed_result, Mapping)
+                        and parsed_result.get("order_id") == order_id
+                        and isinstance(parsed_result.get("items"), (list, tuple))
+                    ):
+                        order_result = parsed_result
+                        outcome = "successful_order_snapshot"
+                    else:
+                        outcome = "invalid_result"
+
+            write_attempts.append(
+                {
+                    "call_id": call_id,
+                    "call_index": message_index,
+                    "result_index": result_index,
+                    "outcome": outcome,
+                    "order_snapshot": order_result,
+                }
+            )
+
+    if not write_attempts:
         return _trace_not_evaluable(
             order_id,
-            "successful_postwrite_order_snapshot_available",
-            "No successful matching write result containing the target order was found. "
-            "The write may have been blocked, failed, or omitted from the trace.",
+            "matching_write_attempt_available",
+            "No matching write-tool call for the target order was found in the trace.",
         )
 
-    write = successful_writes[-1]
-    post_order = write["order_snapshot"]
+    # Never fall back to an older successful write result after a newer attempt failed
+    # or was blocked. The state must then be established by a fresh subsequent order read.
+    latest_attempt = write_attempts[-1]
+    post_order = latest_attempt["order_snapshot"]
     snapshot_source = "successful_write_result"
-
-    # Prefer a subsequent matching order read, if present. A later malformed/failed
-    # read supersedes the write result because it is the newest requested evidence.
     latest_read_seen = False
     latest_read_snapshot: Mapping[str, Any] | None = None
-    for message_index in range(write["result_index"] + 1, len(messages)):
+    latest_read_call_id: str | None = None
+    read_start_index = (
+        latest_attempt["result_index"]
+        if latest_attempt["result_index"] >= 0
+        else latest_attempt["call_index"]
+    )
+
+    for message_index in range(read_start_index + 1, len(messages)):
         message = messages[message_index]
         for call in _trace_tool_calls(message):
             arguments = _field(call, "arguments", {})
@@ -487,6 +511,7 @@ def audit_tau2_trace_postwrite(
             latest_read_seen = True
             latest_read_snapshot = None
             call_id = _field(call, "id")
+            latest_read_call_id = call_id if isinstance(call_id, str) else None
             if not isinstance(call_id, str) or not call_id:
                 continue
             result_message = next(
@@ -515,10 +540,28 @@ def audit_tau2_trace_postwrite(
                 "latest_postwrite_order_read_is_valid",
                 "A later order read was attempted but the latest result is missing, "
                 "failed, malformed, or does not match the requested order.",
-                write_call_id=write["call_id"],
+                write_call_id=latest_attempt["call_id"],
             )
         post_order = latest_read_snapshot
-        snapshot_source = "get_order_details_after_write"
+        snapshot_source = "get_order_details_after_latest_write_attempt"
+    elif latest_attempt["outcome"] != "successful_order_snapshot":
+        return _trace_not_evaluable(
+            order_id,
+            "latest_write_attempt_has_a_valid_postwrite_snapshot",
+            "The latest matching write attempt was "
+            f"{latest_attempt['outcome']!r}. Its result cannot establish post-write "
+            "state, and no subsequent matching get_order_details snapshot was found.",
+            write_call_id=latest_attempt["call_id"],
+        )
+
+    if not isinstance(post_order, Mapping):
+        return _trace_not_evaluable(
+            order_id,
+            "postwrite_order_snapshot_is_available",
+            "No valid post-write order snapshot could be established.",
+            write_call_id=latest_attempt["call_id"],
+        )
+    write_call_id = latest_attempt["call_id"]
 
     # Product catalog data is unaffected by order writes. Use the latest observed
     # result for each product in the post-write order; failed latest reads invalidate
@@ -576,7 +619,8 @@ def audit_tau2_trace_postwrite(
     result = audit_tau2_order_items_against_catalog(post_order, product_snapshots)
     result.setdefault("evidence_summary", {}).update(
         {
-            "write_call_id": write["call_id"],
+            "write_call_id": write_call_id,
+            "latest_write_outcome": latest_attempt["outcome"],
             "write_tool_name": write_tool_name,
             "post_write_snapshot_source": snapshot_source,
             "catalog_product_count": len(product_snapshots),
