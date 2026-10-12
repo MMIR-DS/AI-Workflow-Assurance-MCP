@@ -30,7 +30,7 @@ Create an environment and install the development version:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # macOS/Linux; PowerShell: .\\.venv\\Scripts\\Activate.ps1
+source .venv/bin/activate  # macOS/Linux; PowerShell: .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 ```
 
