@@ -3,10 +3,10 @@
 ## 0.1.7 (Unreleased)
 
 - Add operation-specific Tau2 preflight policy adapters for exchange, cancellation, order-address changes, payment-method changes, pending-item modifications, user default-address changes, and delivered-item returns. The dispatcher enables the six non-item-modification paths and explicitly denies pending-item modification until independent per-item post-state invariants are verified.
-- Explicitly default-deny Tau2 retail `create_order` because it has no reviewed AWA policy adapter, and `modify_pending_order_items` because public reports describe possible multi-item state corruption in the pinned upstream tool; prove neither write reaches the environment callback in the no-model dispatcher smoke.
+- Explicitly default-deny Tau2 retail `create_order`, `modify_pending_order_items`, and any unrecognized/unreviewed tool name; prove blocked tools never reach the environment callback while an explicit known read-only tool still passes through in the no-model dispatcher smoke.
 - Validate current order/user snapshots, identity-to-owner binding, item quantity and product matching, replacement availability, payment-method authorization, exact financial/address disclosure, fresh confirmation, and retry/batch protections before simulated writes.
 - Add no-model runtime smoke coverage using Tau2's actual patched dispatch method and a counting fake environment, including cross-operation same-order batch blocking.
-- Version the dispatcher patch as V5, reject stale V2/V3/V4 or partial patched source, and document default-deny for unreviewed `create_order` and unverified pending-item mutations.
+- Version the dispatcher patch as V6, reject stale V2/V3/V4/V5 or partial patched source, and default-deny unrecognized tool names; only explicitly allowlisted read/escalation tools pass through. Keep `create_order` and unverified pending-item mutations blocked.
 - Bump the evaluation-report schema to `0.4` for explicit `PASS` / `FAIL` / `NOT_EVALUABLE` check statuses and separate counts for definite failures versus unobserved checks.
 - Keep the release gate fail-closed: unknown-only evidence cannot produce `GO`; observed failing checks continue to block release.
 - Extend `explain` output with separate, bounded groups and case-ID previews for checks that could not be evaluated.

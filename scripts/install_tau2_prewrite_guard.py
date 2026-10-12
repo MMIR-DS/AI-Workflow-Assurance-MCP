@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
-PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V5"
+PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V6"
 
 ORIGINAL = """        tool_results = []
         for tool_call in tool_calls:
@@ -21,7 +21,7 @@ REPLACEMENT = """        tool_results = []
         # allow two writes for the same order to reuse that snapshot.
         awa_write_orders_seen = set()
         for tool_call in tool_calls:
-            # AWA_PREWRITE_GUARD_PATCH_V5: guard reviewed writes and deny unreviewed create_order.
+            # AWA_PREWRITE_GUARD_PATCH_V6: guard reviewed writes and default-deny unreviewed tool names.
             awa_write_tools = {
                 "cancel_pending_order",
                 "exchange_delivered_order_items",
@@ -32,6 +32,18 @@ REPLACEMENT = """        tool_results = []
                 "return_delivered_order_items",
                 # No reviewed policy exists for new-order creation; deny it below.
                 "create_order",
+            }
+            # Only explicitly reviewed non-write/read/escalation tools may pass through.
+            # New or renamed tools are denied until classified and tested here.
+            awa_passthrough_tools = {
+                "find_user_id_by_email",
+                "find_user_id_by_name_zip",
+                "get_order_details",
+                "get_product_details",
+                "get_user_details",
+                "list_all_product_types",
+                "think",
+                "transfer_to_human_agents",
             }
             if tool_call.name in awa_write_tools:
                 if tool_call.name == "exchange_delivered_order_items":
@@ -355,8 +367,20 @@ REPLACEMENT = """        tool_results = []
                             "AWA policy adapter and is blocked before execution."
                         ),
                     )
-            else:
+            elif tool_call.name in awa_passthrough_tools:
                 tool_result = self.environment.get_response(tool_call)
+            else:
+                tool_result = ToolMessage(
+                    id=tool_call.id,
+                    role="tool",
+                    requestor=tool_call.requestor,
+                    error=True,
+                    content=(
+                        "AWA_PREWRITE_NO_GO: unrecognized or unreviewed tool name "
+                        "is blocked before execution. Add it to the explicit passthrough "
+                        "allowlist or give it a reviewed operation-specific write policy."
+                    ),
+                )
             if tool_result.error:
                 self.num_errors += 1
             tool_results.append(tool_result)
