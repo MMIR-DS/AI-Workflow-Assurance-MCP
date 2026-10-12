@@ -10,10 +10,10 @@ import argparse
 import asyncio
 import json
 import os
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
-from ai_workflow_assurance_mcp import __version__
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -69,6 +69,7 @@ def _payload(result: object) -> dict[str, Any]:
 
 
 async def _run(server_executable: str) -> dict[str, Any]:
+    expected_version = version("ai-workflow-assurance-mcp")
     env = os.environ.copy()
     # Force the child server to use the installed wheel instead of a source override.
     env.pop("PYTHONPATH", None)
@@ -80,9 +81,9 @@ async def _run(server_executable: str) -> dict[str, Any]:
             server_info = getattr(initialized, "serverInfo", None) or getattr(
                 initialized, "server_info", None
             )
-            if server_info is None or server_info.version != __version__:
+            if server_info is None or server_info.version != expected_version:
                 raise AssertionError(
-                    f"MCP initialize version mismatch: expected {__version__!r}, "
+                    f"MCP initialize version mismatch: expected {expected_version!r}, "
                     f"got {getattr(server_info, 'version', None)!r}"
                 )
 
@@ -277,7 +278,7 @@ async def _run(server_executable: str) -> dict[str, Any]:
 
             return {
                 "passed": all(checks.values()),
-                "package_version": __version__,
+                "package_version": expected_version,
                 "server_version": server_info.version,
                 "listed_tool_count": len(tool_names),
                 "checks": checks,
