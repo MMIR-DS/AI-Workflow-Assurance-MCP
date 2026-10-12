@@ -12,6 +12,7 @@ import asyncio
 import importlib.metadata
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -72,8 +73,51 @@ def _payload(result: object) -> dict[str, Any]:
 async def _run(server_executable: str) -> dict[str, Any]:
     expected_version = importlib.metadata.version("ai-workflow-assurance-mcp")
     env = os.environ.copy()
-    # Force the child server to use the installed wheel instead of a source override.
+    # Do not inherit source-tree overrides. Inject only a startup hook that blocks
+    # outbound networking in the child server; the installed package remains resolved
+    # from the clean environment's site-packages.
     env.pop("PYTHONPATH", None)
+    network_guard = tempfile.TemporaryDirectory(prefix="awa-mcp-smoke-network-guard-")
+    guard_dir = Path(network_guard.name)
+    attempts_path = guard_dir / "blocked-network-attempts.txt"
+    (guard_dir / "sitecustomize.py").write_text(
+        """
+import os
+import socket
+
+_counter = os.environ["AWA_MCP_SMOKE_NETWORK_COUNTER"]
+
+def _record_blocked_network_attempt():
+    with open(_counter, "a", encoding="utf-8") as handle:
+        handle.write("blocked\\n")
+
+def _deny_network(*args, **kwargs):
+    _record_blocked_network_attempt()
+    raise OSError("outbound network is disabled during the installed-wheel MCP smoke test")
+
+_original_connect = socket.socket.connect
+_original_connect_ex = socket.socket.connect_ex
+
+def _guard_socket_connect(self, address):
+    if self.family in (socket.AF_INET, socket.AF_INET6):
+        _record_blocked_network_attempt()
+        raise OSError("outbound network is disabled during the installed-wheel MCP smoke test")
+    return _original_connect(self, address)
+
+def _guard_socket_connect_ex(self, address):
+    if self.family in (socket.AF_INET, socket.AF_INET6):
+        _record_blocked_network_attempt()
+        raise OSError("outbound network is disabled during the installed-wheel MCP smoke test")
+    return _original_connect_ex(self, address)
+
+socket.create_connection = _deny_network
+socket.socket.connect = _guard_socket_connect
+socket.socket.connect_ex = _guard_socket_connect_ex
+""".lstrip(),
+        encoding="utf-8",
+    )
+    env["PYTHONPATH"] = str(guard_dir)
+    env["AWA_MCP_SMOKE_NETWORK_COUNTER"] = str(attempts_path)
     params = StdioServerParameters(command=server_executable, args=[], env=env)
 
     async with stdio_client(params) as (read_stream, write_stream):
@@ -281,7 +325,7 @@ async def _run(server_executable: str) -> dict[str, Any]:
             if not checks["preflight_sensitive_write"]:
                 raise AssertionError("Valid synthetic preflight did not return GO.")
 
-            return {
+            report = {
                 "passed": all(checks.values()),
                 "package_version": expected_version,
                 "server_version": server_info.version,
@@ -289,8 +333,19 @@ async def _run(server_executable: str) -> dict[str, Any]:
                 "checks": checks,
                 "scope": "installed_wheel_local_synthetic_mcp_stdio_smoke_not_production_proof",
                 "model_calls": 0,
-                "external_api_calls": 0,
             }
+            network_attempts = (
+                attempts_path.read_text(encoding="utf-8").splitlines()
+                if attempts_path.exists()
+                else []
+            )
+            report["external_api_calls"] = len(network_attempts)
+            if network_attempts:
+                raise AssertionError(
+                    "Unexpected outbound network connection attempt(s) were blocked "
+                    f"during MCP smoke: {len(network_attempts)}"
+                )
+            return report
 
 
 def main() -> int:

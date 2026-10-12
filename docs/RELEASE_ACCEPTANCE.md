@@ -41,23 +41,25 @@ ai-workflow-assurance explain --spec examples/invoice_matching/workflow.json --c
 ai-workflow-assurance release --spec examples/invoice_matching/workflow.json --cases examples/invoice_matching/cases_candidate.json
 ```
 
-Review the JSON outputs rather than relying only on process exit codes. In particular, inspect the release decision, configured thresholds, warnings, and the assurance-scope note.
+Review the JSON outputs rather than relying only on process exit codes. In particular, inspect the release decision, configured thresholds, warnings, and the assurance-scope note. CI also runs the documented CLI commands from the built wheel and checks key JSON response contracts; keep the manual review as a separate release-acceptance step.
 
 ## 4. Verify the MCP boundary
 
-The automated suite includes a stdio handshake and calls each exposed tool. For manual integration, launch:
+CI launches the MCP server executable from a wheel installed in a clean virtual environment. The child process receives only a temporary startup hook on `PYTHONPATH` (not the checkout's source tree), so the installed package must still resolve from the wheel while outbound IP-network connections are blocked and counted. Any attempted connection fails the smoke test. The stdio smoke test checks the versioned initialize handshake, the exact inventory of eight exposed tools, representative response contracts for all eight tools, and critical evidence-trust and sensitive-write preflight behavior. It uses synthetic local input and makes no model calls.
+
+For manual integration, launch the installed server:
 
 ```bash
 ai-workflow-assurance-mcp
 ```
 
-Use a local MCP client configured for stdio. Do not expose the process as a network service without a separate threat model and deployment review.
+Connect using the target MCP client's stdio configuration and verify that client's actual initialization, tool discovery, and invocation behavior. The automated smoke is protocol-level coverage; it does not prove compatibility with every MCP client or deployment configuration. Do not expose the process as a network service without a separate threat model and deployment review.
 
 ## 5. Verify the built artifact and CI
 
-The CI workflow builds a wheel, installs it outside the source tree, checks the installed CLI entry point, runs the test suite and lint, validates the deterministic assurance harness report (including its `overall_passed` flag), runs the harness unit tests, and executes the source mutation smoke test on Python 3.10–3.13.
+The CI workflow builds a wheel and installs it outside the source tree, checks the installed CLI entry point, runs the test suite and lint, validates the deterministic assurance harness report (including its `overall_passed` flag), runs the harness unit tests, smoke-tests the installed-wheel MCP stdio boundary, verifies documented CLI JSON contracts, checks the release-gate exit behavior, and executes the source mutation smoke test on Python 3.10–3.13.
 
-Before tagging, confirm the latest workflow run for the exact commit is green. Do not infer success from an earlier commit's run. CI does not replace the manual MCP client handshake or review of the example CLI JSON outputs above.
+Before tagging, confirm that the latest workflow run for the exact candidate commit is green on every supported CI matrix version. Do not infer success from an earlier commit's run or from a partial set of checks. Passing CI is evidence about the tested commit and test cases only; it does not replace manual MCP-client integration or review of the example CLI outputs.
 
 ## 6. Review scope and release notes
 
