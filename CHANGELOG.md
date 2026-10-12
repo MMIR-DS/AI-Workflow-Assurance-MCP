@@ -3,7 +3,7 @@
 ## 0.1.7 (Unreleased)
 
 - Enforce the deterministic assurance mutation harness and its unit tests in the Python 3.10–3.13 CI matrix, including an explicit check of the harness report's overall pass flag.
-- Smoke-test the MCP stdio protocol from the clean installed wheel in CI: verify the versioned initialize handshake, exact eight-tool inventory, representative tool contracts, and evidence/preflight boundaries; block and count outbound IP-network attempts from the server process, with zero attempts required for a pass.
+- Smoke-test the MCP stdio protocol from the clean installed wheel in CI: verify the versioned initialize handshake, exact eight-tool inventory, representative tool contracts, and evidence/preflight boundaries; require the Python socket-level IPv4/IPv6 network guard to prove it loaded, block/count attempts, and observe zero attempts for a pass. This is test instrumentation, not an OS-level network sandbox.
 - Exercise the documented public CLI commands from the installed wheel and assert their JSON response contracts in CI.
 - Reject ambiguous Tau2 trace correlation when tool-call IDs or tool-result IDs are duplicated; add regression coverage across catalog reads and write attempts.
 - Add operation-specific Tau2 preflight policy adapters for exchange, cancellation, order-address changes, payment-method changes, pending-item modifications, user default-address changes, and delivered-item returns. The dispatcher enables the six non-item-modification paths and explicitly denies pending-item modification until independent per-item post-state invariants are verified.

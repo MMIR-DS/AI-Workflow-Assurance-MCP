@@ -40,7 +40,7 @@ jobs:
           "$RUNNER_TEMP/awa-wheel-venv/bin/python" scripts/smoke_installed_wheel_mcp_stdio.py \
             --server "$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance-mcp" \
             > "$RUNNER_TEMP/awa-mcp-smoke.json"
-          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-mcp-smoke.json').read_text()); assert p['passed'] is True and p['listed_tool_count'] == 8 and p['model_calls'] == 0 and p['external_api_calls'] == 0, p"
+          python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/awa-mcp-smoke.json').read_text()); assert p['passed'] is True and p['listed_tool_count'] == 8 and p['model_calls'] == 0 and p['network_guard_active'] is True and p['blocked_network_attempts'] == 0, p"
       - name: Verify documented CLI acceptance commands
         run: |
           CLI="$RUNNER_TEMP/awa-wheel-venv/bin/ai-workflow-assurance"
