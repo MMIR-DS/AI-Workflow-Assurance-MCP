@@ -80,6 +80,13 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     "preflight_sensitive_write",
                 }
 
+                preflight_tool = next(
+                    tool for tool in listed.tools if tool.name == "preflight_sensitive_write"
+                )
+                preflight_description = (preflight_tool.description or "").lower()
+                assert "exchange-specific" in preflight_description
+                assert "not a generic policy" in preflight_description
+
                 spec_json = json.dumps(SPEC)
                 cases_json = json.dumps(CASES)
                 evidence_names = (
