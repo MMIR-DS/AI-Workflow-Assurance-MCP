@@ -2,9 +2,10 @@
 """Smoke-test MCP stdio from a wheel installed in a clean virtual environment.
 
 The child process has no source-tree override on PYTHONPATH. A temporary
-sitecustomize hook blocks and counts Python socket-level IPv4/IPv6 connection
-attempts. This is a test guard, not an OS-level network sandbox. Inputs are
-synthetic, and the smoke itself makes no model calls.
+sitecustomize hook blocks and counts Python socket-level non-loopback IPv4/IPv6
+connection attempts. Loopback is allowed for runtime IPC (notably Windows
+asyncio's internal socketpair). This is a test guard, not an OS-level network
+sandbox. Inputs are synthetic, and the smoke itself makes no model calls.
 """
 from __future__ import annotations
 
@@ -84,6 +85,7 @@ async def _run(server_executable: str) -> dict[str, Any]:
     guard_active_path = guard_dir / "guard-active.txt"
     (guard_dir / "sitecustomize.py").write_text(
         """
+import ipaddress
 import os
 import socket
 
@@ -93,28 +95,47 @@ def _record_blocked_network_attempt():
     with open(_counter, "a", encoding="utf-8") as handle:
         handle.write("blocked\\n")
 
-def _deny_network(*args, **kwargs):
-    _record_blocked_network_attempt()
-    raise OSError("outbound network is disabled during the installed-wheel MCP smoke test")
+def _is_loopback_address(address):
+    try:
+        host = address[0]
+    except (IndexError, TypeError):
+        return False
+    if not isinstance(host, str):
+        return False
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
 
+_original_create_connection = socket.create_connection
 _original_connect = socket.socket.connect
 _original_connect_ex = socket.socket.connect_ex
 
+def _guard_create_connection(address, *args, **kwargs):
+    if _is_loopback_address(address):
+        return _original_create_connection(address, *args, **kwargs)
+    _record_blocked_network_attempt()
+    raise OSError("non-loopback outbound network is disabled during the installed-wheel MCP smoke test")
+
 def _guard_socket_connect(self, address):
-    if self.family in (socket.AF_INET, socket.AF_INET6):
+    if self.family in (socket.AF_INET, socket.AF_INET6) and not _is_loopback_address(address):
         _record_blocked_network_attempt()
-        raise OSError("outbound network is disabled during the installed-wheel MCP smoke test")
+        raise OSError("non-loopback outbound network is disabled during the installed-wheel MCP smoke test")
     return _original_connect(self, address)
 
 def _guard_socket_connect_ex(self, address):
-    if self.family in (socket.AF_INET, socket.AF_INET6):
+    if self.family in (socket.AF_INET, socket.AF_INET6) and not _is_loopback_address(address):
         _record_blocked_network_attempt()
-        raise OSError("outbound network is disabled during the installed-wheel MCP smoke test")
+        raise OSError("non-loopback outbound network is disabled during the installed-wheel MCP smoke test")
     return _original_connect_ex(self, address)
 
-socket.create_connection = _deny_network
+socket.create_connection = _guard_create_connection
 socket.socket.connect = _guard_socket_connect
 socket.socket.connect_ex = _guard_socket_connect_ex
+with open(os.environ["AWA_MCP_SMOKE_NETWORK_GUARD_ACTIVE"], "w", encoding="utf-8") as handle:
+    handle.write("active\\n")
 with open(os.environ["AWA_MCP_SMOKE_NETWORK_GUARD_ACTIVE"], "w", encoding="utf-8") as handle:
     handle.write("active\\n")
 """.lstrip(),

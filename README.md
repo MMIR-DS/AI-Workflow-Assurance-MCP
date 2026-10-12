@@ -134,7 +134,7 @@ See the [original tau2 run](https://github.com/MMIR-DS/AI-Workflow-Assurance-MCP
 
 ## Release acceptance
 
-Before tagging a release, follow the [clean-checkout release acceptance checklist](docs/RELEASE_ACCEPTANCE.md). For the real Windows client handshake and tool-invocation check, use the [VS Code MCP client acceptance guide](docs/MCP_CLIENT_ACCEPTANCE_WINDOWS.md).
+Before tagging a release, follow the [clean-checkout release acceptance checklist](docs/RELEASE_ACCEPTANCE.md). For the real Windows client handshake and tool-invocation check, use the [VS Code MCP client acceptance guide](docs/MCP_CLIENT_ACCEPTANCE_WINDOWS.md). If no Windows desktop is available, CI provides a hosted Windows installed-wheel MCP protocol smoke as a documented fallback; it does not count as a VS Code GUI test, as explained in the release checklist.
 
 ## License
 

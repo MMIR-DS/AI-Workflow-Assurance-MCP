@@ -91,3 +91,86 @@ jobs:
           name: source-mutation-report-python-${{ matrix.python-version }}
           path: artifacts/mutation-report-python-${{ matrix.python-version }}.json
           if-no-files-found: ignore
+
+  windows-mcp-smoke:
+    name: Windows installed-wheel MCP smoke
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Build wheel and install into a clean Windows virtual environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip wheel . --no-deps --wheel-dir dist
+          if ($LASTEXITCODE -ne 0) { throw "Wheel build failed." }
+
+          $venv = Join-Path $env:RUNNER_TEMP "awa-wheel-venv"
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw "Virtual environment creation failed." }
+
+          $wheel = Get-ChildItem -Path dist -Filter "ai_workflow_assurance_mcp-*.whl" | Select-Object -First 1
+          if (-not $wheel) { throw "Built wheel not found." }
+
+          $python = Join-Path $venv "Scripts\python.exe"
+          $cli = Join-Path $venv "Scripts\ai-workflow-assurance.exe"
+          $server = Join-Path $venv "Scripts\ai-workflow-assurance-mcp.exe"
+
+          & $python -m pip install $wheel.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Wheel installation failed." }
+          "WHEEL=$($wheel.Name)" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "awa-build-info.txt") -Encoding utf8
+      - name: Verify installed-wheel origin on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $venv = Join-Path $env:RUNNER_TEMP "awa-wheel-venv"
+          $python = Join-Path $venv "Scripts\python.exe"
+          $cli = Join-Path $venv "Scripts\ai-workflow-assurance.exe"
+          $server = Join-Path $venv "Scripts\ai-workflow-assurance-mcp.exe"
+          $reportPath = Join-Path $env:RUNNER_TEMP "awa-windows-wheel-origin.json"
+
+          & $python scripts/check_installed_wheel_origin.py --python $python --cli $cli --server $server > $reportPath
+          if ($LASTEXITCODE -ne 0) { throw "Installed-wheel origin check failed." }
+
+          $report = Get-Content -Raw $reportPath | ConvertFrom-Json
+          if ($report.status -ne "passed" -or
+              $report.import_from_installed_package -ne $true -or
+              $report.metadata_version -ne $report.package_version) {
+            throw "Installed-wheel origin contract failed: $($report | ConvertTo-Json -Depth 8)"
+          }
+          Write-Host ($report | ConvertTo-Json -Depth 8)
+      - name: Exercise MCP handshake, tool discovery, and all tool contracts over Windows stdio
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $venv = Join-Path $env:RUNNER_TEMP "awa-wheel-venv"
+          $python = Join-Path $venv "Scripts\python.exe"
+          $server = Join-Path $venv "Scripts\ai-workflow-assurance-mcp.exe"
+          $reportPath = Join-Path $env:RUNNER_TEMP "awa-windows-mcp-smoke.json"
+
+          & $python scripts/smoke_installed_wheel_mcp_stdio.py --server $server > $reportPath
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content -Raw $reportPath
+            throw "Windows installed-wheel MCP stdio smoke failed."
+          }
+
+          $report = Get-Content -Raw $reportPath | ConvertFrom-Json
+          if ($report.passed -ne $true -or
+              $report.listed_tool_count -ne 8 -or
+              $report.model_calls -ne 0 -or
+              $report.network_guard_active -ne $true -or
+              $report.blocked_network_attempts -ne 0) {
+            throw "Windows MCP smoke contract failed: $($report | ConvertTo-Json -Depth 12)"
+          }
+          Write-Host ($report | ConvertTo-Json -Depth 12)
+      - name: Upload Windows MCP smoke evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installed-wheel-mcp-smoke
+          path: ${{ runner.temp }}\awa-windows-mcp-smoke.json
+          if-no-files-found: warn
+
