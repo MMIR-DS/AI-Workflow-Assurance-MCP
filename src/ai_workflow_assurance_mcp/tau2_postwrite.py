@@ -370,6 +370,45 @@ def _trace_tool_calls(message: Any) -> list[Any]:
     return list(calls) if isinstance(calls, (list, tuple)) else []
 
 
+def _trace_messages_are_well_formed(messages: list[Any] | None) -> bool:
+    """Reject malformed trace records instead of silently ignoring them."""
+    if messages is None:
+        return False
+
+    for message in messages:
+        role = _field(message, "role")
+        if not isinstance(role, str) or not role.strip():
+            return False
+
+        raw_calls = _field(message, "tool_calls", None)
+        if raw_calls is not None:
+            if not isinstance(raw_calls, (list, tuple)):
+                return False
+            for call in raw_calls:
+                call_id = _field(call, "id")
+                name = _field(call, "name")
+                arguments = _field(call, "arguments", {})
+                if (
+                    not isinstance(call_id, str)
+                    or not call_id
+                    or not isinstance(name, str)
+                    or not name
+                    or not isinstance(arguments, Mapping)
+                ):
+                    return False
+
+        if role == "tool":
+            result_id = _field(message, "id")
+            if (
+                not isinstance(result_id, str)
+                or not result_id
+                or _field(message, "content", None) is None
+            ):
+                return False
+
+    return True
+
+
 def _json_object(value: Any) -> Mapping[str, Any] | None:
     if isinstance(value, Mapping):
         return value
@@ -426,6 +465,13 @@ def audit_tau2_trace_postwrite(
             order_id,
             "trajectory_is_well_formed",
             "Expected a list of Tau2 messages.",
+        )
+    if not _trace_messages_are_well_formed(messages):
+        return _trace_not_evaluable(
+            order_id,
+            "trajectory_messages_are_well_formed",
+            "Every message must have a role; tool calls need a name, ID, and mapping "
+            "arguments; tool results need a matching-call ID and content.",
         )
     if not isinstance(order_id, str) or not order_id.strip():
         return _trace_not_evaluable(
@@ -794,12 +840,13 @@ def audit_tau2_benchmark_result_postwrite(
     for index, simulation in selected:
         task_id = _field(simulation, "task_id")
         messages = _trace_messages(_field(simulation, "messages"))
-        if messages is None:
+        if not _trace_messages_are_well_formed(messages):
             all_simulations_well_formed = False
             audit = _trace_not_evaluable(
                 None,
                 "simulation_messages_are_well_formed",
-                "This simulation does not contain a messages list.",
+                "This simulation's messages list or an individual message/tool-call "
+                "record is missing or malformed.",
             )
             entry = {
                 "simulation_index": index,

@@ -362,6 +362,16 @@ def test_trace_audit_extracts_write_result_and_catalog_snapshots() -> None:
     assert result["evidence_summary"]["catalog_product_count"] == 3
 
 
+def test_trace_audit_returns_not_evaluable_for_malformed_message_records() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    trajectory.append({"role": "assistant", "tool_calls": "not-a-list"})
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["blocking_checks"] == ["trajectory_messages_are_well_formed"]
+
+
 def test_trace_audit_fails_on_corrupted_multi_item_write_result() -> None:
     order = _order_snapshot()
     for item in order["items"][:2]:
@@ -646,6 +656,19 @@ def test_benchmark_artifact_marks_missing_messages_as_not_well_formed() -> None:
     assert result["checked"]["benchmark_simulations_are_well_formed"] == "NOT_EVALUABLE"
     assert result["simulation_results"][0]["decision"] == "PASS"
     assert result["simulation_results"][1]["decision"] == "NOT_EVALUABLE"
+
+
+def test_benchmark_artifact_marks_malformed_tool_calls_as_not_well_formed() -> None:
+    payload = _benchmark_result_with_orders([_order_snapshot()])
+    payload["simulations"][0]["messages"].append(
+        {"role": "assistant", "tool_calls": "not-a-list"}
+    )
+
+    result = audit_tau2_benchmark_result_postwrite(payload)
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert result["checked"]["benchmark_simulations_are_well_formed"] == "NOT_EVALUABLE"
+    assert result["simulation_results"][0]["decision"] == "NOT_EVALUABLE"
 
 
 def test_benchmark_artifact_audit_can_select_one_simulation() -> None:
