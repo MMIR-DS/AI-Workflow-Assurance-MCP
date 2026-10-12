@@ -57,7 +57,7 @@ Connect using the target MCP client's stdio configuration and verify that client
 
 ## 5. Verify the built artifact and CI
 
-The CI workflow builds a wheel and installs it outside the source tree, checks the installed CLI entry point, runs the test suite and lint, validates the deterministic assurance harness report (including its `overall_passed` flag), runs the harness unit tests, smoke-tests the installed-wheel MCP stdio boundary, verifies documented CLI JSON contracts, checks the release-gate exit behavior, and executes the source mutation smoke test on Python 3.10–3.13.
+The CI workflow builds a wheel and installs it outside the source tree. Before calling the MCP protocol smoke, it launches a probe from a temporary working directory with `PYTHONPATH` removed and asserts that the imported module resolves beneath that virtual environment's installed-package directory, that both console entry points belong to the environment, and that distribution/package versions agree. CI also checks the installed CLI entry point, runs the test suite and lint, validates the deterministic assurance harness report (including its `overall_passed` flag), runs the harness unit tests, smoke-tests the installed-wheel MCP stdio boundary, verifies documented CLI JSON contracts, checks release-gate exit behavior, and executes the source mutation smoke test on Python 3.10–3.13.
 
 Before tagging, confirm that the latest workflow run for the exact candidate commit is green on every supported CI matrix version. Do not infer success from an earlier commit's run or from a partial set of checks. Passing CI is evidence about the tested commit and test cases only; it does not replace manual MCP-client integration or review of the example CLI outputs.
 
