@@ -3,6 +3,7 @@
 ## 0.1.7 (Unreleased)
 
 - Guard all seven write tools in the pinned Tau2 retail toolkit at the actual orchestrator dispatch boundary, with operation-specific fail-closed policies for exchange, cancellation, order-address changes, payment-method changes, pending-item modifications, user default-address changes, and delivered-item returns.
+- Explicitly default-deny Tau2 retail `create_order` because it has no reviewed AWA policy adapter; prove the environment callback is not reached in the no-model dispatcher smoke.
 - Validate current order/user snapshots, identity-to-owner binding, item quantity and product matching, replacement availability, payment-method authorization, exact financial/address disclosure, fresh confirmation, and retry/batch protections before simulated writes.
 - Add no-model runtime smoke coverage using Tau2's actual patched dispatch method and a counting fake environment, including cross-operation same-order batch blocking.
 - Version the dispatcher patch as V3 and reject stale V2 patched source instead of silently treating it as current; document the explicit simulator-only trust boundary and production requirements.
