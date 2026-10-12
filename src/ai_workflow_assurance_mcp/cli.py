@@ -86,7 +86,7 @@ def _parser() -> argparse.ArgumentParser:
 
     inspect_evidence = subparsers.add_parser(
         "inspect-evidence",
-        help="validate and normalize a tau2 simulator evidence manifest",
+        help="validate and normalize a tau2 simulator evidence manifest (not a release gate)",
     )
     inspect_evidence.add_argument("--manifest", required=True)
     inspect_evidence.add_argument("--output")
