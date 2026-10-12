@@ -358,7 +358,7 @@ def test_trace_audit_prefers_order_read_after_write_result() -> None:
     assert result["decision"] == "FAIL"
     assert (
         result["evidence_summary"]["post_write_snapshot_source"]
-        == "get_order_details_after_write"
+        == "get_order_details_after_latest_write_attempt"
     )
 
 
