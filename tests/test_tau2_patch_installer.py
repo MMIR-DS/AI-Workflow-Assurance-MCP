@@ -1,13 +1,14 @@
 """Regression tests for the Tau2 source patcher's fail-closed behavior."""
 from __future__ import annotations
 
+import pytest
+
 from scripts.install_tau2_prewrite_guard import (
     ORIGINAL,
     PATCH_MARKER,
     REPLACEMENT,
     patch_orchestrator_source,
 )
-import pytest
 
 
 def test_patch_is_idempotent_only_for_the_complete_reviewed_replacement() -> None:
