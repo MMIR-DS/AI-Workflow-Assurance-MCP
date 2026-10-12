@@ -362,6 +362,49 @@ def test_trace_audit_extracts_write_result_and_catalog_snapshots() -> None:
     assert result["evidence_summary"]["catalog_product_count"] == 3
 
 
+def test_trace_audit_rejects_duplicate_tool_call_ids_even_when_one_result_exists() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    # Two product-read calls share an ID, so the single tool result cannot be
+    # unambiguously attributed to either call.
+    trajectory.insert(
+        1,
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "id": "product-read-0",
+                    "name": "get_product_details",
+                    "arguments": {"product_id": "product-camera"},
+                }
+            ],
+        },
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert "product-camera" in result["evidence_summary"]["catalog_product_ids_missing"]
+
+
+def test_trace_audit_rejects_duplicate_tool_results_for_same_call_id() -> None:
+    trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
+    # A duplicate result makes the ID-to-result relationship ambiguous.
+    trajectory.insert(
+        2,
+        {
+            "role": "tool",
+            "id": "product-read-0",
+            "content": json.dumps(_catalog_snapshots()[0]),
+            "error": False,
+        },
+    )
+
+    result = audit_tau2_trace_postwrite(trajectory, "#W9348897")
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert "product-camera" in result["evidence_summary"]["catalog_product_ids_missing"]
+
+
 def test_trace_audit_returns_not_evaluable_for_malformed_message_records() -> None:
     trajectory = _trace_with_write(_order_snapshot(), _catalog_snapshots())
     trajectory.append({"role": "assistant", "tool_calls": "not-a-list"})
