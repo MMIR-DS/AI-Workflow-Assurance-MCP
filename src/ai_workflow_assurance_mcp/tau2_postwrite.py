@@ -39,7 +39,23 @@ def _catalog_entries(product_snapshots: Any) -> list[Any] | None:
             _field(product_snapshots, "variants"), Mapping
         ):
             return [product_snapshots]
-        return list(product_snapshots.values())
+
+        # For an ID-keyed mapping, the key is an explicit identifier. Copy snapshots
+        # that omit product_id and inject that key; never overwrite a conflicting ID.
+        entries: list[Any] = []
+        for product_id, snapshot in product_snapshots.items():
+            if (
+                isinstance(product_id, str)
+                and product_id
+                and isinstance(snapshot, Mapping)
+                and "product_id" not in snapshot
+            ):
+                normalized = dict(snapshot)
+                normalized["product_id"] = product_id
+                entries.append(normalized)
+            else:
+                entries.append(snapshot)
+        return entries
     return None
 
 
