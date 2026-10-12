@@ -495,6 +495,35 @@ class NotEvaluableStatusTests(unittest.TestCase):
         self.assertEqual(report["summary"]["critical_failures"], 1)
         self.assertEqual(decision["decision"], "NO_GO")
 
+    def test_explicit_null_is_an_observed_value_not_an_observation_gap(self):
+        case = {
+            "case_id": "explicit-null-decision",
+            "expected": {
+                "decision": "approve",
+                "requires_human_review": False,
+                "amount_variance": 0.0,
+            },
+            "actual": {
+                "decision": None,
+                "requires_human_review": False,
+                "amount_variance": 0.0,
+            },
+            "human_review_observed": False,
+            "cost_usd": 0.01,
+            "latency_ms": 100,
+        }
+
+        report = evaluate_suite(SPEC, [case])
+        result = report["case_results"][0]
+        check = next(item for item in result["checks"] if item["criterion_id"] == "decision_matches")
+
+        self.assertEqual(check["status"], "FAIL")
+        self.assertEqual(check["message"], "Values do not match.")
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(report["summary"]["failed_checks"], 1)
+        self.assertEqual(report["summary"]["not_evaluable_checks"], 0)
+        self.assertEqual(create_release_report(SPEC, report)["decision"], "NO_GO")
+
     def test_unobserved_check_is_not_counted_as_a_definite_failure(self):
         case = {
             "case_id": "missing-decision-evidence",
