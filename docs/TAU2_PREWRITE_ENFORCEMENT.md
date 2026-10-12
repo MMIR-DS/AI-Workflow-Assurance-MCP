@@ -2,7 +2,7 @@
 
 ## Status
 
-The manual retail smoke workflow applies a narrow patch to the pinned Tau2 orchestrator so the seven reviewed exchange, cancellation, order-address, payment-method, pending-item, user-default-address, and delivered-item-return paths consult AWA before calling the environment. The known `create_order` write is explicitly default-denied until it has a reviewed policy adapter. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
+The manual retail smoke workflow applies a narrow patch to the pinned Tau2 orchestrator. Six reviewed write paths consult AWA before calling the environment: exchange, cancellation, order-address changes, payment-method changes, user default-address changes, and delivered-item returns. Pending-item modification is currently default-denied because public reports describe possible multi-item price/options corruption in Tau2's implementation ([#317](https://github.com/sierra-research/tau2-bench/issues/317), [#318](https://github.com/sierra-research/tau2-bench/issues/318)); the pinned executor has not yet passed an independent per-item post-state check. The known `create_order` write is also default-denied because it has no reviewed policy adapter. The workflow is manual-only and model calls can incur charges. A no-model runtime smoke test runs first.
 
 Pinned upstream Tau2 revision: `4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699`.
 
@@ -42,7 +42,7 @@ The separate `evaluate_tau2_payment_prewrite` policy requires a fresh matching p
 
 ## Pending-order item modifications
 
-The `evaluate_tau2_pending_items_prewrite` policy reuses the exchange evidence checks but requires `pending` state. It also enforces Tau2's one-time-only rule: any prior modification attempt that was not explicitly blocked by AWA prevents another attempt, even if a later order read is fresh. A prior AWA `NO_GO` can be retried only after a new disclosure, fresh confirmation, and fresh order read.
+The pure `evaluate_tau2_pending_items_prewrite` adapter reuses the exchange evidence checks but requires `pending` state and enforces Tau2's one-time-only rule. However, the dispatcher currently default-denies `modify_pending_order_items` before environment execution. Public reports [#317](https://github.com/sierra-research/tau2-bench/issues/317) and [#318](https://github.com/sierra-research/tau2-bench/issues/318) describe a possible upstream defect where multiple modified items inherit the final replacement variant's price/options; Tau2's replay-based DB oracle may not expose that corruption. We will re-enable this operation only after the pinned executor passes independent per-item post-state validation or the implementation is fixed and covered by regression tests.
 
 ## User default-address changes
 
@@ -70,7 +70,7 @@ The runtime smoke test uses Tau2's actual patched `BaseOrchestrator._execute_too
 - a valid pending-order cancellation reaches the fake callback only after exact refund disclosure, while missing disclosure is blocked before callback;
 - a valid pending-order address change reaches the fake callback only after exact address disclosure, while a missing field is blocked before callback;
 - a valid pending-order payment-method change reaches the fake callback only after the proposed method is verified and disclosed, while missing disclosure is blocked before callback;
-- a valid pending-order item modification reaches the fake callback only after exact item/price disclosure, while missing disclosure is blocked before callback;
+- a plausible pending-order item modification is deliberately denied before the fake callback because the pinned executor has not passed independent per-item post-state verification;
 - a valid user default-address change reaches the fake callback only after the identity and exact address are verified, while missing disclosure is blocked before callback;
 - a valid delivered-item return reaches the fake callback only after item/payment authorization and follow-up-process disclosure, while missing disclosure is blocked before callback.
 
@@ -80,7 +80,7 @@ The full AWA test suite separately tests the evidence adapter and patcher's idem
 
 This is a **simulator-specific enforcement experiment**, not a production authorization system.
 
-- Seven write tools in the pinned Tau2 retail toolkit have simulator-specific reviewed adapters: `exchange_delivered_order_items`, `cancel_pending_order`, `modify_pending_order_address`, `modify_pending_order_payment`, `modify_pending_order_items`, `modify_user_address`, and `return_delivered_order_items`. The separately recognized `create_order` write is blocked because it has no reviewed adapter. Read-only and generic non-write tools continue through the normal dispatch path.
+- Six retail write paths are currently enabled through simulator-specific reviewed adapters: `exchange_delivered_order_items`, `cancel_pending_order`, `modify_pending_order_address`, `modify_pending_order_payment`, `modify_user_address`, and `return_delivered_order_items`. `modify_pending_order_items` has a pure preflight policy but is disabled at dispatch until its multi-item post-state semantics are independently verified. `create_order` is blocked because it has no reviewed adapter. Read-only and generic non-write tools continue through the normal dispatch path.
 - Tau2's simulated identity lookup and in-memory database are benchmark evidence, not production authentication or trusted payment authorization.
 - The normalized trajectory is not cryptographically authenticated; the adapter must not be used as proof of real customer identity.
 - This source patch is applied in the workflow checkout and is not automatically installed into the upstream Tau2 repository or a user's local environment.
