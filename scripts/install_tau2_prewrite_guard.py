@@ -365,8 +365,17 @@ REPLACEMENT = """        tool_results = []
 
 
 def patch_orchestrator_source(source: str) -> str:
-    """Patch only the expected dispatch loop; reject unknown source layouts."""
+    """Patch only the expected dispatch loop and verify idempotent installations."""
     if PATCH_MARKER in source:
+        if (
+            source.count(PATCH_MARKER) != 1
+            or source.count(REPLACEMENT) != 1
+            or ORIGINAL in source
+        ):
+            raise ValueError(
+                "Found the AWA patch marker, but the complete reviewed dispatcher "
+                "replacement is not intact. Refusing to trust a partial or modified guard."
+            )
         return source
     if source.count(ORIGINAL) != 1:
         raise ValueError(
