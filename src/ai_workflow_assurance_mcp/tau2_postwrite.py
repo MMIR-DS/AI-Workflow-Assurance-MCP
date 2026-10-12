@@ -451,10 +451,10 @@ def audit_tau2_trace_postwrite(
             order_result: Mapping[str, Any] | None = None
             if result_message is not None:
                 content = _field(result_message, "content")
-                if _field(result_message, "error", False) is True:
-                    outcome = "tool_error"
-                elif isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:
+                if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:
                     outcome = "blocked"
+                elif _field(result_message, "error", False) is True:
+                    outcome = "tool_error"
                 else:
                     parsed_result = _json_object(content)
                     if (
@@ -545,14 +545,16 @@ def audit_tau2_trace_postwrite(
         post_order = latest_read_snapshot
         snapshot_source = "get_order_details_after_latest_write_attempt"
     elif latest_attempt["outcome"] != "successful_order_snapshot":
-        return _trace_not_evaluable(
+        result = _trace_not_evaluable(
             order_id,
-            "latest_write_attempt_has_a_valid_postwrite_snapshot",
+            "successful_postwrite_order_snapshot_available",
             "The latest matching write attempt was "
             f"{latest_attempt['outcome']!r}. Its result cannot establish post-write "
             "state, and no subsequent matching get_order_details snapshot was found.",
             write_call_id=latest_attempt["call_id"],
         )
+        result["evidence_summary"]["latest_write_outcome"] = latest_attempt["outcome"]
+        return result
 
     if not isinstance(post_order, Mapping):
         return _trace_not_evaluable(
