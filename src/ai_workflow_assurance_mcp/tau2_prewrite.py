@@ -60,6 +60,37 @@ def _contains_all(text: str, values: list[str]) -> bool:
     return all(value in text for value in values)
 
 
+def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bool:
+    """Require the customer-facing disclosure to state the exact ordered old→new pairs."""
+    if (
+        not isinstance(old_items, list)
+        or not isinstance(new_items, list)
+        or not old_items
+        or len(old_items) != len(new_items)
+        or not all(isinstance(item, str) and item for item in [*old_items, *new_items])
+    ):
+        return False
+
+    # Tau2 retail item IDs are standalone numeric identifiers. Reject any unexpected
+    # item-like ID in the disclosure rather than relying on presence-only matching.
+    mentioned_ids = re.findall(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])", text)
+    expected_ids = set([*old_items, *new_items])
+    if any(item_id not in expected_ids for item_id in mentioned_ids):
+        return False
+
+    # Link each old item to its replacement with an explicit connector. The non-digit
+    # gap prevents a match from skipping over another item ID and silently changing pairs.
+    pair_pattern = re.compile(
+        r"(?<![A-Za-z0-9_])(?P<old>\d{8,})(?![A-Za-z0-9_])"
+        r"[^0-9]{1,100}?\b(?:for|to|with)\b[^0-9]{0,50}?"
+        r"(?<![A-Za-z0-9_])(?P<new>\d{8,})(?![A-Za-z0-9_])",
+        re.IGNORECASE,
+    )
+    disclosed_pairs = pair_pattern.findall(text)
+    expected_pairs = list(zip(old_items, new_items, strict=True))
+    return disclosed_pairs == expected_pairs
+
+
 def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
     """Require the latest matching order read to return that exact order, with no later write."""
     if not isinstance(order_id, str) or not order_id:
@@ -426,6 +457,7 @@ def evaluate_tau2_prewrite(
     identifiers = [order_id, *(old_items if isinstance(old_items, list) else []),
                    *(new_items if isinstance(new_items, list) else []), payment_id]
     identifiers_are_strings = all(isinstance(item, str) and item for item in identifiers)
+    pairing_disclosed = _exchange_pairing_disclosed(last_assistant_text, old_items, new_items)
     disclosure_valid = (
         identifiers_are_strings
         and last_assistant_text_index >= 0
@@ -434,6 +466,7 @@ def evaluate_tau2_prewrite(
             term in last_assistant_text.casefold()
             for term in ("exchange", "replace", "swap")
         )
+        and pairing_disclosed
     )
 
     last_user_index = -1
@@ -489,6 +522,7 @@ def evaluate_tau2_prewrite(
         "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
         "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
+        "customer_disclosed_item_pairs_match_requested_exchange": pairing_disclosed,
     }
     for check_name, passed in extra_checks.items():
         result.setdefault("checked", {})[check_name] = passed

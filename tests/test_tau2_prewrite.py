@@ -481,6 +481,43 @@ def test_tau2_adapter_blocks_exchange_without_exact_price_difference_disclosure(
     assert "exact_price_difference_and_direction_disclosed" in result["blocking_checks"]
 
 
+def test_tau2_adapter_blocks_confirmation_with_swapped_replacement_pairing() -> None:
+    trajectory, call = _trajectory_and_call()
+    # The tool call pairs old item 115... with 770... and old item 498... with 774...,
+    # but the customer-facing disclosure presents the two replacements in reverse.
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7747408585 "
+        "and old item 4983901480 for 7706410293. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, exchange both items as described and use credit_card_9513926."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "customer_disclosed_item_pairs_match_requested_exchange" in result["blocking_checks"]
+    assert result["evidence_summary"]["assistant_disclosed_exact_order_items_and_payment"] is False
+
+
+def test_tau2_adapter_blocks_unexpected_item_id_in_confirmation_disclosure() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. Also item 9999999999 was included. "
+        "The total price difference is a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, exchange both items as described and use credit_card_9513926."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert "customer_disclosed_item_pairs_match_requested_exchange" in result["blocking_checks"]
+
+
 def test_tau2_adapter_blocks_exchange_to_variant_of_another_product() -> None:
     trajectory, call = _trajectory_and_call()
     call["arguments"]["new_item_ids"] = ["7706410293", "6342039236"]
@@ -508,8 +545,8 @@ def test_tau2_adapter_allows_duplicate_old_item_ids_only_when_order_quantity_sup
     call["arguments"]["item_ids"] = ["1151293680", "1151293680"]
     call["arguments"]["new_item_ids"] = ["7706410293", "6342039236"]
     trajectory[16]["content"] = (
-        "To confirm order #W2378156: exchange item 1151293680 twice for "
-        "7706410293 and 6342039236. The total price difference is a $30.59 "
+        "To confirm order #W2378156: exchange item 1151293680 for 7706410293 "
+        "and item 1151293680 for 6342039236. The total price difference is a $30.59 "
         "refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = (
