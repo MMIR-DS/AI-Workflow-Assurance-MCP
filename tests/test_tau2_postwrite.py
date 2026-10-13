@@ -722,9 +722,32 @@ def test_benchmark_artifact_audit_is_not_evaluable_without_a_target_write() -> N
     result = audit_tau2_benchmark_result_postwrite(payload)
 
     assert result["decision"] == "NOT_EVALUABLE"
+    assert result["simulation_results"][0]["decision"] == "NOT_APPLICABLE"
     assert result["evidence_summary"]["simulations_without_matching_write"] == 1
-    assert result["blocking_checks"]
+    assert result["evidence_summary"]["not_applicable_simulation_count"] == 1
+    assert result["evidence_summary"]["not_evaluable_count"] == 0
+    assert "no_applicable_write_simulations" in result["blocking_checks"]
 
+
+
+
+def test_benchmark_artifact_excludes_read_only_tasks_from_write_audit_aggregate() -> None:
+    payload = _benchmark_result_with_orders([_order_snapshot()])
+    payload["simulations"].append(
+        {
+            "task_id": "read-only-task",
+            "messages": [{"role": "assistant", "content": "Read-only result; no write."}],
+        }
+    )
+
+    result = audit_tau2_benchmark_result_postwrite(payload)
+
+    assert result["decision"] == "PASS"
+    assert result["simulation_results"][0]["decision"] == "PASS"
+    assert result["simulation_results"][1]["decision"] == "NOT_APPLICABLE"
+    assert result["evidence_summary"]["applicable_simulation_count"] == 1
+    assert result["evidence_summary"]["not_applicable_simulation_count"] == 1
+    assert result["evidence_summary"]["not_evaluable_count"] == 0
 
 def test_benchmark_artifact_marks_missing_messages_as_not_well_formed() -> None:
     payload = _benchmark_result_with_orders([_order_snapshot()])
