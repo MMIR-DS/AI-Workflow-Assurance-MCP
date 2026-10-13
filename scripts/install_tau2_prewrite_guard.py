@@ -7,7 +7,28 @@ from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
 PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V6"
+REPLAY_PATCH_MARKER = "AWA_PREWRITE_REPLAY_NOOP_V1"
 
+REPLAY_ORIGINAL = """            if not self._is_mutating_tool(tool_call.name):
+                continue
+            response = self.get_response(tool_call)
+            try:
+                content = json.loads(response.content)"""
+
+REPLAY_REPLACEMENT = """            if not self._is_mutating_tool(tool_call.name):
+                continue
+            # AWA_PREWRITE_REPLAY_NOOP_V1: denied writes must be replayed as no-ops.
+            recorded_content = expected_response.content
+            if (
+                expected_response.error
+                and isinstance(recorded_content, str)
+                and recorded_content.startswith("AWA_PREWRITE_NO_GO:")
+            ):
+                logger.debug("Skipping AWA-blocked mutating tool during evaluator replay.")
+                continue
+            response = self.get_response(tool_call)
+            try:
+                content = json.loads(response.content)"""
 ORIGINAL = """        tool_results = []
         for tool_call in tool_calls:
             tool_result = self.environment.get_response(tool_call)
