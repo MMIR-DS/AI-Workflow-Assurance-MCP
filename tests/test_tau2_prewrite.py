@@ -152,6 +152,10 @@ def test_tau2_adapter_blocks_write_when_final_confirmation_omits_order_and_old_i
 
 def test_tau2_adapter_allows_only_after_complete_disclosure_and_affirmative_reply() -> None:
     trajectory, call = _trajectory_and_call()
+    trajectory[14]["content"] = (
+        "Item ID 7706410293 is a full-size, clicky keyboard with no backlight. "
+        "Item ID 7747408585 is a black Google Assistant-compatible thermostat."
+    )
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
         "and old item 4983901480 for 7747408585. The total price difference is "
