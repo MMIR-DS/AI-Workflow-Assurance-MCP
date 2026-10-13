@@ -658,6 +658,7 @@ def evaluate_tau2_prewrite(
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
         "complete_customer_facing_exchange_disclosure": disclosure_valid,
         "user_confirmation_references_match_requested_action": confirmation_references_valid,
+        "user_reconfirmed_after_latest_blocked_attempt": reconfirmed_after_block,
         "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
         "customer_disclosed_item_pairs_match_requested_exchange": pairing_disclosed,
     }
