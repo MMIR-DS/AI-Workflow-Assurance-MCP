@@ -104,30 +104,49 @@ def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bo
     id_pattern = re.compile(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])")
     id_matches = list(id_pattern.finditer(normalized_text))
     mentioned_ids = [match.group(0) for match in id_matches]
-    expected_sequence = [item for pair in zip(old_items, new_items, strict=True) for item in pair]
+    expected_sequence = [
+        item
+        for pair in zip(old_items, new_items, strict=True)
+        for item in pair
+    ]
 
     # Require precisely the intended item IDs, in the stated old/new order.
     # Currency amounts may contain digits, but are not 8+ digit item identifiers.
     if mentioned_ids != expected_sequence:
         return False
 
-    for pair_index, (old_item, new_item) in enumerate(zip(old_items, new_items, strict=True)):
+    for pair_index, (old_item, new_item) in enumerate(
+        zip(old_items, new_items, strict=True)
+    ):
         old_match = id_matches[pair_index * 2]
         new_match = id_matches[pair_index * 2 + 1]
         if old_match.group(0) != old_item or new_match.group(0) != new_item:
             return False
 
-        preceding_text = normalized_text[max(0, old_match.start() - 50):old_match.start()]
+        preceding_text = normalized_text[
+            max(0, old_match.start() - 50):old_match.start()
+        ]
         gap = normalized_text[old_match.end():new_match.start()]
-        connector_present = bool(re.search(r"\b(?:for|to|with)\b|(?:->|→|⇒|=+>)", gap, re.IGNORECASE))
+        connector_present = bool(
+            re.search(r"\b(?:for|to|with)\b|(?:->|→|⇒|=+>)", gap, re.IGNORECASE)
+        )
         labeled_pair_present = (
-            bool(re.search(r"\b(?:old|original|current)\s+item\b", preceding_text, re.IGNORECASE))
-            and bool(re.search(r"\b(?:new|replacement)\s+item\b", gap, re.IGNORECASE))
+            bool(
+                re.search(
+                    r"\b(?:old|original|current)\s+item\b",
+                    preceding_text,
+                    re.IGNORECASE,
+                )
+            )
+            and bool(
+                re.search(r"\b(?:new|replacement)\s+item\b", gap, re.IGNORECASE)
+            )
         )
         if not connector_present and not labeled_pair_present:
             return False
 
     return True
+
 
 def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
     """Require the latest matching order read to return that exact order, with no later write."""
