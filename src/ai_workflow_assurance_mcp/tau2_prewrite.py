@@ -795,9 +795,6 @@ def evaluate_tau2_prewrite(
         "user_reconfirmed_after_latest_blocked_attempt": reconfirmed_after_block,
         "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
         "customer_disclosed_item_pairs_match_requested_exchange": pairing_disclosed,
-        "assistant_variant_claims_match_catalog": _assistant_variant_claims_match_catalog(
-            prior_messages, new_items, variants
-        ),
     }
     for check_name, passed in extra_checks.items():
         result.setdefault("checked", {})[check_name] = passed
@@ -824,6 +821,9 @@ def evaluate_tau2_prewrite(
         "old_item_multiplicity_does_not_exceed_order_quantity": old_items_belong_to_order,
         "new_items_are_verified_available_variants": new_items_verified_available,
         "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
+        "assistant_variant_claims_match_catalog": _assistant_variant_claims_match_catalog(
+            prior_messages, new_items, variants
+        ),
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
         "price_difference": price_difference,
         "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
