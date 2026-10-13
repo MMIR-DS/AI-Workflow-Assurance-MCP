@@ -1,4 +1,4 @@
-name: Replay saved tau2 trace through AWA — independent six-mutation suite (no model calls)
+name: Replay saved tau2 trace through AWA — independent seven-mutation suite (no model calls)
 
 on:
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
             --results "$TRACE_FILE" \
             --spec examples/tau2_retail_workflow.json \
             --output-dir awa-baseline
-      - name: Run six independent raw-evidence mutation checks (no model calls)
+      - name: Run seven independent raw-evidence mutation checks (no model calls)
         run: |
           PYTHONPATH=src python scripts/verify_tau2_mutations.py \
             --results "$TRACE_FILE" \
@@ -76,7 +76,7 @@ jobs:
           assert baseline["decision"] == "GO", baseline
           assert summary["all_mutations_no_go"] is True, summary
           assert summary["tau2_oracle_unchanged_for_all_mutations"] is True, summary
-          assert summary["mutation_count"] == 6, summary
+          assert summary["mutation_count"] == 7, summary
           print(json.dumps({"trace_source": os.environ.get("TRACE_SOURCE"), "baseline": baseline["decision"], **summary}, indent=2))
           PY
       - name: Upload trace and AWA mutation evidence
