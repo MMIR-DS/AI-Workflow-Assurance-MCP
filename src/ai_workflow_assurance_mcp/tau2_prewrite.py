@@ -12,7 +12,6 @@ from typing import Any
 
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
 
-
 TAU2_WRITE_TOOLS = frozenset({
     "cancel_pending_order",
     "exchange_delivered_order_items",
