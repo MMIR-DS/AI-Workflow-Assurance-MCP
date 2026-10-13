@@ -84,7 +84,7 @@ jobs:
             --results "$TRACE_FILE" \
             --spec examples/tau2_retail_workflow.json \
             --output-dir awa-mutation-suite
-      - name: Enforce baseline GO and all mutated NO_GO outcomes
+      - name: Enforce raw-trace NO_GO and synthetic-control GO with all mutations NO_GO
         run: |
           python - <<'PY'
           import json
