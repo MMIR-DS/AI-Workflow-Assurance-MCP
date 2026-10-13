@@ -263,7 +263,8 @@ def _price_difference_disclosed(text: str, price_difference: float | None) -> bo
         return False
 
     amount = f"{abs(price_difference):.2f}"
-    matches = list(re.finditer(re.escape(amount), normalized))
+    amount_pattern = rf"(?<![\d.]){re.escape(amount)}(?![\d.])"
+    matches = list(re.finditer(amount_pattern, normalized))
     if not matches:
         return False
 
