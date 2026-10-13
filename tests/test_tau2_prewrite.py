@@ -635,6 +635,22 @@ def test_tau2_cancel_adapter_allows_pending_order_after_exact_refund_disclosure(
     assert result["evidence_summary"]["identity_and_order_ownership_verified"] is True
 
 
+def test_tau2_cancel_accepts_normalized_currency_and_refund_timing() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To cancel order #W2378156 because it is No longer needed, you will receive "
+        "a refund of $1,819.92 to credit_card_9513926 in 5–7 business days. Please confirm."
+    )
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["refund_total"] == 1819.92
+
+
 def test_tau2_cancel_adapter_blocks_confirmation_for_other_order_number_wording() -> None:
     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
 
