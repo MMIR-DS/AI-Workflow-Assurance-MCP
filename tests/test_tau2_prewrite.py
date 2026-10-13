@@ -619,7 +619,8 @@ def test_tau2_adapter_blocks_replay_of_confirmation_after_no_go() -> None:
     assert result["decision"] == "NO_GO"
     assert result["allowed"] is False
     assert result["evidence_summary"]["user_reconfirmed_after_latest_blocked_attempt"] is False
-    assert "explicit_confirmation_does_not_match_action" in result["blocking_checks"]
+    assert "user_reconfirmed_after_latest_blocked_attempt" in result["blocking_checks"]
+    assert "explicit_confirmation_does_not_match_action" not in result["blocking_checks"]
 
 
 def test_tau2_cancel_adapter_allows_pending_order_after_exact_refund_disclosure() -> None:
