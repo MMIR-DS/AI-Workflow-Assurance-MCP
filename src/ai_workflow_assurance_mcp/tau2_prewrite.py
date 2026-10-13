@@ -212,8 +212,132 @@ def _variant_details(messages: list[Any]) -> dict[str, dict[str, Any]]:
                     "product_id": product_id,
                     "price": variant.get("price"),
                     "available": variant.get("available") is True,
+                    "options": variant.get("options"),
                 }
     return details
+
+
+_VARIANT_OPTION_CLAIMS: dict[str, dict[str, tuple[str, ...]]] = {
+    "switch type": {
+        "linear": ("linear",),
+        "tactile": ("tactile",),
+        "clicky": ("clicky",),
+    },
+    "backlight": {
+        "rgb": ("rgb", "rgb backlight"),
+        "white": ("white", "white backlight"),
+        "none": ("no backlight", "without backlight", "backlight none"),
+    },
+    "size": {
+        "full size": ("full size", "full-size"),
+        "80%": ("80%",),
+        "60%": ("60%",),
+    },
+    "compatibility": {
+        "google assistant": ("google assistant", "google home"),
+        "amazon alexa": ("amazon alexa", "alexa"),
+        "apple homekit": ("apple homekit", "homekit"),
+    },
+    "color": {
+        "black": ("black",),
+        "white": ("white",),
+        "blue": ("blue",),
+        "gold": ("gold",),
+        "stainless steel": ("stainless steel",),
+    },
+}
+
+
+def _alias_is_asserted(text: str, alias: str) -> bool:
+    """Return whether an option phrase is asserted, ignoring simple explicit negation."""
+    escaped = re.escape(alias).replace(r"\ ", r"\s+")
+    pattern = re.compile(r"(?<![a-z0-9])" + escaped + r"(?![a-z0-9])")
+    for match in pattern.finditer(text):
+        preceding = text[max(0, match.start() - 28):match.start()]
+        if re.search(
+            r"\b(?:not|no|never|isn't|is not|without|unavailable)\s+(?:(?:a|an|the)\s+)?$",
+            preceding,
+        ):
+            continue
+        return True
+    return False
+
+
+def _assistant_variant_claims_match_catalog(
+    messages: list[Any],
+    new_items: Any,
+    variants: dict[str, dict[str, Any]],
+) -> bool:
+    """Reject explicit assistant claims about a selected variant that contradict catalog data.
+
+    This is a contradiction check, not a natural-language preference solver: it fails
+    only when a message that names the selected item ID also asserts a different catalog
+    value for a recognized option. Unknown option fields and omitted option claims are
+    not inferred or guessed.
+    """
+    if (
+        not isinstance(new_items, list)
+        or not new_items
+        or not all(isinstance(item_id, str) and item_id for item_id in new_items)
+    ):
+        return False
+
+    for item_id in new_items:
+        variant = variants.get(item_id)
+        options = variant.get("options") if isinstance(variant, dict) else None
+        if not isinstance(options, dict):
+            return False
+
+        for message in messages:
+            if _get(message, "role") != "assistant" or _tool_calls(message):
+                continue
+            content = _get(message, "content")
+            if not isinstance(content, str) or item_id not in content:
+                continue
+
+            normalized_content = _normalize_disclosure_text(content)
+            # Work sentence-by-sentence, and focus on the text after the chosen ID.
+            # This avoids attributing the old item's options to the new item in a
+            # disclosure such as "old RGB item A for white-backlight item B".
+            sentences = re.split(r"(?<=[.!?])\s+|\n+", normalized_content)
+            for sentence in sentences:
+                id_position = sentence.find(item_id)
+                if id_position < 0:
+                    continue
+                claim_text = sentence[id_position + len(item_id):]
+                next_item_ref = re.search(
+                    r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])",
+                    claim_text,
+                )
+                if next_item_ref:
+                    claim_text = claim_text[:next_item_ref.start()]
+
+                for option_key, actual_value in options.items():
+                    if not isinstance(option_key, str) or not isinstance(actual_value, str):
+                        continue
+                    value_aliases = _VARIANT_OPTION_CLAIMS.get(option_key.casefold())
+                    if not value_aliases:
+                        continue
+                    actual_canonical = next(
+                        (
+                            canonical
+                            for canonical, aliases in value_aliases.items()
+                            if actual_value.casefold() == canonical
+                            or actual_value.casefold() in aliases
+                        ),
+                        None,
+                    )
+                    if actual_canonical is None:
+                        continue
+                    claimed_values = {
+                        canonical
+                        for canonical, aliases in value_aliases.items()
+                        if any(_alias_is_asserted(claim_text, alias) for alias in aliases)
+                    }
+                    if claimed_values and claimed_values != {actual_canonical}:
+                        return False
+
+    return True
 
 
 def _exchange_price_difference(
@@ -662,12 +786,18 @@ def evaluate_tau2_prewrite(
         "old_item_multiplicity_does_not_exceed_order_quantity": old_items_belong_to_order,
         "new_items_are_verified_available_variants": new_items_verified_available,
         "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
+        "assistant_variant_claims_match_catalog": _assistant_variant_claims_match_catalog(
+            prior_messages, new_items, variants
+        ),
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
         "complete_customer_facing_exchange_disclosure": disclosure_valid,
         "user_confirmation_references_match_requested_action": confirmation_references_valid,
         "user_reconfirmed_after_latest_blocked_attempt": reconfirmed_after_block,
         "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
         "customer_disclosed_item_pairs_match_requested_exchange": pairing_disclosed,
+        "assistant_variant_claims_match_catalog": _assistant_variant_claims_match_catalog(
+            prior_messages, new_items, variants
+        ),
     }
     for check_name, passed in extra_checks.items():
         result.setdefault("checked", {})[check_name] = passed
