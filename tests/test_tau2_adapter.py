@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -405,6 +406,86 @@ def test_confirmation_fails_closed_when_assistant_does_not_disclose_exact_paymen
     assert release["decision"] == "NO_GO"
 
 
+
+def test_adapter_counts_only_successful_exchange_after_blocked_retries() -> None:
+    results, spec = _load_inputs()
+    _set_complete_confirmation(results)
+    sim = results["simulations"][0]
+    messages = sim["messages"]
+    call_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict)
+            and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    successful_call_message = messages[call_index]
+    successful_call = next(
+        call for call in successful_call_message["tool_calls"]
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+    success_id = str(successful_call["id"])
+    success_result_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "tool" and str(message.get("id")) == success_id
+    )
+    assert success_result_index == call_index + 1
+    successful_tool_message = messages[success_result_index]
+    assert successful_tool_message.get("error") is False
+
+    disclosure = next(
+        message for message in reversed(messages[:call_index])
+        if message.get("role") == "assistant"
+        and not message.get("tool_calls")
+        and "To confirm:" in str(message.get("content") or "")
+    )
+    affirmative = next(
+        message for message in reversed(messages[:call_index])
+        if message.get("role") == "user"
+    )
+
+    synthetic_attempts = []
+    for attempt in (1, 2):
+        if attempt > 1:
+            synthetic_attempts.extend([copy.deepcopy(disclosure), copy.deepcopy(affirmative)])
+        blocked_call = copy.deepcopy(successful_call)
+        blocked_call["id"] = f"blocked-attempt-{attempt}"
+        synthetic_attempts.extend([
+            {"role": "assistant", "tool_calls": [blocked_call]},
+            {
+                "role": "tool",
+                "id": blocked_call["id"],
+                "requestor": "assistant",
+                "error": True,
+                "content": "AWA_PREWRITE_NO_GO: complete_customer_facing_exchange_disclosure",
+            },
+        ])
+
+    # A fresh disclosure and affirmative reply follow the second denial.
+    synthetic_attempts.extend([copy.deepcopy(disclosure), copy.deepcopy(affirmative)])
+    sim["messages"] = (
+        messages[:call_index]
+        + synthetic_attempts
+        + [successful_call_message, successful_tool_message]
+        + messages[success_result_index + 1:]
+    )
+
+    case, metadata, report, release = evaluate_trace(results, spec)
+
+    assert metadata["attempted_exchange_calls"] == 3
+    assert metadata["successful_write_count"] == 1
+    assert metadata["expected_write_observed"] is True
+    assert metadata["task_completed"] is True
+    assert metadata["unobserved_checks"] == []
+    assert case["actual"]["confirmation_policy_respected"] is True
+    assert case["actual"]["final_state_matches_expected"] is True
+    assert case["actual"]["one_expected_write_only"] is True
+    assert case["actual"]["final_order_status"] == "exchange requested"
+    assert case["actual"]["policy_violation_count"] == 0
+    assert report["summary"]["pass_rate"] == 1.0
+    assert release["decision"] == "GO"
 
 def test_terminal_user_stop_without_expected_exchange_write_is_no_go() -> None:
     """A terminal trace must not pass merely because the simulator stopped cleanly."""
