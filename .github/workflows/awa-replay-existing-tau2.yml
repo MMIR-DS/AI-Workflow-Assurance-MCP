@@ -57,12 +57,27 @@ jobs:
           PY
           echo "TRACE_FILE=$TRACE_FILE" >> "$GITHUB_ENV"
           echo "TRACE_SOURCE=$TRACE_SOURCE" >> "$GITHUB_ENV"
-      - name: Generate baseline AWA reports from recorded tool outputs
+      - name: Generate baseline AWA reports and require pre-write fail-closed result
         run: |
+          set +e
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
             --results "$TRACE_FILE" \
             --spec examples/tau2_retail_workflow.json \
             --output-dir awa-baseline
+          adapter_status=$?
+          set -e
+          python - "$adapter_status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          adapter_status = int(sys.argv[1])
+          report = json.loads(Path("awa-baseline/awa_release_report.json").read_text(encoding="utf-8"))
+          cases = json.loads(Path("awa-baseline/awa_cases.json").read_text(encoding="utf-8"))
+          assert report["decision"] == "NO_GO", report
+          assert adapter_status == 2, {"adapter_status": adapter_status, "decision": report["decision"]}
+          assert cases[0]["actual"]["confirmation_policy_respected"] is False, cases[0]["actual"]
+          print("Raw task-0 trace is correctly NO_GO: required pre-write disclosure is absent.")
+          PY
       - name: Run seven independent raw-evidence mutation checks (no model calls)
         run: |
           PYTHONPATH=src python scripts/verify_tau2_mutations.py \
