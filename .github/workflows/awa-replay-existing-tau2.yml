@@ -92,7 +92,11 @@ jobs:
           from pathlib import Path
           baseline = json.loads(Path("awa-baseline/awa_release_report.json").read_text(encoding="utf-8"))
           summary = json.loads(Path("awa-mutation-suite/mutation_summary.json").read_text(encoding="utf-8"))
-          assert baseline["decision"] == "GO", baseline
+          baseline_case = json.loads(Path("awa-baseline/awa_cases.json").read_text(encoding="utf-8"))[0]
+          assert baseline["decision"] == "NO_GO", baseline
+          assert baseline_case["actual"]["confirmation_policy_respected"] is False, baseline_case["actual"]
+          # The mutation harness builds a separate synthetic complete-confirmation control.
+          assert summary["baseline_decision"] == "GO", summary
           assert summary["all_mutations_no_go"] is True, summary
           assert summary["tau2_oracle_unchanged_for_all_mutations"] is True, summary
           assert summary["mutation_count"] == 7, summary
