@@ -579,6 +579,28 @@ def evaluate_tau2_prewrite(
         and last_user_index < current_message_index
     )
 
+    # Bind the generic reference checks to observed message context rather than
+    # encoding the overall policy result into each lower-level evidence field.
+    affirmative_confirmation = _is_affirmative(last_user_text)
+    confirmation_references_valid = _confirmation_references_consistent(
+        last_user_text, order_id, old_items, new_items, payment_id
+    )
+    assistant_disclosed_order = (
+        isinstance(order_id, str) and bool(order_id)
+        and _contains_all(last_assistant_text, [order_id])
+    )
+    assistant_disclosed_old_items = (
+        isinstance(old_items, list) and bool(old_items)
+        and _contains_all(last_assistant_text, old_items)
+    )
+    assistant_disclosed_new_items = (
+        isinstance(new_items, list) and bool(new_items)
+        and _contains_all(last_assistant_text, new_items)
+    )
+    assistant_disclosed_payment = (
+        isinstance(payment_id, str) and bool(payment_id)
+        and _contains_all(last_assistant_text, [payment_id])
+    )
     evidence = {
         "identity_verified": identity_valid,
         "verified_user_id": identity_id,
@@ -586,24 +608,46 @@ def evaluate_tau2_prewrite(
         "order_id": order_id if order_is_object else None,
         "order_status": order_status,
         "confirmation": {
-            "confirmed": confirmation_valid,
+            "confirmed": affirmative_confirmation,
             "order_id": order_id,
             "old_item_ids": old_items,
             "new_item_ids": new_items,
             "payment_method_id": payment_id,
-            "confirmation_id": f"tau2-turn-{last_user_index + 1}" if confirmation_valid else "",
+            "confirmation_id": (
+                f"tau2-turn-{last_user_index + 1}"
+                if affirmative_confirmation and last_user_index >= 0
+                else ""
+            ),
         },
         "customer_facing_confirmation": {
-            "order_id": order_id,
-            "old_item_ids": old_items,
-            "new_item_ids": new_items,
-            "payment_method_id": payment_id,
-            "payment_method_disclosed": disclosure_valid,
+            "order_id": order_id if assistant_disclosed_order else None,
+            "old_item_ids": old_items if assistant_disclosed_old_items else [],
+            "new_item_ids": new_items if assistant_disclosed_new_items else [],
+            "payment_method_id": payment_id if assistant_disclosed_payment else None,
+            "payment_method_disclosed": assistant_disclosed_payment,
         },
-        "confirmation_event_sequence": last_user_index + 1 if confirmation_valid else None,
+        "confirmation_event_sequence": (
+            last_user_index + 1
+            if affirmative_confirmation and last_user_index >= 0
+            else None
+        ),
         "proposed_write_sequence": current_message_index + 1,
     }
     result = evaluate_prewrite(action, evidence, expected_order_status=expected_order_status)
+    # The generic reference evaluator uses a broad failure label. Translate it to
+    # a truthful reason for the Tau2 adapter, where confirmation fields are context-bound.
+    if "explicit_confirmation_does_not_match_action" in result.get("blocking_checks", []):
+        blocking = [
+            item for item in result["blocking_checks"]
+            if item != "explicit_confirmation_does_not_match_action"
+        ]
+        specific_failure = (
+            "explicit_customer_confirmation_missing"
+            if not affirmative_confirmation
+            else "confirmation_action_binding_invalid"
+        )
+        blocking.append(specific_failure)
+        result["blocking_checks"] = list(dict.fromkeys(blocking))
     order_snapshot_fresh = _order_snapshot_is_fresh(messages, order_id)
     extra_checks = {
         "order_snapshot_matches_requested_order": order_snapshot_matches_request,
@@ -612,6 +656,8 @@ def evaluate_tau2_prewrite(
         "new_items_are_verified_available_variants": new_items_verified_available,
         "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
+        "complete_customer_facing_exchange_disclosure": disclosure_valid,
+        "user_confirmation_references_match_requested_action": confirmation_references_valid,
         "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
         "customer_disclosed_item_pairs_match_requested_exchange": pairing_disclosed,
     }
