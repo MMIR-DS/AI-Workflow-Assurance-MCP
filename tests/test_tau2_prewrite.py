@@ -467,6 +467,7 @@ def test_tau2_adapter_accepts_labeled_pairs_with_prices_between_item_ids() -> No
     assert result["checked"]["customer_disclosed_item_pairs_match_requested_exchange"] is True
     assert result["checked"]["exact_price_difference_and_direction_disclosed"] is True
 
+
 def test_tau2_adapter_blocks_order_snapshot_for_a_different_order_id() -> None:
     trajectory, call = _trajectory_and_call()
     snapshot = _tool_result_json(trajectory, "order-read-1")
