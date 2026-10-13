@@ -57,14 +57,14 @@ python -m ai_workflow_assurance_mcp.server
 
 Tools: `validate_workflow_spec`, `run_eval_suite`, `compare_eval_runs`, `explain_failures`, `generate_release_report`, `inspect_tau2_evidence_manifest`, `inspect_github_actions_run`, and `preflight_sensitive_write`.
 
-The `preflight_sensitive_write` tool is an **exchange-specific reference check** for replacing items on a delivered retail order—not a general policy for cancellations, address changes, payment-method changes, or other writes. It does not execute or intercept a write; the caller must enforce `NO_GO`. The generic callback wrapper is not itself a policy, and the current preflight is not wired into a production Tau2 path. See [preflight scope](docs/PREWRITE_AUTHORIZATION_PREFLIGHT.md), [guarded execution boundary](docs/GUARDED_EXECUTION_BOUNDARY.md), and [Tau2 enforcement limits](docs/TAU2_PREWRITE_ENFORCEMENT.md).
+The `preflight_sensitive_write` MCP tool is an **exchange-specific reference check** for replacing items on a delivered retail order—not a general policy for other writes. The generic MCP tool itself does not intercept a write; its caller must enforce `NO_GO`. Separately, this repo's V6 installer and smoke test patch and verify the actual dispatcher in a pinned Tau2 **simulator workflow checkout**; they do not provide a production commerce integration. See [preflight scope](docs/PREWRITE_AUTHORIZATION_PREFLIGHT.md), [guarded execution boundary](docs/GUARDED_EXECUTION_BOUNDARY.md), and [Tau2 enforcement limits](docs/TAU2_PREWRITE_ENFORCEMENT.md).
 
-Evidence inspection tools return bounded, allowlisted fields and always retain `source_authenticity=not_verified` and `release_eligible=false`. `inspect_github_actions_run` reads metadata for one explicitly selected run and requires a read-only Actions token, repository, run ID, expected commit SHA, and optional freshness limit. A successful CI run is not production proof. See [GitHub Actions evidence contract](docs/GITHUB_ACTIONS_EVIDENCE_SOURCE.md) and [simulator manifest contract](docs/READ_ONLY_EVIDENCE_SOURCE_CONTRACT.md).
+Evidence inspection tools return bounded, allowlisted fields and always retain `source_authenticity=not_verified` and `release_eligible=false`. `inspect_github_actions_run` reads metadata for one explicitly selected run and requires a read-only Actions token, repository, run ID, expected commit SHA, optional freshness limit, and `AWA_GITHUB_ALLOWED_REPOSITORIES` (a comma-separated repository allowlist; requests outside it are denied before network access). A successful CI run is not production proof. See [GitHub Actions evidence contract](docs/GITHUB_ACTIONS_EVIDENCE_SOURCE.md) and [simulator manifest contract](docs/READ_ONLY_EVIDENCE_SOURCE_CONTRACT.md).
 
 ## Tests
 
 ```bash
-pytest
+python -m pytest
 ruff check src tests scripts
 ```
 
