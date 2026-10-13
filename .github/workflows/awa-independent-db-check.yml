@@ -83,7 +83,7 @@ jobs:
         run: |
           SOURCE_COMMIT="$(git rev-parse HEAD)"
           PYTHONPATH="$GITHUB_WORKSPACE/src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/verify_tau2_independent_db.py \
-            --results "$GITHUB_WORKSPACE/$TRACE_FILE" \
+            --results "$TRACE_FILE" \
             --output "$GITHUB_WORKSPACE/awa-independent-db-report.json" \
             --source-commit "$SOURCE_COMMIT"
       - name: Enforce independent database decision
