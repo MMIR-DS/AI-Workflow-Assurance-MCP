@@ -152,6 +152,10 @@ def test_tau2_adapter_blocks_write_when_final_confirmation_omits_order_and_old_i
 
 def test_tau2_adapter_allows_only_after_complete_disclosure_and_affirmative_reply() -> None:
     trajectory, call = _trajectory_and_call()
+    trajectory[14]["content"] = (
+        "Item ID 7706410293 is a full-size, clicky keyboard with no backlight. "
+        "Item ID 7747408585 is a black Google Assistant-compatible thermostat."
+    )
     trajectory[16]["content"] = (
         "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
         "and old item 4983901480 for 7747408585. The total price difference is "
@@ -167,6 +171,38 @@ def test_tau2_adapter_allows_only_after_complete_disclosure_and_affirmative_repl
     assert result["allowed"] is True
     assert result["evidence_summary"]["assistant_disclosed_exact_order_items_and_payment"] is True
     assert result["evidence_summary"]["user_affirmed_after_disclosure"] is True
+    assert result["checked"]["assistant_variant_claims_match_catalog"] is True
+
+
+def test_tau2_adapter_blocks_catalog_option_claim_that_misstates_selected_variant() -> None:
+    trajectory, call = _trajectory_and_call()
+    call["arguments"]["new_item_ids"] = ["6342039236", "7747408585"]
+    trajectory[-1]["tool_calls"] = [call]
+    trajectory[14]["content"] = (
+        "I found item ID 6342039236, which is a full-size, RGB-backlit, "
+        "clicky mechanical keyboard. Item ID 7747408585 is a black, "
+        "Google Assistant-compatible thermostat."
+    )
+    trajectory[15]["content"] = (
+        "Yes, I want those exact replacements."
+    )
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 6342039236 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $40.88 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, I confirm both exchanges and the refund to credit_card_9513926."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["checked"]["new_items_are_verified_available_variants"] is True
+    assert result["checked"]["new_items_match_the_corresponding_old_product_types"] is True
+    assert result["checked"]["assistant_variant_claims_match_catalog"] is False
+    assert "assistant_variant_claims_match_catalog" in result["blocking_checks"]
 
 
 def test_tau2_adapter_blocks_negative_reply_even_when_details_were_disclosed() -> None:
