@@ -14,6 +14,7 @@ except ImportError:  # Direct script execution puts the scripts/ directory on sy
 
 MUTATION_EXPECTATIONS = {
     "missing_confirmation": "confirmation_policy_respected",
+    "terminal_stop_before_expected_write": "one_expected_write_only",
     "selected_variant_unavailable": "selected_variants_match_product_and_request",
     "unrelated_order_state_mutated": "no_unrelated_state_mutation",
     "price_difference_mismatch": "price_difference_reconciles",
@@ -59,6 +60,24 @@ def mutate_trace(results: dict[str, Any], name: str) -> dict[str, Any]:
         sim["messages"] = [m for m in before if not (m.get("role") == "user" and "yes, that's exactly right" in str(m.get("content", "")).lower())]
         if len(sim["messages"]) == len(before):
             raise ValueError("Explicit confirmation message was not found.")
+    elif name == "terminal_stop_before_expected_write":
+        messages = sim.get("messages", [])
+        exchange_index = next(
+            (
+                index for index, message in enumerate(messages)
+                if message.get("role") == "assistant"
+                and any(
+                    isinstance(call, dict)
+                    and call.get("name") == "exchange_delivered_order_items"
+                    for call in (message.get("tool_calls") or [])
+                )
+            ),
+            None,
+        )
+        if exchange_index is None:
+            raise ValueError("Expected exchange write was not found to create premature-stop mutation.")
+        sim["messages"] = messages[:exchange_index]
+        sim["termination_reason"] = "user_stop"
     elif name == "selected_variant_unavailable":
         message, payload = _response(sim, "get_product_details", "product_id", "1656367028")
         variant = (payload.get("variants") or {}).get("7706410293")
