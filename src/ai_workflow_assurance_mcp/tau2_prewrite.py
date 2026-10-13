@@ -280,13 +280,21 @@ def _price_difference_disclosed(text: str, price_difference: float | None) -> bo
             explicitly_not_refund = re.search(
                 r"\b(?:no|not|without)\s+(?:a\s+)?refund\b", context
             )
-            if negative_direction.search(context) and not explicitly_not_refund:
+            if (
+                negative_direction.search(context)
+                and not positive_direction.search(context)
+                and not explicitly_not_refund
+            ):
                 return True
         else:
             explicitly_not_charge = re.search(
                 r"\b(?:no|not|without)\s+(?:a\s+)?(?:charge|payment)\b", context
             )
-            if positive_direction.search(context) and not explicitly_not_charge:
+            if (
+                positive_direction.search(context)
+                and not negative_direction.search(context)
+                and not explicitly_not_charge
+            ):
                 return True
     return False
 
