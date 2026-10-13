@@ -2,7 +2,7 @@
 
 ## Why this exists
 
-The 2026-10-11 Tau2 retail run reached the expected exchange state but AWA correctly returned `NO_GO`: the assistant had not disclosed the exact stored payment-method identifier in its customer-facing confirmation before the write. A post-run evaluator can detect that policy failure, but detection after a mutation is not prevention.
+The saved 2026-10-11 Tau2 retail trace shows that the exchange write ran even though its customer-facing pre-write confirmation omitted required details. The post-run adapter now evaluates that trace as `NO_GO`; a historical post-run result alone cannot prevent a write. The current repository also includes a distinct V6 integration that patches the actual dispatch loop in the pinned Tau2 simulator workflow and verifies that `NO_GO` blocks the environment callback before execution (see `TAU2_PREWRITE_ENFORCEMENT.md`). This simulator-only check is not a production commerce control.
 
 This module introduces a deterministic, **exchange-specific** preflight contract for a calling application to check before a retail item-exchange write.
 
@@ -25,7 +25,7 @@ Missing, malformed, mismatched, or incorrectly ordered evidence returns `NO_GO`.
 
 **This is a reference preflight, not a write interceptor.** It does not execute a write, connect to Tau2, verify identity-provider signatures, or independently authenticate the evidence. A caller must enforce the rule `if decision != "GO": do not invoke the write tool`. The caller must also derive the evidence from trusted sources; passing caller-controlled JSON to this function does not make that evidence trustworthy.
 
-The function is not yet wired into Tau2's actual `exchange_delivered_order_items` execution path. Therefore this addition demonstrates and tests the policy contract, but must not be described as blocking real environment writes until an executor integration is implemented and tested.
+This generic evaluator remains a policy function, not an interceptor by itself. The separate Tau2-specific pre-write adapter is patched into the pinned simulator's `BaseOrchestrator._execute_tool_calls` path by the workflow installer, with a smoke test for callback suppression on `NO_GO`. Do not conflate that simulator integration with an application production deployment.
 
 ## Test
 
