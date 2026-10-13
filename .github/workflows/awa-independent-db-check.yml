@@ -29,7 +29,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   independent-db-check:
@@ -61,25 +60,10 @@ jobs:
       - name: Install missing optional import used by tau2 package initialization
         working-directory: tau2-bench
         run: uv pip install --python .venv/bin/python websockets
-      - name: Load archived trace (fixture fallback; no model runs)
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Load committed task-0 fixture (deterministic; no artifact dependency)
         run: |
-          set +e
-          gh run download 38047957343 \
-            --repo MMIR-DS/AI-Workflow-Assurance-MCP \
-            --name tau2-standalone-retail-smoke \
-            --dir saved-tau2
-          download_status=$?
-          set -e
-          TRACE_FILE="$(find saved-tau2 -type f -path '*/tau2-standalone-retail-task0/results.json' -print -quit 2>/dev/null)"
-          if [ -z "$TRACE_FILE" ]; then
-            echo "::warning::Archived result unavailable (status=$download_status); using committed minimal fixture."
-            TRACE_FILE="tests/fixtures/tau2_task0_trace_minimal.json"
-            TRACE_SOURCE="committed_minimal_fixture"
-          else
-            TRACE_SOURCE="archived_full_tau2_result"
-          fi
+          TRACE_FILE="tests/fixtures/tau2_task0_trace_minimal.json"
+          TRACE_SOURCE="committed_minimal_fixture"
           python - "$TRACE_FILE" "$TRACE_SOURCE" <<'PY'
           import json
           import sys
