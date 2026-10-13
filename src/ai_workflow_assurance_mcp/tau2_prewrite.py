@@ -90,7 +90,7 @@ def _mentioned_order_ids(text: str) -> list[str]:
 
 
 def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bool:
-    """Require the customer-facing disclosure to state the exact ordered old→new pairs."""
+    """Require explicit, ordered old→new pairs without mistaking price digits for item IDs."""
     if (
         not isinstance(old_items, list)
         or not isinstance(new_items, list)
@@ -101,26 +101,33 @@ def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bo
         return False
 
     normalized_text = _normalize_disclosure_text(text)
+    id_pattern = re.compile(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])")
+    id_matches = list(id_pattern.finditer(normalized_text))
+    mentioned_ids = [match.group(0) for match in id_matches]
+    expected_sequence = [item for pair in zip(old_items, new_items, strict=True) for item in pair]
 
-    # Tau2 retail item IDs are standalone numeric identifiers. Reject any unexpected
-    # item-like ID in the disclosure rather than relying on presence-only matching.
-    mentioned_ids = re.findall(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])", normalized_text)
-    expected_ids = set([*old_items, *new_items])
-    if any(item_id not in expected_ids for item_id in mentioned_ids):
+    # Require precisely the intended item IDs, in the stated old/new order.
+    # Currency amounts may contain digits, but are not 8+ digit item identifiers.
+    if mentioned_ids != expected_sequence:
         return False
 
-    # Link each old item to its replacement with an explicit connector. The non-digit
-    # gap prevents a match from skipping over another item ID and silently changing pairs.
-    pair_pattern = re.compile(
-        r"(?<![A-Za-z0-9_])(?P<old>\d{8,})(?![A-Za-z0-9_])"
-        r"[^0-9]{1,100}?\b(?:for|to|with)\b[^0-9]{0,50}?"
-        r"(?<![A-Za-z0-9_])(?P<new>\d{8,})(?![A-Za-z0-9_])",
-        re.IGNORECASE,
-    )
-    disclosed_pairs = pair_pattern.findall(normalized_text)
-    expected_pairs = list(zip(old_items, new_items, strict=True))
-    return disclosed_pairs == expected_pairs
+    for pair_index, (old_item, new_item) in enumerate(zip(old_items, new_items, strict=True)):
+        old_match = id_matches[pair_index * 2]
+        new_match = id_matches[pair_index * 2 + 1]
+        if old_match.group(0) != old_item or new_match.group(0) != new_item:
+            return False
 
+        preceding_text = normalized_text[max(0, old_match.start() - 50):old_match.start()]
+        gap = normalized_text[old_match.end():new_match.start()]
+        connector_present = bool(re.search(r"\b(?:for|to|with)\b|(?:->|→|⇒|=+>)", gap, re.IGNORECASE))
+        labeled_pair_present = (
+            bool(re.search(r"\b(?:old|original|current)\s+item\b", preceding_text, re.IGNORECASE))
+            and bool(re.search(r"\b(?:new|replacement)\s+item\b", gap, re.IGNORECASE))
+        )
+        if not connector_present and not labeled_pair_present:
+            return False
+
+    return True
 
 def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
     """Require the latest matching order read to return that exact order, with no later write."""
