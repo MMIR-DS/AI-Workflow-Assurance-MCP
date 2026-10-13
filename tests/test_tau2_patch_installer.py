@@ -32,8 +32,8 @@ def test_patch_rejects_marker_without_complete_replacement() -> None:
 def test_patch_rejects_modified_guard_even_when_marker_remains() -> None:
     patched = patch_orchestrator_source(ORIGINAL)
     corrupted = patched.replace(
-        "evaluate_tau2_prewrite(self.trajectory, tool_call)",
-        "evaluate_tau2_prewrite(self.trajectory, None)",
+        "evaluate_tau2_prewrite,",
+        "evaluate_tau2_prewrite_broken,",
         1,
     )
 
