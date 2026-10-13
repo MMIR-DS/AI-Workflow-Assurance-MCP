@@ -13,6 +13,17 @@ from typing import Any
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
 
 
+TAU2_WRITE_TOOLS = frozenset({
+    "cancel_pending_order",
+    "exchange_delivered_order_items",
+    "modify_pending_order_address",
+    "modify_pending_order_items",
+    "modify_pending_order_payment",
+    "modify_user_address",
+    "return_delivered_order_items",
+})
+
+
 def _get(value: Any, key: str, default: Any = None) -> Any:
     if isinstance(value, dict):
         return value.get(key, default)
@@ -94,7 +105,7 @@ def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bo
     # gap prevents a match from skipping over another item ID and silently changing pairs.
     pair_pattern = re.compile(
         r"(?<![A-Za-z0-9_])(?P<old>\d{8,})(?![A-Za-z0-9_])"
-        r"[^0-9]{1,100}?\b(?:for|to|with)\b[^0-9]{0,50}?"
+        r"[^0-9]{1,100}?(?:\b(?:for|to|with)\b|(?:-+>|=+>|→|⇒))[^0-9]{0,50}?"
         r"(?<![A-Za-z0-9_])(?P<new>\d{8,})(?![A-Za-z0-9_])",
         re.IGNORECASE,
     )
@@ -107,15 +118,7 @@ def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
     """Require the latest matching order read to return that exact order, with no later write."""
     if not isinstance(order_id, str) or not order_id:
         return False
-    write_tools = {
-        "cancel_pending_order",
-        "exchange_delivered_order_items",
-        "modify_pending_order_address",
-        "modify_pending_order_items",
-        "modify_pending_order_payment",
-        "modify_user_address",
-        "return_delivered_order_items",
-    }
+    write_tools = TAU2_WRITE_TOOLS
     read_index = -1
     latest_read_matches = False
     for index, message in enumerate(messages):
@@ -242,17 +245,93 @@ def _exchange_price_difference(
 
 
 def _price_difference_disclosed(text: str, price_difference: float | None) -> bool:
-    """Require an explicitly labeled amount and direction in assistant disclosure."""
-    folded = text.casefold()
+    """Require a labeled, correctly directed amount; a payment-method name is not direction."""
+    folded = text.casefold().replace("–", "-").replace("—", "-")
+    folded = re.sub(r"\s+", " ", folded)
     if not any(term in folded for term in ("price difference", "price delta")):
         return False
-    if price_difference is None or f"{abs(price_difference):.2f}" not in text:
+    if price_difference is None:
         return False
-    if price_difference > 0:
-        return any(term in folded for term in ("charge", "pay an additional", "additional payment"))
-    if price_difference < 0:
-        return any(term in folded for term in ("refund", "credit"))
-    return "no price difference" in folded or "no additional charge" in folded
+    if price_difference == 0:
+        return "no price difference" in folded or "no additional charge" in folded
+
+    expected_amount = round(abs(float(price_difference)), 2)
+    amount_pattern = re.compile(
+        r"(?<![A-Za-z0-9.])\$?\s*(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)(?![A-Za-z0-9.])"
+    )
+    negative_direction = re.compile(
+        r"\b(?:refund(?:ed)?|reimburse(?:d|ment)?|money\s+back|credited\s+back|"
+        r"credit\s+back|credit(?:ed)?\s+to\s+(?:your|the)\s+(?:original\s+)?"
+        r"(?:payment\s+method|card|account)|returned\s+to\s+you)\b"
+    )
+    positive_direction = re.compile(
+        r"\b(?:charge(?:d)?|owe|pay(?:ing)?\s+(?:an\s+)?additional|"
+        r"additional\s+payment|amount\s+due)\b"
+    )
+
+    for match in amount_pattern.finditer(folded):
+        try:
+            observed_amount = round(float(match.group("amount").replace(",", "")), 2)
+        except ValueError:
+            continue
+        if observed_amount != expected_amount:
+            continue
+        context = folded[max(0, match.start() - 70):min(len(folded), match.end() + 70)]
+        if price_difference < 0:
+            explicitly_not_refund = re.search(
+                r"\b(?:no|not|without)\s+(?:a\s+)?refund\b", context
+            )
+            if negative_direction.search(context) and not explicitly_not_refund:
+                return True
+        else:
+            explicitly_not_charge = re.search(
+                r"\b(?:no|not|without)\s+(?:a\s+)?(?:charge|payment)\b", context
+            )
+            if positive_direction.search(context) and not explicitly_not_charge:
+                return True
+    return False
+
+
+def _exchange_disclosure_checks(
+    text: str,
+    order_id: Any,
+    old_items: Any,
+    new_items: Any,
+    payment_id: Any,
+    price_difference: float | None,
+) -> dict[str, bool]:
+    """Shared exchange-disclosure policy used by both pre-write and post-hoc checks."""
+    valid_item_lists = (
+        isinstance(old_items, list)
+        and isinstance(new_items, list)
+        and all(isinstance(item, str) and item for item in [*old_items, *new_items])
+    )
+    identifiers_are_strings = (
+        isinstance(order_id, str)
+        and bool(order_id)
+        and isinstance(payment_id, str)
+        and bool(payment_id)
+        and valid_item_lists
+    )
+    identifiers = [
+        order_id,
+        *(old_items if isinstance(old_items, list) else []),
+        *(new_items if isinstance(new_items, list) else []),
+        payment_id,
+    ]
+    folded = text.casefold() if isinstance(text, str) else ""
+    pairing_disclosed = _exchange_pairing_disclosed(text, old_items, new_items)
+    disclosure_valid = bool(
+        identifiers_are_strings
+        and _contains_all(text, identifiers)
+        and any(term in folded for term in ("exchange", "replace", "swap"))
+        and pairing_disclosed
+    )
+    return {
+        "disclosure_valid": disclosure_valid,
+        "pairing_disclosed": pairing_disclosed,
+        "price_difference_disclosed": _price_difference_disclosed(text, price_difference),
+    }
 
 
 def _confirmation_references_consistent(
@@ -457,7 +536,6 @@ def evaluate_tau2_prewrite(
                 last_assistant_text_index = index
                 last_assistant_text = text
 
-    price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
     latest_blocked_attempt_index = _latest_blocked_write_result_index(
         prior_messages, order_id, expected_tool_name
     )
@@ -466,20 +544,12 @@ def evaluate_tau2_prewrite(
         or last_assistant_text_index > latest_blocked_attempt_index
     )
 
-    identifiers = [order_id, *(old_items if isinstance(old_items, list) else []),
-                   *(new_items if isinstance(new_items, list) else []), payment_id]
-    identifiers_are_strings = all(isinstance(item, str) and item for item in identifiers)
-    pairing_disclosed = _exchange_pairing_disclosed(last_assistant_text, old_items, new_items)
-    disclosure_valid = (
-        identifiers_are_strings
-        and last_assistant_text_index >= 0
-        and _contains_all(last_assistant_text, identifiers)
-        and any(
-            term in last_assistant_text.casefold()
-            for term in ("exchange", "replace", "swap")
-        )
-        and pairing_disclosed
+    disclosure_checks = _exchange_disclosure_checks(
+        last_assistant_text, order_id, old_items, new_items, payment_id, price_difference
     )
+    price_difference_disclosed = disclosure_checks["price_difference_disclosed"]
+    pairing_disclosed = disclosure_checks["pairing_disclosed"]
+    disclosure_valid = disclosure_checks["disclosure_valid"] and last_assistant_text_index >= 0
 
     last_user_index = -1
     last_user_text = ""
