@@ -57,8 +57,24 @@ def _find_call_result(messages: list[Any], tool_names: set[str], predicate: Any)
     return {}, None
 
 
+def _normalize_disclosure_text(text: str) -> str:
+    """Normalize harmless typography and numeric grouping while preserving identifiers."""
+    normalized = text.casefold().translate(str.maketrans({
+        "\u2010": "-",  # hyphen
+        "\u2011": "-",  # non-breaking hyphen
+        "\u2012": "-",  # figure dash
+        "\u2013": "-",  # en dash
+        "\u2014": "-",  # em dash
+        "\u2212": "-",  # minus sign
+    }))
+    normalized = re.sub(r"(?<=\d),(?=\d)", "", normalized)
+    normalized = re.sub(r"(?:→|⇒|⟶|➜|->|=>)", " for ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
 def _contains_all(text: str, values: list[str]) -> bool:
-    return all(value in text for value in values)
+    normalized_text = _normalize_disclosure_text(text)
+    return all(_normalize_disclosure_text(value) in normalized_text for value in values)
 
 
 def _mentioned_order_ids(text: str) -> list[str]:
@@ -84,9 +100,11 @@ def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bo
     ):
         return False
 
+    normalized_text = _normalize_disclosure_text(text)
+
     # Tau2 retail item IDs are standalone numeric identifiers. Reject any unexpected
     # item-like ID in the disclosure rather than relying on presence-only matching.
-    mentioned_ids = re.findall(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])", text)
+    mentioned_ids = re.findall(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])", normalized_text)
     expected_ids = set([*old_items, *new_items])
     if any(item_id not in expected_ids for item_id in mentioned_ids):
         return False
@@ -99,7 +117,7 @@ def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bo
         r"(?<![A-Za-z0-9_])(?P<new>\d{8,})(?![A-Za-z0-9_])",
         re.IGNORECASE,
     )
-    disclosed_pairs = pair_pattern.findall(text)
+    disclosed_pairs = pair_pattern.findall(normalized_text)
     expected_pairs = list(zip(old_items, new_items, strict=True))
     return disclosed_pairs == expected_pairs
 
@@ -236,9 +254,9 @@ def _exchange_price_difference(
 
 def _price_difference_disclosed(text: str, price_difference: float | None) -> bool:
     """Require an explicitly labeled amount with a direction consistent with that amount."""
-    # Accept common thousands separators without weakening the numeric comparison.
-    normalized = re.sub(r"(?<=\d),(?=\d)", "", text)
-    folded = normalized.casefold()
+    # Share typography and thousands-separator handling with the other disclosure checks.
+    normalized = _normalize_disclosure_text(text)
+    folded = normalized
     if not any(term in folded for term in ("price difference", "price delta")):
         return False
     if price_difference is None:
@@ -724,24 +742,25 @@ def evaluate_tau2_cancel_prewrite(trajectory: Any, tool_call: Any) -> dict[str, 
                 last_assistant_text = content
 
     identifiers = [order_id, reason, *payment_ids]
+    normalized_disclosure = _normalize_disclosure_text(last_assistant_text)
+    bank_refund_timing_valid = bool(
+        re.search(r"\b5\s*(?:-|to)\s*7\s+business\s+days\b", normalized_disclosure)
+    )
     disclosure_valid = (
         all(isinstance(item, str) and item for item in identifiers)
         and last_assistant_text_index >= 0
         and _contains_all(last_assistant_text, identifiers)
-        and any(
-            term in last_assistant_text.casefold()
-            for term in ("cancel", "cancellation")
-        )
-        and refund_total_text in last_assistant_text
-        and "refund" in last_assistant_text.casefold()
+        and any(term in normalized_disclosure for term in ("cancel", "cancellation"))
+        and refund_total_text in normalized_disclosure
+        and "refund" in normalized_disclosure
         and refund_timing_valid
         and (
             not any(payment_id.startswith("gift_card_") for payment_id in payment_ids)
-            or "immediately" in last_assistant_text.casefold()
+            or "immediately" in normalized_disclosure
         )
         and (
             not any(not payment_id.startswith("gift_card_") for payment_id in payment_ids)
-            or "5-7 business days" in last_assistant_text.casefold()
+            or bank_refund_timing_valid
         )
     )
 
