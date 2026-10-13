@@ -10,9 +10,8 @@ import re
 from collections import Counter
 from typing import Any
 
-from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS as _WRITE_TOOLS
-
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
+from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS as _WRITE_TOOLS
 
 
 def _get(value: Any, key: str, default: Any = None) -> Any:
