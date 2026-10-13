@@ -7,7 +7,28 @@ from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
 PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V6"
+REPLAY_PATCH_MARKER = "AWA_PREWRITE_REPLAY_NOOP_V1"
 
+REPLAY_ORIGINAL = """            if not self._is_mutating_tool(tool_call.name):
+                continue
+            response = self.get_response(tool_call)
+            try:
+                content = json.loads(response.content)"""
+
+REPLAY_REPLACEMENT = """            if not self._is_mutating_tool(tool_call.name):
+                continue
+            # AWA_PREWRITE_REPLAY_NOOP_V1: denied writes must be replayed as no-ops.
+            recorded_content = expected_response.content
+            if (
+                expected_response.error
+                and isinstance(recorded_content, str)
+                and recorded_content.startswith("AWA_PREWRITE_NO_GO:")
+            ):
+                logger.debug("Skipping AWA-blocked mutating tool during evaluator replay.")
+                continue
+            response = self.get_response(tool_call)
+            try:
+                content = json.loads(response.content)"""
 ORIGINAL = """        tool_results = []
         for tool_call in tool_calls:
             tool_result = self.environment.get_response(tool_call)
@@ -246,6 +267,20 @@ def patch_orchestrator_source(source: str) -> str:
     return source.replace(ORIGINAL, REPLACEMENT, 1)
 
 
+def patch_environment_replay_source(source: str) -> str:
+    """Keep explicitly blocked AWA writes as no-ops during Tau2 state replay."""
+    if REPLAY_PATCH_MARKER in source:
+        if source.count(REPLAY_PATCH_MARKER) != 1 or source.count(REPLAY_REPLACEMENT) != 1:
+            raise ValueError(
+                "Found the AWA replay marker, but the complete reviewed replay replacement is not intact."
+            )
+        return source
+    if source.count(REPLAY_ORIGINAL) != 1:
+        raise ValueError(
+            "Expected exactly one unmodified mutating-tool replay block; refusing to patch an unreviewed source version."
+        )
+    return source.replace(REPLAY_ORIGINAL, REPLAY_REPLACEMENT, 1)
+
 def install(tau2_root: Path) -> Path:
     """Verify the pinned checkout and install the guard into its orchestrator."""
     revision = subprocess.run(
@@ -261,10 +296,20 @@ def install(tau2_root: Path) -> Path:
         )
 
     target = tau2_root / "src" / "tau2" / "orchestrator" / "orchestrator.py"
+    replay_target = tau2_root / "src" / "tau2" / "environment" / "environment.py"
     original_source = target.read_text(encoding="utf-8")
+    replay_source = replay_target.read_text(encoding="utf-8")
+
+    # Validate both upstream source blocks before writing either file.
     patched_source = patch_orchestrator_source(original_source)
+    patched_replay_source = patch_environment_replay_source(replay_source)
+
     if patched_source != original_source:
         target.write_text(patched_source, encoding="utf-8")
+    if patched_replay_source != replay_source:
+        replay_target.write_text(patched_replay_source, encoding="utf-8")
+    print(f"Installed {PATCH_MARKER} in {target}")
+    print(f"Installed {REPLAY_PATCH_MARKER} in {replay_target}")
     return target
 
 
@@ -273,7 +318,7 @@ def main() -> None:
     parser.add_argument("--tau2-root", type=Path, required=True)
     args = parser.parse_args()
     path = install(args.tau2_root.resolve())
-    print(f"Installed {PATCH_MARKER} in {path}")
+    print(f"Verified Tau2 guard patches at {path} and the environment replay hook.")
 
 
 if __name__ == "__main__":
