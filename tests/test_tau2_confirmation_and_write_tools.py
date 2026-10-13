@@ -4,6 +4,7 @@ from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS
 from ai_workflow_assurance_mcp.tau2_prewrite import (
     _WRITE_TOOLS,
     _evaluate_exchange_confirmation_context,
+    _exchange_pairing_disclosed,
     _is_affirmative,
     _price_difference_disclosed,
 )
@@ -83,3 +84,12 @@ def test_all_tau2_write_paths_share_one_complete_inventory() -> None:
     assert _WRITE_TOOLS is WRITE_TOOLS
     assert "from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS as awa_shared_write_tools" in REPLACEMENT
     assert 'set(awa_shared_write_tools) | {"create_order"}' in REPLACEMENT
+
+
+def test_exchange_pair_disclosure_accepts_arrow_typography_after_normalization() -> None:
+    assert _exchange_pairing_disclosed(
+        "To confirm: exchange item 1151293680 → 7706410293 and item "
+        "4983901480 → 7747408585.",
+        ["1151293680", "4983901480"],
+        ["7706410293", "7747408585"],
+    )
