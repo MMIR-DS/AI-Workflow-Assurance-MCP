@@ -60,7 +60,7 @@ def _set_complete_confirmation(results: dict) -> None:
         and "To confirm:" in str(messages[index].get("content") or "")
     )
     messages[assistant_index]["content"] = (
-        f"To confirm order {order_id}: exchange {pairs}. "
+        f"To confirm: order {order_id}: exchange {pairs}. "
         f"The total price difference is {price_disclosure}. Please confirm."
     )
     user_index = next(
