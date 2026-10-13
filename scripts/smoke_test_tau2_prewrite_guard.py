@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from tau2.data_model.message import ToolCall, ToolMessage
+from tau2.data_model.message import AssistantMessage, ToolCall, ToolMessage
 from tau2.domains.retail.environment import get_environment
 from tau2.orchestrator.orchestrator import BaseOrchestrator
 
@@ -623,7 +623,43 @@ def main() -> None:
     assert "unrecognized or unreviewed tool name" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    print("PASS: six reviewed write policies are enforced; pending-item updates, create_order, and unknown tool names are denied; explicit read passthrough works.")
+    # Evaluator state reconstruction must treat a recorded AWA denial as a no-op.
+    # Otherwise Tau2 re-executes the mutating tool while grading and reports a
+    # false infrastructure error because the environment result differs from NO_GO.
+    replay_environment = get_environment()
+    db_hash_before = replay_environment.get_db_hash()
+    replay_call = ToolCall(
+        id="replay-blocked-exchange",
+        name="exchange_delivered_order_items",
+        arguments={
+            "order_id": "#W2378156",
+            "item_ids": ["1151293680", "4983901480"],
+            "new_item_ids": ["7706410293", "7747408585"],
+            "payment_method_id": "credit_card_9513926",
+        },
+        requestor="assistant",
+    )
+    replay_denial = ToolMessage(
+        id=replay_call.id,
+        role="tool",
+        requestor="assistant",
+        content="AWA_PREWRITE_NO_GO: exchange blocked before execution. Blocking checks: exact_price_difference_and_direction_disclosed.",
+        error=True,
+    )
+    replay_environment.set_state(
+        initialization_data=None,
+        initialization_actions=None,
+        message_history=[
+            AssistantMessage(role="assistant", tool_calls=[replay_call]),
+            replay_denial,
+        ],
+        strict=True,
+    )
+    assert replay_environment.get_db_hash() == db_hash_before, (
+        "Tau2 evaluator replay mutated DB for a tool call recorded as AWA_PREWRITE_NO_GO"
+    )
+
+    print("PASS: dispatch guard and evaluator replay both preserve NO_GO as a no-op.")
 
 
 if __name__ == "__main__":
