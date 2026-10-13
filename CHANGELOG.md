@@ -20,6 +20,8 @@
 - Treat Tau2 terminal traces without the expected exchange write as task non-completion, while avoiding inflated policy-violation counts from unobservable downstream assertions.
 - Upgrade GitHub Actions workflows to pinned Node.js 24-compatible revisions and configure the Tau2 `uv` cache after checkout.
 
+- Automate the pinned Tau2 saved-trace evidence workflow for relevant pull requests and main-branch changes; expand the no-model raw-evidence mutation suite to seven cases, including terminal stop before the expected exchange write; and run independent RetailDB verification on relevant pull requests without duplicate feature-branch replays. These artifacts provide simulator/replay evidence only and do not establish production readiness.
+
 ## 0.1.6
 
 - Add a retail-exchange observation adapter contract, a threat model, and adversarial tests for event ordering, requested variants, payment consistency, price reconciliation, and notification evidence.
