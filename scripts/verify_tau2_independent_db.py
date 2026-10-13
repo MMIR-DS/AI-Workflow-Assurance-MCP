@@ -10,10 +10,18 @@ import argparse
 import copy
 import hashlib
 import json
+import sys
 from collections import Counter
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+
+# This script runs in Tau2's virtual environment, where AWA is not installed.
+# Resolve the repository source tree relative to this script rather than depending
+# on the caller's current working directory or a PYTHONPATH set by a workflow.
+AWA_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(AWA_SRC) not in sys.path:
+    sys.path.insert(0, str(AWA_SRC))
 
 from ai_workflow_assurance_mcp.tau2_prewrite import TAU2_WRITE_TOOLS
 
