@@ -41,3 +41,19 @@ def test_item_pair_disclosure_accepts_explicit_arrows() -> None:
         ["11111111", "33333333"],
         ["22222222", "44444444"],
     )
+
+
+def test_affirmative_confirmation_accepts_cancellation_action_words() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import _is_affirmative
+
+    assert _is_affirmative("Yes, cancel it.")
+    assert _is_affirmative("Yes, it's no longer needed.")
+    assert _is_affirmative("Yes, I confirm the cancellation and refund as described.")
+
+
+def test_affirmative_confirmation_still_rejects_explicit_refusal_and_qualified_yes() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import _is_affirmative
+
+    assert not _is_affirmative("No, cancel it.")
+    assert not _is_affirmative("Yes, but change the payment method instead.")
+    assert not _is_affirmative("I do not confirm.")
