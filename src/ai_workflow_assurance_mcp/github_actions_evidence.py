@@ -11,14 +11,47 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from ai_workflow_assurance_mcp.evidence_sources import EvidenceEnvelope
 
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_ALLOWED_REPOSITORIES_ENV = "AWA_GITHUB_ALLOWED_REPOSITORIES"
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _API_ROOT = "https://api.github.com"
 _MAX_RESPONSE_BYTES = 256 * 1024
+
+
+def _valid_repository_name(value: str) -> bool:
+    if not isinstance(value, str) or not _REPO_RE.fullmatch(value):
+        return False
+    owner, name = value.split("/", maxsplit=1)
+    return owner not in {".", ".."} and name not in {".", ".."}
+
+
+def _allowed_repositories_from_env() -> set[str]:
+    raw = os.getenv(_ALLOWED_REPOSITORIES_ENV, "")
+    if not raw.strip():
+        raise GitHubActionsEvidenceError(
+            f"Set {_ALLOWED_REPOSITORIES_ENV} to a comma-separated repository allowlist."
+        )
+    entries = [entry.strip() for entry in raw.split(",") if entry.strip()]
+    if not entries or any(not _valid_repository_name(entry) for entry in entries):
+        raise GitHubActionsEvidenceError(
+            f"{_ALLOWED_REPOSITORIES_ENV} contains an invalid owner/name entry."
+        )
+    return {entry.casefold() for entry in entries}
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Refuse redirects so an Authorization header can never be replayed elsewhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _open_without_redirects(request: Request, *, timeout: float):
+    return build_opener(_NoRedirectHandler).open(request, timeout=timeout)
 
 
 class GitHubActionsEvidenceError(ValueError):
@@ -43,8 +76,8 @@ class GitHubActionsRunSource:
         now: datetime | None = None,
         timeout_seconds: float = 5.0,
     ) -> None:
-        if not isinstance(repository, str) or not _REPO_RE.fullmatch(repository):
-            raise GitHubActionsEvidenceError("repository must be an owner/name pair.")
+        if not _valid_repository_name(repository):
+            raise GitHubActionsEvidenceError("repository must be a valid owner/name pair without dot components.")
         if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id <= 0:
             raise GitHubActionsEvidenceError("run_id must be a positive integer.")
         if not isinstance(expected_head_sha, str) or not _SHA_RE.fullmatch(expected_head_sha):
@@ -78,6 +111,11 @@ class GitHubActionsRunSource:
     def read_evidence(self) -> EvidenceEnvelope:
         if not isinstance(self.token, str) or not self.token.strip():
             raise GitHubActionsEvidenceError("Set GH_TOKEN or GITHUB_TOKEN with read-only Actions access.")
+        allowed_repositories = _allowed_repositories_from_env()
+        if self.repository.casefold() not in allowed_repositories:
+            raise GitHubActionsEvidenceError(
+                "Requested repository is not included in the configured GitHub evidence allowlist."
+            )
         url = f"{_API_ROOT}/repos/{self.repository}/actions/runs/{self.run_id}"
         request = Request(
             url,
@@ -90,7 +128,7 @@ class GitHubActionsRunSource:
             method="GET",
         )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with _open_without_redirects(request, timeout=self.timeout_seconds) as response:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
         except HTTPError as exc:
             # Do not echo response bodies, request headers, or credentials.

@@ -48,6 +48,95 @@ def _store(message: dict[str, Any], payload: dict[str, Any]) -> None:
     message["content"] = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
+def _prepare_valid_control(results: dict[str, Any]) -> dict[str, Any]:
+    """Create a synthetic valid confirmation while leaving the recorded fixture untouched."""
+    changed = copy.deepcopy(results)
+    simulations = changed.get("simulations")
+    if not isinstance(simulations, list) or len(simulations) != 1:
+        raise ValueError("Control preparation requires exactly one simulation.")
+    messages = simulations[0].get("messages", [])
+    exchange_index = next(
+        (
+            index for index, message in enumerate(messages)
+            if message.get("role") == "assistant"
+            and any(
+                isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+                for call in (message.get("tool_calls") or [])
+            )
+        ),
+        None,
+    )
+    if exchange_index is None:
+        raise ValueError("Control preparation requires the expected exchange write.")
+    call = next(
+        call for call in messages[exchange_index].get("tool_calls", [])
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+    args = call.get("arguments") or {}
+    old_ids = args.get("item_ids")
+    new_ids = args.get("new_item_ids")
+    payment_id = args.get("payment_method_id")
+    order_id = args.get("order_id")
+    if not (
+        isinstance(old_ids, list) and isinstance(new_ids, list)
+        and len(old_ids) == len(new_ids) and isinstance(payment_id, str)
+        and isinstance(order_id, str)
+    ):
+        raise ValueError("Exchange action has incomplete identifiers.")
+    response = next(
+        (
+            message for message in messages
+            if message.get("role") == "tool"
+            and str(message.get("id", "")) == str(call.get("id", ""))
+        ),
+        None,
+    )
+    if response is None:
+        raise ValueError("Control preparation requires the recorded exchange result.")
+    response_payload = json.loads(response.get("content", ""))
+    delta = float(response_payload["exchange_price_difference"])
+    pairs = " and ".join(
+        f"old item {old_id} for {new_id}"
+        for old_id, new_id in zip(old_ids, new_ids, strict=True)
+    )
+    if delta < 0:
+        amount = f"a {chr(36)}{abs(delta):,.2f} refund to {payment_id}"
+    elif delta > 0:
+        amount = f"an additional charge of {chr(36)}{abs(delta):,.2f} on {payment_id}"
+    else:
+        amount = f"$0.00; no price difference for {payment_id}"
+
+    assistant_index = next(
+        (
+            index for index in range(exchange_index - 1, -1, -1)
+            if messages[index].get("role") == "assistant"
+            and not messages[index].get("tool_calls")
+            and "To confirm:" in str(messages[index].get("content") or "")
+        ),
+        None,
+    )
+    if assistant_index is None:
+        raise ValueError("Control preparation requires the pre-write disclosure message.")
+    messages[assistant_index]["content"] = (
+        f"To confirm: order {order_id}: exchange {pairs}. "
+        f"The total price difference is {amount}. Please confirm."
+    )
+    user_index = next(
+        (
+            index for index in range(exchange_index - 1, assistant_index, -1)
+            if messages[index].get("role") == "user"
+        ),
+        None,
+    )
+    if user_index is None:
+        raise ValueError("Control preparation requires a user confirmation message.")
+    messages[user_index]["content"] = (
+        f"Yes, that's exactly right. Go ahead and use {payment_id} for any price differences."
+    )
+    return changed
+
+
+
 def mutate_trace(results: dict[str, Any], name: str) -> dict[str, Any]:
     """Return a copied trace with exactly one controlled evidence mutation."""
     changed = copy.deepcopy(results)
@@ -115,16 +204,19 @@ def mutate_trace(results: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def run_mutation_checks(results: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
-    case0, metadata0, report0, release0 = evaluate_trace(results, spec)
+    # The committed task-0 trace intentionally lacks the full pre-write disclosure.
+    # Use a separate synthetic control for mutation killing; do not rewrite the source fixture.
+    control_results = _prepare_valid_control(results)
+    case0, metadata0, report0, release0 = evaluate_trace(control_results, spec)
     if release0["decision"] != "GO":
-        raise AssertionError(f"Known-good trace should be GO, got {release0['decision']}")
+        raise AssertionError(f"Synthetic valid control should be GO, got {release0['decision']}")
     oracle0 = metadata0["tau2_oracle_for_comparison_only"]
     outcomes: dict[str, Any] = {
         "baseline": {"case": case0, "metadata": metadata0, "report": report0, "release": release0},
         "mutations": {},
     }
     for mutation, failed_field in MUTATION_EXPECTATIONS.items():
-        altered = mutate_trace(results, mutation)
+        altered = mutate_trace(control_results, mutation)
         case, metadata, report, release = evaluate_trace(altered, spec)
         oracle_unchanged = metadata["tau2_oracle_for_comparison_only"] == oracle0
         if not oracle_unchanged:

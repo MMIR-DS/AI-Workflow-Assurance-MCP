@@ -619,7 +619,8 @@ def test_tau2_adapter_blocks_replay_of_confirmation_after_no_go() -> None:
     assert result["decision"] == "NO_GO"
     assert result["allowed"] is False
     assert result["evidence_summary"]["user_reconfirmed_after_latest_blocked_attempt"] is False
-    assert "explicit_confirmation_does_not_match_action" in result["blocking_checks"]
+    assert "user_reconfirmed_after_latest_blocked_attempt" in result["blocking_checks"]
+    assert "explicit_confirmation_does_not_match_action" not in result["blocking_checks"]
 
 
 def test_tau2_cancel_adapter_allows_pending_order_after_exact_refund_disclosure() -> None:
@@ -633,6 +634,22 @@ def test_tau2_cancel_adapter_allows_pending_order_after_exact_refund_disclosure(
     assert result["allowed"] is True
     assert result["evidence_summary"]["refund_total"] == 1819.92
     assert result["evidence_summary"]["identity_and_order_ownership_verified"] is True
+
+
+def test_tau2_cancel_accepts_normalized_currency_and_refund_timing() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
+
+    trajectory, call = _cancel_trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To cancel order #W2378156 because it is No longer needed, you will receive "
+        "a refund of $1,819.92 to credit_card_9513926 in 5–7 business days. Please confirm."
+    )
+
+    result = evaluate_tau2_cancel_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["evidence_summary"]["refund_total"] == 1819.92
 
 
 def test_tau2_cancel_adapter_blocks_confirmation_for_other_order_number_wording() -> None:

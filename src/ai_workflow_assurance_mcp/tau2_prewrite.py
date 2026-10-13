@@ -11,6 +11,7 @@ from collections import Counter
 from typing import Any
 
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
+from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS as _WRITE_TOOLS
 
 
 def _get(value: Any, key: str, default: Any = None) -> Any:
@@ -56,8 +57,24 @@ def _find_call_result(messages: list[Any], tool_names: set[str], predicate: Any)
     return {}, None
 
 
+def _normalize_disclosure_text(text: str) -> str:
+    """Normalize harmless typography and numeric grouping while preserving identifiers."""
+    normalized = text.casefold().translate(str.maketrans({
+        "\u2010": "-",  # hyphen
+        "\u2011": "-",  # non-breaking hyphen
+        "\u2012": "-",  # figure dash
+        "\u2013": "-",  # en dash
+        "\u2014": "-",  # em dash
+        "\u2212": "-",  # minus sign
+    }))
+    normalized = re.sub(r"(?<=\d),(?=\d)", "", normalized)
+    normalized = re.sub(r"(?:→|⇒|⟶|➜|->|=>)", " for ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
 def _contains_all(text: str, values: list[str]) -> bool:
-    return all(value in text for value in values)
+    normalized_text = _normalize_disclosure_text(text)
+    return all(_normalize_disclosure_text(value) in normalized_text for value in values)
 
 
 def _mentioned_order_ids(text: str) -> list[str]:
@@ -83,9 +100,11 @@ def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bo
     ):
         return False
 
+    normalized_text = _normalize_disclosure_text(text)
+
     # Tau2 retail item IDs are standalone numeric identifiers. Reject any unexpected
     # item-like ID in the disclosure rather than relying on presence-only matching.
-    mentioned_ids = re.findall(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])", text)
+    mentioned_ids = re.findall(r"(?<![A-Za-z0-9_])\d{8,}(?![A-Za-z0-9_])", normalized_text)
     expected_ids = set([*old_items, *new_items])
     if any(item_id not in expected_ids for item_id in mentioned_ids):
         return False
@@ -98,7 +117,7 @@ def _exchange_pairing_disclosed(text: str, old_items: Any, new_items: Any) -> bo
         r"(?<![A-Za-z0-9_])(?P<new>\d{8,})(?![A-Za-z0-9_])",
         re.IGNORECASE,
     )
-    disclosed_pairs = pair_pattern.findall(text)
+    disclosed_pairs = pair_pattern.findall(normalized_text)
     expected_pairs = list(zip(old_items, new_items, strict=True))
     return disclosed_pairs == expected_pairs
 
@@ -107,15 +126,7 @@ def _order_snapshot_is_fresh(messages: list[Any], order_id: Any) -> bool:
     """Require the latest matching order read to return that exact order, with no later write."""
     if not isinstance(order_id, str) or not order_id:
         return False
-    write_tools = {
-        "cancel_pending_order",
-        "exchange_delivered_order_items",
-        "modify_pending_order_address",
-        "modify_pending_order_items",
-        "modify_pending_order_payment",
-        "modify_user_address",
-        "return_delivered_order_items",
-    }
+    write_tools = _WRITE_TOOLS
     read_index = -1
     latest_read_matches = False
     for index, message in enumerate(messages):
@@ -242,18 +253,52 @@ def _exchange_price_difference(
 
 
 def _price_difference_disclosed(text: str, price_difference: float | None) -> bool:
-    """Require an explicitly labeled amount and direction in assistant disclosure."""
-    folded = text.casefold()
+    """Require an explicitly labeled amount with a direction consistent with that amount."""
+    # Share typography and thousands-separator handling with the other disclosure checks.
+    normalized = _normalize_disclosure_text(text)
+    folded = normalized
     if not any(term in folded for term in ("price difference", "price delta")):
         return False
-    if price_difference is None or f"{abs(price_difference):.2f}" not in text:
+    if price_difference is None:
         return False
-    if price_difference > 0:
-        return any(term in folded for term in ("charge", "pay an additional", "additional payment"))
-    if price_difference < 0:
-        return any(term in folded for term in ("refund", "credit"))
-    return "no price difference" in folded or "no additional charge" in folded
 
+    amount = f"{abs(price_difference):.2f}"
+    amount_pattern = rf"(?<![\d.]){re.escape(amount)}(?![\d.])"
+    matches = list(re.finditer(amount_pattern, normalized))
+    if not matches:
+        return False
+
+    for match in matches:
+        # Direction must appear near the amount; a payment instrument named "credit_card"
+        # is not evidence that the customer was told a negative delta is a refund.
+        window = folded[max(0, match.start() - 100):min(len(folded), match.end() + 100)]
+        if price_difference < 0:
+            refund = re.search(
+                r"\brefund(?:ed|s|ing)?\b|\bmoney back\b|\breturn(?:ed)? to\b",
+                window,
+            )
+            charge = re.search(
+                r"\bcharg(?:e|ed|es|ing)\b|\bpay(?:ment)?\s+(?:an?\s+)?additional\b|"
+                r"\badditional\s+payment\b",
+                window,
+            )
+            if refund and not charge:
+                return True
+        elif price_difference > 0:
+            charge = re.search(
+                r"\bcharg(?:e|ed|es|ing)\b|\bpay(?:ing)?\s+(?:an?\s+)?additional\b|"
+                r"\badditional\s+payment\b",
+                window,
+            )
+            no_charge = re.search(
+                r"\b(?:no|without|not)\s+(?:an?\s+)?(?:additional\s+)?charge\b",
+                window,
+            )
+            if charge and not no_charge:
+                return True
+        elif "no price difference" in window or "no additional charge" in window:
+            return True
+    return False
 
 def _confirmation_references_consistent(
     text: str,
@@ -292,15 +337,22 @@ def _confirmation_references_consistent(
     return True
 
 
-def _is_affirmative(text: str) -> bool:
+def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
+    """Recognize confirmation while treating action conflicts as task-specific."""
     normalized = re.sub(r"[^a-z0-9' ]+", " ", text.casefold())
-    # A positive token is not sufficient when the reply also qualifies or changes
-    # the requested action. Prefer a false block over treating mixed intent as consent.
-    if re.search(
-        r"\b(no|don't|do not|not yet|stop|wait|change|incorrect|instead|cancel|"
+    if action == "cancel":
+        # "No longer needed" is a legitimate cancellation reason, not a negation
+        # of the user's affirmative authorization.
+        normalized = re.sub(r"\bno longer needed\b", "no_longer_needed", normalized)
+
+    negative = re.search(
+        r"\b(no|don't|do not|not yet|stop|wait|change|incorrect|instead|"
         r"but|however|except|different|another|rather|unless|maybe|not that)\b",
         normalized,
-    ):
+    )
+    if negative:
+        return False
+    if action != "cancel" and re.search(r"\bcancel(?:led|lation)?\b", normalized):
         return False
     return bool(
         re.search(
@@ -310,6 +362,46 @@ def _is_affirmative(text: str) -> bool:
         )
     )
 
+
+def _evaluate_exchange_confirmation_context(
+    disclosure_text: str,
+    confirmation_text: str,
+    order_id: Any,
+    old_items: Any,
+    new_items: Any,
+    payment_id: Any,
+    price_difference: float | None,
+) -> dict[str, bool]:
+    """Apply the same disclosure and confirmation rules to live and post-hoc traces."""
+    disclosure_text = disclosure_text if isinstance(disclosure_text, str) else ""
+    confirmation_text = confirmation_text if isinstance(confirmation_text, str) else ""
+    old_ids = old_items if isinstance(old_items, list) else []
+    new_ids = new_items if isinstance(new_items, list) else []
+    identifiers = [order_id, *old_ids, *new_ids, payment_id]
+    identifiers_are_strings = all(isinstance(item, str) and item for item in identifiers)
+    pairing_disclosed = _exchange_pairing_disclosed(disclosure_text, old_ids, new_ids)
+    disclosure_valid = bool(
+        identifiers_are_strings
+        and disclosure_text.strip()
+        and _contains_all(disclosure_text, identifiers)
+        and any(term in disclosure_text.casefold() for term in ("exchange", "replace", "swap"))
+        and pairing_disclosed
+    )
+    price_difference_disclosed = _price_difference_disclosed(disclosure_text, price_difference)
+    confirmation_valid = bool(
+        disclosure_valid
+        and price_difference_disclosed
+        and _is_affirmative(confirmation_text)
+        and _confirmation_references_consistent(
+            confirmation_text, order_id, old_ids, new_ids, payment_id
+        )
+    )
+    return {
+        "disclosure_valid": disclosure_valid,
+        "pairing_disclosed": pairing_disclosed,
+        "price_difference_disclosed": price_difference_disclosed,
+        "confirmation_valid": confirmation_valid,
+    }
 
 def _latest_blocked_write_result_index(
     messages: list[Any], order_id: Any, tool_name: str
@@ -457,28 +549,12 @@ def evaluate_tau2_prewrite(
                 last_assistant_text_index = index
                 last_assistant_text = text
 
-    price_difference_disclosed = _price_difference_disclosed(last_assistant_text, price_difference)
     latest_blocked_attempt_index = _latest_blocked_write_result_index(
         prior_messages, order_id, expected_tool_name
     )
     reconfirmed_after_block = (
         latest_blocked_attempt_index < 0
         or last_assistant_text_index > latest_blocked_attempt_index
-    )
-
-    identifiers = [order_id, *(old_items if isinstance(old_items, list) else []),
-                   *(new_items if isinstance(new_items, list) else []), payment_id]
-    identifiers_are_strings = all(isinstance(item, str) and item for item in identifiers)
-    pairing_disclosed = _exchange_pairing_disclosed(last_assistant_text, old_items, new_items)
-    disclosure_valid = (
-        identifiers_are_strings
-        and last_assistant_text_index >= 0
-        and _contains_all(last_assistant_text, identifiers)
-        and any(
-            term in last_assistant_text.casefold()
-            for term in ("exchange", "replace", "swap")
-        )
-        and pairing_disclosed
     )
 
     last_user_index = -1
@@ -489,17 +565,43 @@ def evaluate_tau2_prewrite(
             if isinstance(text, str):
                 last_user_index = index
                 last_user_text = text
+
+    confirmation_context = _evaluate_exchange_confirmation_context(
+        last_assistant_text, last_user_text, order_id, old_items, new_items,
+        payment_id, price_difference,
+    )
+    price_difference_disclosed = confirmation_context["price_difference_disclosed"]
+    pairing_disclosed = confirmation_context["pairing_disclosed"]
+    disclosure_valid = confirmation_context["disclosure_valid"]
     confirmation_valid = (
-        disclosure_valid
+        confirmation_context["confirmation_valid"]
         and last_user_index > last_assistant_text_index
-        and _is_affirmative(last_user_text)
-        and _confirmation_references_consistent(
-            last_user_text, order_id, old_items, new_items, payment_id
-        )
         and reconfirmed_after_block
         and last_user_index < current_message_index
     )
 
+    # Bind the generic reference checks to observed message context rather than
+    # encoding the overall policy result into each lower-level evidence field.
+    affirmative_confirmation = _is_affirmative(last_user_text)
+    confirmation_references_valid = _confirmation_references_consistent(
+        last_user_text, order_id, old_items, new_items, payment_id
+    )
+    assistant_disclosed_order = (
+        isinstance(order_id, str) and bool(order_id)
+        and _contains_all(last_assistant_text, [order_id])
+    )
+    assistant_disclosed_old_items = (
+        isinstance(old_items, list) and bool(old_items)
+        and _contains_all(last_assistant_text, old_items)
+    )
+    assistant_disclosed_new_items = (
+        isinstance(new_items, list) and bool(new_items)
+        and _contains_all(last_assistant_text, new_items)
+    )
+    assistant_disclosed_payment = (
+        isinstance(payment_id, str) and bool(payment_id)
+        and _contains_all(last_assistant_text, [payment_id])
+    )
     evidence = {
         "identity_verified": identity_valid,
         "verified_user_id": identity_id,
@@ -507,24 +609,46 @@ def evaluate_tau2_prewrite(
         "order_id": order_id if order_is_object else None,
         "order_status": order_status,
         "confirmation": {
-            "confirmed": confirmation_valid,
+            "confirmed": affirmative_confirmation,
             "order_id": order_id,
             "old_item_ids": old_items,
             "new_item_ids": new_items,
             "payment_method_id": payment_id,
-            "confirmation_id": f"tau2-turn-{last_user_index + 1}" if confirmation_valid else "",
+            "confirmation_id": (
+                f"tau2-turn-{last_user_index + 1}"
+                if affirmative_confirmation and last_user_index >= 0
+                else ""
+            ),
         },
         "customer_facing_confirmation": {
-            "order_id": order_id,
-            "old_item_ids": old_items,
-            "new_item_ids": new_items,
-            "payment_method_id": payment_id,
-            "payment_method_disclosed": disclosure_valid,
+            "order_id": order_id if assistant_disclosed_order else None,
+            "old_item_ids": old_items if assistant_disclosed_old_items else [],
+            "new_item_ids": new_items if assistant_disclosed_new_items else [],
+            "payment_method_id": payment_id if assistant_disclosed_payment else None,
+            "payment_method_disclosed": assistant_disclosed_payment,
         },
-        "confirmation_event_sequence": last_user_index + 1 if confirmation_valid else None,
+        "confirmation_event_sequence": (
+            last_user_index + 1
+            if affirmative_confirmation and last_user_index >= 0
+            else None
+        ),
         "proposed_write_sequence": current_message_index + 1,
     }
     result = evaluate_prewrite(action, evidence, expected_order_status=expected_order_status)
+    # The generic reference evaluator uses a broad failure label. Translate it to
+    # a truthful reason for the Tau2 adapter, where confirmation fields are context-bound.
+    if "explicit_confirmation_does_not_match_action" in result.get("blocking_checks", []):
+        blocking = [
+            item for item in result["blocking_checks"]
+            if item != "explicit_confirmation_does_not_match_action"
+        ]
+        specific_failure = (
+            "explicit_customer_confirmation_missing"
+            if not affirmative_confirmation
+            else "confirmation_action_binding_invalid"
+        )
+        blocking.append(specific_failure)
+        result["blocking_checks"] = list(dict.fromkeys(blocking))
     order_snapshot_fresh = _order_snapshot_is_fresh(messages, order_id)
     extra_checks = {
         "order_snapshot_matches_requested_order": order_snapshot_matches_request,
@@ -533,6 +657,9 @@ def evaluate_tau2_prewrite(
         "new_items_are_verified_available_variants": new_items_verified_available,
         "new_items_match_the_corresponding_old_product_types": new_items_match_old_product_types,
         "payment_method_belongs_to_order": payment_method_belongs_to_order,
+        "complete_customer_facing_exchange_disclosure": disclosure_valid,
+        "user_confirmation_references_match_requested_action": confirmation_references_valid,
+        "user_reconfirmed_after_latest_blocked_attempt": reconfirmed_after_block,
         "exact_price_difference_and_direction_disclosed": price_difference_disclosed,
         "customer_disclosed_item_pairs_match_requested_exchange": pairing_disclosed,
     }
@@ -663,24 +790,25 @@ def evaluate_tau2_cancel_prewrite(trajectory: Any, tool_call: Any) -> dict[str, 
                 last_assistant_text = content
 
     identifiers = [order_id, reason, *payment_ids]
+    normalized_disclosure = _normalize_disclosure_text(last_assistant_text)
+    bank_refund_timing_valid = bool(
+        re.search(r"\b5\s*(?:-|to)\s*7\s+business\s+days\b", normalized_disclosure)
+    )
     disclosure_valid = (
         all(isinstance(item, str) and item for item in identifiers)
         and last_assistant_text_index >= 0
         and _contains_all(last_assistant_text, identifiers)
-        and any(
-            term in last_assistant_text.casefold()
-            for term in ("cancel", "cancellation")
-        )
-        and refund_total_text in last_assistant_text
-        and "refund" in last_assistant_text.casefold()
+        and any(term in normalized_disclosure for term in ("cancel", "cancellation"))
+        and refund_total_text in normalized_disclosure
+        and "refund" in normalized_disclosure
         and refund_timing_valid
         and (
             not any(payment_id.startswith("gift_card_") for payment_id in payment_ids)
-            or "immediately" in last_assistant_text.casefold()
+            or "immediately" in normalized_disclosure
         )
         and (
             not any(not payment_id.startswith("gift_card_") for payment_id in payment_ids)
-            or "5-7 business days" in last_assistant_text.casefold()
+            or bank_refund_timing_valid
         )
     )
 
@@ -701,7 +829,7 @@ def evaluate_tau2_cancel_prewrite(trajectory: Any, tool_call: Any) -> dict[str, 
     confirmation_valid = (
         disclosure_valid
         and last_user_index > last_assistant_text_index
-        and _is_affirmative(last_user_text)
+        and _is_affirmative(last_user_text, action="cancel")
         and _cancel_confirmation_references_consistent(
             last_user_text, order_id, reason, payment_ids
         )

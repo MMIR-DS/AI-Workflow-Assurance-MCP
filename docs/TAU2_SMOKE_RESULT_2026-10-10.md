@@ -1,5 +1,8 @@
 # tau2 Retail Smoke Run — 2026-10-10
 
+> **Historical, one-task benchmark record.** This page preserves the original model-backed Tau2 run and its recorded reward/state-match outputs. Those benchmark metrics are not AWA authorization evidence. Since this run, the pinned Tau2 dispatcher has a separate V6 simulator-only pre-write guard and the current adapter evaluates the saved raw trace as `NO_GO` when required pre-write disclosure is absent. See the current enforcement docs and CI workflows for current behavior; this 2026-10-10 run itself was not rerun under V6.
+
+
 ## Result
 
 - Benchmark: public `sierra-research/tau2-bench`, retail domain, task ID `0`
@@ -18,7 +21,7 @@ The first attempt was rejected by OpenRouter because the default request asked f
 
 ## Interpretation limits
 
-This confirms that the selected model completed one simulated retail exchange task in tau2. It does **not** prove that AI Workflow Assurance independently executed or evaluated the agent, nor does one task establish general reliability. The current benchmark workflow remains separate from AWA until a reviewed adapter maps the raw tau2 trace and final environment state into AWA's normalized observation contract and produces a deterministic AWA report.
+This confirms that the selected model completed one simulated retail exchange task in tau2. It does **not** prove that AI Workflow Assurance independently executed or evaluated the agent, nor does one task establish general reliability. This historical run predates the current adapter and V6 dispatcher guard. Current no-model CI workflows separately test the normalized saved-trace adapter, raw-trace `NO_GO`, pinned dispatcher callback suppression, and independent database-state verification. Those checks do not retroactively change how this historical model-backed run executed.
 
 ## Artifacts
 

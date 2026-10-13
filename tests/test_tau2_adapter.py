@@ -18,12 +18,67 @@ def _load_inputs() -> tuple[dict, dict]:
     )
 
 
-def test_task0_release_uses_order_catalog_and_action_return_payloads() -> None:
+def _set_complete_confirmation(results: dict) -> None:
+    """Build a synthetic, fully disclosed control from the recorded order/action payloads."""
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    call = next(
+        call for call in messages[exchange_index].get("tool_calls", [])
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+    args = call.get("arguments") or {}
+    old_ids = args["item_ids"]
+    new_ids = args["new_item_ids"]
+    order_id = args["order_id"]
+    payment_id = args["payment_method_id"]
+    result = next(
+        message for message in messages
+        if message.get("role") == "tool" and str(message.get("id")) == str(call.get("id"))
+    )
+    delta = float(json.loads(result["content"])["exchange_price_difference"])
+    pairs = " and ".join(
+        f"old item {old_id} for {new_id}" for old_id, new_id in zip(old_ids, new_ids, strict=True)
+    )
+    if delta < 0:
+        price_disclosure = f"a ${abs(delta):,.2f} refund to {payment_id}"
+    elif delta > 0:
+        price_disclosure = f"an additional charge of ${abs(delta):,.2f} on {payment_id}"
+    else:
+        price_disclosure = f"$0.00; no price difference for {payment_id}"
+
+    assistant_index = next(
+        index for index in range(exchange_index - 1, -1, -1)
+        if messages[index].get("role") == "assistant"
+        and not messages[index].get("tool_calls")
+        and "To confirm:" in str(messages[index].get("content") or "")
+    )
+    messages[assistant_index]["content"] = (
+        f"To confirm: order {order_id}: exchange {pairs}. "
+        f"The total price difference is {price_disclosure}. Please confirm."
+    )
+    user_index = next(
+        index for index in range(exchange_index - 1, assistant_index, -1)
+        if messages[index].get("role") == "user"
+    )
+    messages[user_index]["content"] = (
+        f"Yes, that's exactly right. Go ahead and use {payment_id} for any price differences."
+    )
+
+
+def test_task0_trace_blocks_when_prewrite_disclosure_is_incomplete() -> None:
     results, spec = _load_inputs()
     case, metadata, report, release = evaluate_trace(results, spec)
-    assert release["decision"] == "GO"
-    assert report["summary"]["pass_rate"] == 1.0
+    assert release["decision"] == "NO_GO"
+    assert report["summary"]["pass_rate"] < 1.0
     assert report["summary"]["total_checks"] == 16
+    assert case["actual"]["confirmation_policy_respected"] is False
     assert case["actual"]["price_difference_reconciles"] is True
     assert case["actual"]["no_unrelated_state_mutation"] is True
     assert case["actual"]["selected_variants_match_product_and_request"] is True
@@ -35,6 +90,7 @@ def test_task0_release_uses_order_catalog_and_action_return_payloads() -> None:
 
 def test_confirmation_accepts_affirmative_reply_to_details_disclosed_by_assistant() -> None:
     results, spec = _load_inputs()
+    _set_complete_confirmation(results)
     messages = results["simulations"][0]["messages"]
     confirmation = next(
         message for message in messages
@@ -57,6 +113,7 @@ def test_confirmation_accepts_affirmative_reply_to_details_disclosed_by_assistan
 
 def test_confirmation_fails_closed_when_assistant_did_not_disclose_all_new_items() -> None:
     results, spec = _load_inputs()
+    _set_complete_confirmation(results)
     messages = results["simulations"][0]["messages"]
     assistant_confirmation = next(
         message for message in messages
@@ -75,6 +132,7 @@ def test_confirmation_fails_closed_when_assistant_did_not_disclose_all_new_items
 
 def test_explicitly_negated_confirmation_fails_closed() -> None:
     results, spec = _load_inputs()
+    _set_complete_confirmation(results)
     messages = results["simulations"][0]["messages"]
     confirmation = next(
         message for message in messages
@@ -91,6 +149,7 @@ def test_explicitly_negated_confirmation_fails_closed() -> None:
 
 def test_release_decision_does_not_depend_on_tau2_reward_oracle_fields() -> None:
     results, spec = _load_inputs()
+    _set_complete_confirmation(results)
     results["simulations"][0]["reward_info"] = {
         "reward": 0.0,
         "db_check": {"db_match": False, "db_reward": 0.0},
@@ -325,6 +384,7 @@ def test_full_database_invariant_rejects_mutated_product_or_other_order() -> Non
 
 def test_confirmation_fails_closed_when_assistant_does_not_disclose_exact_payment_method():
     results, spec = _load_inputs()
+    _set_complete_confirmation(results)
     messages = results["simulations"][0]["messages"]
     assistant_confirmation = next(
         message for message in messages

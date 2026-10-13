@@ -1,5 +1,8 @@
 # AWA Independent Trace-Evidence Mutation Result — Retail Task 0 — 2026-10-10
 
+> **Historical result; superseded by the v0.1.7 pre-write review.** This document records the six-fault post-run protocol that was executed on 2026-10-10. It is retained as an audit record and must not be read as the current policy result for the committed raw task-0 trace: the current adapter correctly returns `NO_GO` because required pre-write disclosure is absent. The current deterministic workflow uses a separate synthetic valid control and seven independent mutations. See the current PR/CI run for the authoritative result.
+
+
 ## Purpose
 
 Verify that AWA rejects specific defects visible in recorded retail tool evidence without using tau2's `reward`, `db_match`, or expected action-check fields to make its release decision.

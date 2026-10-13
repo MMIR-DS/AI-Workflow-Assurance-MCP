@@ -11,7 +11,13 @@ from types import SimpleNamespace
 from typing import Any
 
 from tau2.data_model.message import ToolCall, ToolMessage
+from tau2.domains.retail.environment import get_environment
 from tau2.orchestrator.orchestrator import BaseOrchestrator
+
+from ai_workflow_assurance_mcp.tau2_constants import (
+    TAU2_PASSTHROUGH_TOOLS,
+    WRITE_TOOLS,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "tau2_task0_trace_minimal.json"
@@ -348,7 +354,44 @@ def _setup_return() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
+def _assert_pinned_tool_coverage() -> None:
+    """Fail if a pinned Tau2 tool is neither explicitly allowed nor classified as a write."""
+    environment = get_environment()
+    toolkit = environment.tools
+    if toolkit is None:
+        raise AssertionError("Pinned Tau2 retail environment has no toolkit.")
+    actual_names = set(toolkit.get_tools())
+    classified_names = set(WRITE_TOOLS) | set(TAU2_PASSTHROUGH_TOOLS)
+    missing = sorted(actual_names - classified_names)
+    if missing:
+        raise AssertionError(
+            "Pinned Tau2 retail tools lack an explicit AWA dispatcher classification: "
+            f"{missing}"
+        )
+
+    actual_mutating = {
+        name for name in actual_names if toolkit.tool_mutates_state(name)
+    }
+    unreviewed_mutating = sorted(actual_mutating - set(WRITE_TOOLS))
+    falsely_classified_nonmutating = sorted(set(WRITE_TOOLS) & actual_names - actual_mutating)
+    if unreviewed_mutating:
+        raise AssertionError(
+            f"Tau2 marks unclassified AWA tools as state-mutating: {unreviewed_mutating}"
+        )
+    if falsely_classified_nonmutating:
+        raise AssertionError(
+            "The shared AWA write inventory includes pinned tools Tau2 does not mark "
+            f"state-mutating: {falsely_classified_nonmutating}"
+        )
+
+    print(
+        "PASS: pinned Tau2 retail toolkit classification covers "
+        f"{len(actual_names)} tools ({len(actual_mutating)} mutating)."
+    )
+
+
 def main() -> None:
+    _assert_pinned_tool_coverage()
     # The recorded baseline omits the order ID and old item IDs in the final
     # customer-facing confirmation. The patched dispatch must block before
     # the environment/write callback is called.

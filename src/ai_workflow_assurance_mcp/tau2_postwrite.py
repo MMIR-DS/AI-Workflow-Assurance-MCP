@@ -914,21 +914,24 @@ def audit_tau2_benchmark_result_postwrite(
                     target_order_ids.append(arguments["order_id"])
 
         if not target_order_ids:
-            audit = _trace_not_evaluable(
-                None,
-                "matching_write_attempt_available",
-                f"No {write_tool_name!r} call with a valid order_id was found in this simulation.",
-            )
             simulation_results.append(
                 {
                     "simulation_index": index,
                     "task_id": task_id,
-                    "decision": "NOT_EVALUABLE",
+                    "decision": "NOT_APPLICABLE",
                     "order_audits": [],
-                    "not_evaluable": audit["not_evaluable"],
+                    "not_applicable": [
+                        {
+                            "check": "matching_write_attempt_available",
+                            "detail": (
+                                f"No {write_tool_name!r} call with a valid order_id "
+                                "was found in this simulation; no write-specific audit applies."
+                            ),
+                        }
+                    ],
                 }
             )
-            simulation_decisions.append("NOT_EVALUABLE")
+            simulation_decisions.append("NOT_APPLICABLE")
             simulations_without_write += 1
             continue
 
@@ -965,11 +968,13 @@ def audit_tau2_benchmark_result_postwrite(
         )
         simulation_decisions.append(simulation_decision)
 
-    if any(decision == "FAIL" for decision in simulation_decisions):
+    applicable_decisions = [
+        item for item in simulation_decisions if item != "NOT_APPLICABLE"
+    ]
+    if any(item == "FAIL" for item in applicable_decisions):
         decision = "FAIL"
-    elif not simulation_decisions or any(
-        decision != "PASS" for decision in simulation_decisions
-    ):
+    elif not applicable_decisions or any(item != "PASS" for item in applicable_decisions):
+        # An all-read-only selection has no applicable write audit and cannot PASS.
         decision = "NOT_EVALUABLE"
     else:
         decision = "PASS"
@@ -995,6 +1000,8 @@ def audit_tau2_benchmark_result_postwrite(
         blocking_checks.append("one_or_more_simulations_not_evaluable")
     if simulations_without_usable_trace:
         blocking_checks.append("one_or_more_simulations_have_no_usable_write_trace")
+    if not applicable_decisions:
+        blocking_checks.append("no_applicable_write_simulations")
 
     return {
         "decision": decision,
@@ -1004,6 +1011,9 @@ def audit_tau2_benchmark_result_postwrite(
             ),
             "all_target_order_audits_passed": (
                 "PASS" if decision == "PASS" else decision
+            ),
+            "at_least_one_applicable_write_simulation": (
+                "PASS" if applicable_decisions else "NOT_EVALUABLE"
             ),
         },
         "blocking_checks": blocking_checks,
@@ -1015,6 +1025,10 @@ def audit_tau2_benchmark_result_postwrite(
             "order_audit_count": len(order_audits),
             "simulations_without_matching_write": simulations_without_write,
             "not_evaluable_simulation_count": not_evaluable_simulation_count,
+            "not_applicable_simulation_count": sum(
+                item["decision"] == "NOT_APPLICABLE" for item in simulation_results
+            ),
+            "applicable_simulation_count": len(applicable_decisions),
             "simulations_without_usable_trace": simulations_without_usable_trace,
             "fail_count": fail_count,
             "not_evaluable_count": not_evaluable_count,

@@ -61,26 +61,11 @@ jobs:
       - name: Install missing optional import used by tau2 package initialization
         working-directory: tau2-bench
         run: uv pip install --python .venv/bin/python websockets
-      - name: Load archived trace (fixture fallback; no model runs)
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Load deterministic committed task-0 fixture (no model runs or expiring artifacts)
         run: |
-          set +e
-          gh run download 38047957343 \
-            --repo MMIR-DS/AI-Workflow-Assurance-MCP \
-            --name tau2-standalone-retail-smoke \
-            --dir saved-tau2
-          download_status=$?
-          set -e
-          TRACE_FILE="$(find saved-tau2 -type f -path '*/tau2-standalone-retail-task0/results.json' -print -quit 2>/dev/null)"
-          if [ -z "$TRACE_FILE" ]; then
-            echo "::warning::Archived result unavailable (status=$download_status); using committed minimal fixture."
-            TRACE_FILE="tests/fixtures/tau2_task0_trace_minimal.json"
-            TRACE_SOURCE="committed_minimal_fixture"
-          else
-            TRACE_SOURCE="archived_full_tau2_result"
-          fi
-          python - "$TRACE_FILE" "$TRACE_SOURCE" <<'PY'
+          TRACE_FILE="$GITHUB_WORKSPACE/tests/fixtures/tau2_task0_trace_minimal.json"
+          TRACE_SOURCE="committed_minimal_fixture"
+          python - "$TRACE_FILE" <<'PY'
           import json
           import sys
           from pathlib import Path
@@ -88,8 +73,8 @@ jobs:
           results = json.loads(path.read_text(encoding="utf-8"))
           source_commit = str((results.get("info") or {}).get("git_commit") or "")
           if not source_commit:
-              raise SystemExit("Trace does not declare info.git_commit.")
-          print(f"Loaded {sys.argv[2]}: {path}; bytes={path.stat().st_size}; trace_source_commit={source_commit}")
+              raise SystemExit("Fixture does not declare info.git_commit.")
+          print(f"Loaded committed fixture: {path}; bytes={path.stat().st_size}; trace_source_commit={source_commit}")
           PY
           echo "TRACE_FILE=$TRACE_FILE" >> "$GITHUB_ENV"
           echo "TRACE_SOURCE=$TRACE_SOURCE" >> "$GITHUB_ENV"
@@ -97,8 +82,8 @@ jobs:
         working-directory: tau2-bench
         run: |
           SOURCE_COMMIT="$(git rev-parse HEAD)"
-          uv run python ../scripts/verify_tau2_independent_db.py \
-            --results "$GITHUB_WORKSPACE/$TRACE_FILE" \
+          PYTHONPATH="$GITHUB_WORKSPACE/src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/verify_tau2_independent_db.py \
+            --results "$TRACE_FILE" \
             --output "$GITHUB_WORKSPACE/awa-independent-db-report.json" \
             --source-commit "$SOURCE_COMMIT"
       - name: Enforce independent database decision

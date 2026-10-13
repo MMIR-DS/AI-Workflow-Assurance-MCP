@@ -17,6 +17,8 @@ def test_patch_is_idempotent_only_for_the_complete_reviewed_replacement() -> Non
     assert PATCH_MARKER in patched
     assert patched.count(PATCH_MARKER) == 1
     assert patched.count(REPLACEMENT) == 1
+    assert "TAU2_PASSTHROUGH_TOOLS as awa_shared_passthrough_tools" in REPLACEMENT
+    assert "set(awa_shared_passthrough_tools)" in REPLACEMENT
     assert patch_orchestrator_source(patched) == patched
 
 

@@ -16,6 +16,14 @@ NOW = datetime(2026, 10, 11, 7, 0, tzinfo=timezone.utc)
 SHA = "a" * 40
 
 
+@pytest.fixture(autouse=True)
+def allow_test_repository(monkeypatch):
+    monkeypatch.setenv(
+        "AWA_GITHUB_ALLOWED_REPOSITORIES",
+        "MMIR-DS/AI-Workflow-Assurance-MCP",
+    )
+
+
 def payload(**overrides):
     result = {
         "id": 12345,
@@ -63,7 +71,7 @@ def source(**kwargs):
 
 def test_success_returns_allowlisted_non_release_envelope():
     with patch(
-        "ai_workflow_assurance_mcp.github_actions_evidence.urlopen",
+        "ai_workflow_assurance_mcp.github_actions_evidence._open_without_redirects",
         return_value=Response(payload()),
     ) as open_url:
         envelope = source().read_evidence()
@@ -118,7 +126,7 @@ def test_missing_token_fails_closed():
 )
 def test_invalid_run_metadata_fails_closed(overrides, message):
     with patch(
-        "ai_workflow_assurance_mcp.github_actions_evidence.urlopen",
+        "ai_workflow_assurance_mcp.github_actions_evidence._open_without_redirects",
         return_value=Response(payload(**overrides)),
     ):
         with pytest.raises(GitHubActionsEvidenceError, match=message):
@@ -127,7 +135,7 @@ def test_invalid_run_metadata_fails_closed(overrides, message):
 
 def test_boolean_run_id_is_rejected_even_when_integer_value_matches():
     with patch(
-        "ai_workflow_assurance_mcp.github_actions_evidence.urlopen",
+        "ai_workflow_assurance_mcp.github_actions_evidence._open_without_redirects",
         return_value=Response(payload(id=True)),
     ):
         with pytest.raises(GitHubActionsEvidenceError, match="different workflow run ID"):
@@ -137,7 +145,7 @@ def test_boolean_run_id_is_rejected_even_when_integer_value_matches():
 def test_http_errors_are_sanitized():
     error = HTTPError("https://api.github.com", 403, "forbidden", {}, None)
     with patch(
-        "ai_workflow_assurance_mcp.github_actions_evidence.urlopen",
+        "ai_workflow_assurance_mcp.github_actions_evidence._open_without_redirects",
         side_effect=error,
     ):
         with pytest.raises(GitHubActionsEvidenceError, match="read permissions") as caught:
@@ -152,3 +160,33 @@ def test_constructor_rejects_invalid_repository_run_and_sha():
         GitHubActionsRunSource("owner/repo", True, SHA, token="x", now=NOW)
     with pytest.raises(GitHubActionsEvidenceError, match="40-character"):
         GitHubActionsRunSource("owner/repo", 12345, "ABC", token="x", now=NOW)
+
+
+def test_repository_must_be_explicitly_allowlisted_before_network_access(monkeypatch):
+    monkeypatch.setenv("AWA_GITHUB_ALLOWED_REPOSITORIES", "owner/approved")
+    with patch(
+        "ai_workflow_assurance_mcp.github_actions_evidence._open_without_redirects"
+    ) as open_url:
+        with pytest.raises(GitHubActionsEvidenceError, match="not included"):
+            source().read_evidence()
+    open_url.assert_not_called()
+
+
+@pytest.mark.parametrize("repository", ["owner/..", "../repo", "./repo", "owner/."])
+def test_dot_path_components_are_rejected(repository):
+    with pytest.raises(GitHubActionsEvidenceError, match="valid owner/name"):
+        GitHubActionsRunSource(repository, 12345, SHA, token="x", now=NOW)
+
+
+def test_redirect_opener_is_configured_to_refuse_redirects():
+    from urllib.request import Request
+
+    from ai_workflow_assurance_mcp import github_actions_evidence as evidence
+
+    with patch.object(evidence, "build_opener") as make_opener:
+        opener = make_opener.return_value
+        opener.open.return_value = Response(payload())
+        request = Request("https://api.github.com/test")
+        with evidence._open_without_redirects(request, timeout=1):
+            pass
+    assert make_opener.call_args.args[0] is evidence._NoRedirectHandler

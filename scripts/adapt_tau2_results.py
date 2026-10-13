@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from ai_workflow_assurance_mcp.core import create_release_report, evaluate_suite
+from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS
+from ai_workflow_assurance_mcp.tau2_prewrite import _evaluate_exchange_confirmation_context
 
 EXPECTED_ORDER_KEYS = {
     "order_id", "user_id", "address", "items", "status", "fulfillments",
@@ -26,11 +28,6 @@ MUTABLE_FIELDS = {
     "exchange_payment_method_id", "exchange_price_difference",
 }
 UNCHANGED_FIELDS = EXPECTED_ORDER_KEYS - MUTABLE_FIELDS
-WRITE_TOOLS = {
-    "cancel_pending_order", "exchange_delivered_order_items",
-    "modify_pending_order_address", "modify_pending_order_items",
-    "return_delivered_order_items", "modify_user_address",
-}
 CONFIRMATION_PHRASES = ("yes, that's exactly right", "i confirm", "please proceed", "go ahead")
 NEGATIVE_CONFIRMATION_PHRASES = (
     "don't go ahead", "do not go ahead", "don't proceed", "do not proceed",
@@ -198,35 +195,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     after_result = result(exchange)
     after = after_result if isinstance(after_result, dict) else None
 
-    user_messages = [
-        (i, str(m.get("content") or "")) for i, m in enumerate(messages)
-        if m.get("role") == "user" and i < exchange_index
-    ]
-    latest_user = user_messages[-1][1].lower() if user_messages else ""
-    preceding_assistant_text = next(
-        (
-            str(message.get("content") or "").lower()
-            for message in reversed(messages[:exchange_index])
-            if message.get("role") == "assistant" and message.get("content")
-        ),
-        "",
-    )
     payment_id = args.get("payment_method_id")
-    confirmation_context_present = bool(
-        payment_id
-        and str(payment_id).lower() in preceding_assistant_text
-        and new_ids
-        and all(str(item_id).lower() in preceding_assistant_text for item_id in new_ids)
-        and any(
-            phrase in preceding_assistant_text
-            for phrase in ("confirm", "before i proceed", "would you like me to proceed", "reply with")
-        )
-    )
-    confirmation = bool(
-        not any(phrase in latest_user for phrase in NEGATIVE_CONFIRMATION_PHRASES)
-        and any(phrase in latest_user for phrase in CONFIRMATION_PHRASES)
-        and confirmation_context_present
-    )
 
     before_items = before.get("items", []) if isinstance(before, dict) else []
     before_by_id = {str(item.get("item_id")): item for item in before_items if isinstance(item, dict)}
@@ -234,6 +203,42 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     requested_counts = Counter(map(str, old_ids))
     origins_present = bool(old_ids) and all(counts[item_id] >= n for item_id, n in requested_counts.items())
     catalog_ok, computed_delta, pair_evidence = _check_catalog(old_ids, new_ids, before, products)
+
+    # Use exactly the same disclosure/affirmation policy as the pre-write guard.
+    prior_messages = messages[:exchange_index]
+    last_assistant_text_index = -1
+    last_assistant_text = ""
+    for index, message in enumerate(prior_messages):
+        if message.get("role") == "assistant" and not message.get("tool_calls"):
+            content = message.get("content")
+            if isinstance(content, str) and content.strip():
+                last_assistant_text_index = index
+                last_assistant_text = content
+
+    last_user_index = -1
+    last_user_text = ""
+    for index, message in enumerate(prior_messages):
+        if index > last_assistant_text_index and message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                last_user_index = index
+                last_user_text = content
+
+    confirmation_context = _evaluate_exchange_confirmation_context(
+        last_assistant_text,
+        last_user_text,
+        order_id,
+        old_ids,
+        new_ids,
+        payment_id,
+        float(computed_delta) if computed_delta is not None else None,
+    )
+    confirmation = bool(
+        last_assistant_text_index >= 0
+        and last_user_index > last_assistant_text_index
+        and last_user_index < exchange_index
+        and confirmation_context["confirmation_valid"]
+    )
 
     original_payment_methods = {
         str(item.get("payment_method_id"))

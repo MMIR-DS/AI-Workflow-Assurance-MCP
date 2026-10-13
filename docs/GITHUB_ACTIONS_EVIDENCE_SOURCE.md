@@ -16,11 +16,11 @@ source = GitHubActionsRunSource(
 envelope = source.read_evidence()
 ```
 
-Set `GH_TOKEN` (preferred) or `GITHUB_TOKEN` in the process environment. Use a fine-grained token restricted to the intended repository with read-only Actions and repository metadata permissions. Never put a token in source code, command-line arguments, evidence JSON, logs, or issue/PR text. The adapter does not print or return the token.
+Set `GH_TOKEN` (preferred) or `GITHUB_TOKEN` in the process environment. Also set `AWA_GITHUB_ALLOWED_REPOSITORIES` to a comma-separated list of exact `owner/repository` names that the server is permitted to inspect (for example, `MMIR-DS/AI-Workflow-Assurance-MCP`). The adapter denies requests for repositories not in that list before making a network request; an unset or malformed allowlist fails closed. Use a fine-grained token restricted to only the intended repository with read-only Actions and repository metadata permissions. Never put a token in source code, command-line arguments, evidence JSON, logs, or issue/PR text. The adapter does not print or return the token.
 
 ## Fail-closed checks
 
-The adapter rejects missing credentials, invalid repository/run/SHA inputs, inaccessible runs, HTTP errors, malformed or oversized responses, a different run ID or repository, a mismatched head commit, non-completed or non-successful runs, invalid timestamps, stale evidence, and future-dated evidence. Default freshness is one hour and the allowed configured range is one second to seven days. Network timeout is bounded.
+The adapter rejects missing credentials, missing or malformed allowlist configuration, invalid repository/run/SHA inputs (including `.` and `..` path components), repositories outside the allowlist, inaccessible runs, HTTP errors, redirects, malformed or oversized responses, a different run ID or repository, a mismatched head commit, non-completed or non-successful runs, invalid timestamps, stale evidence, and future-dated evidence. Redirects are refused so the bearer token cannot be replayed to a redirect target. Default freshness is one hour and the allowed configured range is one second to seven days. Network timeout is bounded.
 
 Only an allowlisted set of run metadata is returned. Logs, artifacts, actor details, event payloads, and arbitrary API fields are not propagated.
 

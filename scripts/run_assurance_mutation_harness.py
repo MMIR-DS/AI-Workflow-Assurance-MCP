@@ -30,8 +30,8 @@ SPEC: dict[str, Any] = {
 
 CONTROL_CASE = {
     "case_id": "valid-control",
-    "expected": {"decision": "approve", "requires_human_review": False, "amount": 125.0},
-    "actual": {"decision": "approve", "requires_human_review": False, "amount": 125.0},
+    "expected": {"decision": "review", "requires_human_review": True, "amount": 125.0},
+    "actual": {"decision": "review", "requires_human_review": True, "amount": 125.0},
 }
 MUTATIONS = {
     "wrong_decision": lambda actual: actual.update(decision="reject"),
@@ -43,13 +43,8 @@ MUTATIONS = {
 
 
 def run_harness() -> dict[str, Any]:
+    # CONTROL_CASE is the explicit reviewed baseline; do not silently override it.
     control = deepcopy(CONTROL_CASE)
-    # This control represents a case where escalation is expected; the correct
-    # workflow must preserve both the expected decision and review requirement.
-    control["expected"] = {
-        "decision": "review", "requires_human_review": True, "amount": 125.0
-    }
-    control["actual"] = deepcopy(control["expected"])
     cases = [control]
     for name, mutate in MUTATIONS.items():
         case = deepcopy(control)
@@ -101,7 +96,7 @@ def run_harness() -> dict[str, Any]:
             and reproducible
         ),
         "limitations": [
-            "Only three deliberately seeded faults in a synthetic workflow are tested.",
+            "Only five deliberately seeded faults in a synthetic workflow are tested.",
             "This result is not a statistical reliability estimate or a production safety claim.",
             "The harness tests evaluated inputs, not arbitrary agent execution or source-code mutations.",
         ],
