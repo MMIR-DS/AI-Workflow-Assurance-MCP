@@ -14,6 +14,8 @@ on:
       - "tests/fixtures/tau2_task0_trace_minimal.json"
       - ".github/workflows/awa-independent-db-check.yml"
   push:
+    branches:
+      - main
     paths:
       - "scripts/verify_tau2_independent_db.py"
       - "scripts/adapt_tau2_db_evidence.py"
