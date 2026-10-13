@@ -188,4 +188,4 @@ def test_redirect_opener_is_configured_to_refuse_redirects():
         request = Request("https://api.github.com/test")
         with evidence._open_without_redirects(request, timeout=1):
             pass
-    assert isinstance(make_opener.call_args.args[0], evidence._NoRedirectHandler)
+    assert make_opener.call_args.args[0] is evidence._NoRedirectHandler
