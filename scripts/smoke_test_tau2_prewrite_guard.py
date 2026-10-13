@@ -11,9 +11,8 @@ from types import SimpleNamespace
 from typing import Any
 
 from tau2.data_model.message import ToolCall, ToolMessage
-from tau2.orchestrator.orchestrator import BaseOrchestrator
-
 from tau2.domains.retail.environment import get_environment
+from tau2.orchestrator.orchestrator import BaseOrchestrator
 
 from ai_workflow_assurance_mcp.tau2_constants import (
     TAU2_PASSTHROUGH_TOOLS,
