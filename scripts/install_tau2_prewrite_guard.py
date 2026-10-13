@@ -23,21 +23,13 @@ REPLACEMENT = """        tool_results = []
         for tool_call in tool_calls:
             # AWA_PREWRITE_GUARD_PATCH_V6: guard reviewed writes and default-deny unreviewed tool names.
             from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS as awa_shared_write_tools
+            from ai_workflow_assurance_mcp.tau2_constants import TAU2_PASSTHROUGH_TOOLS as awa_shared_passthrough_tools
 
             # New-order creation has no reviewed policy and is denied below as a write.
             awa_write_tools = set(awa_shared_write_tools) | {"create_order"}
             # Only explicitly reviewed non-write/read/escalation tools may pass through.
             # New or renamed tools are denied until classified and tested here.
-            awa_passthrough_tools = {
-                "find_user_id_by_email",
-                "find_user_id_by_name_zip",
-                "get_order_details",
-                "get_product_details",
-                "get_user_details",
-                "list_all_product_types",
-                "think",
-                "transfer_to_human_agents",
-            }
+            awa_passthrough_tools = set(awa_shared_passthrough_tools)
             if tool_call.name in awa_write_tools:
                 if tool_call.name == "exchange_delivered_order_items":
                     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
