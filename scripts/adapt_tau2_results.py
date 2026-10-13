@@ -314,7 +314,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         ))
     )
     # No claim is acceptable; a definitive completion claim without a write is not.
-    notification_claim = not completion_claim or bool(exchange_calls)
+    notification_claim = not completion_claim or bool(successful_exchange_calls)
     no_transfer = not any("transfer_to_human" in name or "transfer_to_agent" in name for name in names)
     actual = {
         "identity_policy_respected": bool(auth and order_call and auth["index"] < order_call["index"] < exchange_index and authenticated_user and isinstance(before, dict) and str(before.get("user_id")) == authenticated_user),
@@ -342,7 +342,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     # A terminal user stop is not evidence that the business task succeeded.
     # Distinguish an ended trace from an observed expected write.
     unobserved_checks = []
-    if not exchange_calls:
+    if not successful_exchange_calls:
         dependent_checks = (
             "confirmation_policy_respected",
             "exchange_eligibility_policy_respected",
@@ -385,7 +385,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
 
         # No expected write is an observed task-completion failure only when the
         # trace is terminal; on a truncated trace it is still unobserved.
-        if not writes:
+        if not successful_writes:
             if execution_complete:
                 actual["one_expected_write_only"] = False
             else:
@@ -471,7 +471,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         ),
         "unobserved_checks": unobserved_criterion_ids,
         "decision_note": (
-            "The trace ended without an observed expected exchange write; dependent checks are "
+            "The trace ended without a successful expected exchange write; dependent checks are "
             "not evaluable. The release gate remains closed."
             if unobserved_checks else None
         ),
