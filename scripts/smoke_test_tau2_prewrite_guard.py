@@ -35,6 +35,13 @@ class CountingEnvironment:
 def _setup() -> tuple[list[dict[str, Any]], ToolCall]:
     results = json.loads(FIXTURE.read_text(encoding="utf-8"))
     trajectory = results["simulations"][0]["messages"][:19]
+    # The checked-in baseline is fully disclosed and should pass evaluation.
+    # This smoke intentionally removes required details to prove NO_GO intercepts
+    # the write at the real Tau2 dispatch hook without executing a model call.
+    trajectory[16]["content"] = (
+        "To confirm: keyboard 7706410293 and thermostat 7747408585. "
+        "Your original payment method is credit_card_9513926. Please confirm."
+    )
     raw_call = trajectory[-1]["tool_calls"][0]
     call = ToolCall(
         id=raw_call["id"],
