@@ -151,7 +151,7 @@
         },
         {
           "role": "assistant",
-          "content": "To confirm order #W2378156: exchange keyboard item 1151293680 for 7706410293 and thermostat item 4983901480 for 7747408585. The total price difference is a $16.63 refund to credit_card_9513926. Would you like to proceed?"
+          "content": "To confirm: order #W2378156 — exchange keyboard item 1151293680 for 7706410293 and thermostat item 4983901480 for 7747408585. The total price difference is a $16.63 refund to credit_card_9513926. Would you like to proceed?"
         },
         {
           "role": "user",
