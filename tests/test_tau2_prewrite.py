@@ -140,6 +140,12 @@ def _payment_trajectory_and_call() -> tuple[list[dict], dict]:
 
 def test_tau2_adapter_blocks_write_when_final_confirmation_omits_order_and_old_items() -> None:
     trajectory, call = _trajectory_and_call()
+    # Keep this test deliberately under-disclosed even though the accepted baseline
+    # fixture now contains the complete order, old/new pairings, payment, and refund.
+    trajectory[16]["content"] = (
+        "To confirm: keyboard 7706410293 and thermostat 7747408585. "
+        "Your original payment method is credit_card_9513926. Please confirm."
+    )
 
     result = evaluate_tau2_prewrite(trajectory, call)
 
