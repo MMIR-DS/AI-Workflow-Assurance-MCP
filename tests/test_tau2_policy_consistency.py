@@ -57,3 +57,13 @@ def test_affirmative_confirmation_still_rejects_explicit_refusal_and_qualified_y
     assert not _is_affirmative("No, cancel it.")
     assert not _is_affirmative("Yes, but change the payment method instead.")
     assert not _is_affirmative("I do not confirm.")
+
+
+
+def test_price_disclosure_fails_closed_when_charge_and_refund_directions_conflict() -> None:
+    contradictory = (
+        "The price difference is $16.63 refund, but you will also be charged $16.63 "
+        "on credit_card_9513926."
+    )
+    assert _price_difference_disclosed(contradictory, -16.63) is False
+    assert _price_difference_disclosed(contradictory, 16.63) is False
