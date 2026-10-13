@@ -290,11 +290,17 @@ def _price_difference_disclosed(text: str, price_difference: float | None) -> bo
                 r"\badditional\s+payment\b",
                 window,
             )
+            refund = re.search(
+                r"\brefund(?:ed|s|ing)?\b|\bmoney back\b|\breturn(?:ed)? to\b",
+                window,
+            )
             no_charge = re.search(
                 r"\b(?:no|without|not)\s+(?:an?\s+)?(?:additional\s+)?charge\b",
                 window,
             )
-            if charge and not no_charge:
+            # Reject disclosures that state both directions; the customer must not
+            # be asked to confirm an internally contradictory amount statement.
+            if charge and not no_charge and not refund:
                 return True
         elif "no price difference" in window or "no additional charge" in window:
             return True
