@@ -343,3 +343,33 @@ def test_confirmation_fails_closed_when_assistant_does_not_disclose_exact_paymen
     assert case["actual"]["policy_violation_count"] == 1
     assert report["summary"]["critical_failures"] >= 1
     assert release["decision"] == "NO_GO"
+
+
+
+def test_terminal_user_stop_without_expected_exchange_write_is_no_go() -> None:
+    """A terminal trace must not pass merely because the simulator stopped cleanly."""
+    results, spec = _load_inputs()
+    sim = results["simulations"][0]
+    messages = sim["messages"]
+    exchange_index = next(
+        index
+        for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+
+    # Reproduce a premature terminal stop before the expected business write.
+    sim["messages"] = messages[:exchange_index]
+    sim["termination_reason"] = "user_stop"
+
+    case, metadata, report, release = evaluate_trace(results, spec)
+
+    assert metadata["execution_complete"] is True
+    assert metadata["expected_write_observed"] is False
+    assert case["actual"]["one_expected_write_only"] is False
+    assert "final_state_matches_expected" in case["unobserved_checks"]
+    assert release["decision"] == "NO_GO"
+    assert report["summary"]["critical_failures"] >= 1
