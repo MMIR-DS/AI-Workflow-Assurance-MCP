@@ -1,9 +1,6 @@
 name: tau2 retail + AWA assurance prototype (bounded)
 
 on:
-  push:
-    branches:
-      - temp/tau2-model-validation-v4
   workflow_dispatch:
     inputs:
       model:
