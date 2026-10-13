@@ -32,8 +32,8 @@ The `write_exchange` callback must be the actual operation that mutates state. E
 
 ## Important limits
 
-This is an application-side enforcement seam, **not yet wired into Tau2's real `exchange_delivered_order_items` path**. The MCP tool can evaluate caller-supplied JSON, but the host must call this executor around its actual mutation function. A future Tau2 integration must be made in the Tau2 repository or a maintained fork, pin the upstream commit, and add a test proving the real database write function is not called on `NO_GO`.
+The generic `guarded_executor.py` callback is still an application-side seam, not a production commerce control. Separately, this repository now includes a **pinned Tau2 retail-simulator integration**: `scripts/install_tau2_prewrite_guard.py` applies a V6 patch to the actual dispatch loop for the pinned upstream Tau2 commit, and `scripts/smoke_test_tau2_prewrite_guard.py` verifies that a `NO_GO` does not invoke the dispatch write callback. The integration is applied only in the workflow checkout; it does not modify the upstream repository, a user's local Tau2 install, or any production commerce system. A production deployment still requires a maintained integration in the real application and tests against its actual database-write boundary.
 
 The evidence passed to the guard must come from trusted, independently obtained sources. The guard cannot authenticate caller-controlled JSON. In production, use verified identity/session context, server-side order and payment records, an auditable customer-confirmation event, and enforce the guard and write in one trusted service boundary. Protect against time-of-check/time-of-use changes by re-reading or version-checking the order immediately before mutation and using a transaction or conditional write.
 
-Do not represent this code as production security or as proof that Tau2 writes are currently blocked.
+Do not represent the simulator smoke as production security or as proof that writes in a live commerce system are blocked. The pinned Tau2 workflow proves only that the patched simulator dispatcher blocks the tested `NO_GO` case before its environment callback.
