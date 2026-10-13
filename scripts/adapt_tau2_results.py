@@ -167,7 +167,41 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         return _payload(tool_results.get(str(call.get("id"))) if call and call.get("id") else None)
 
     exchange_calls = [c for c in calls if c["name"] == "exchange_delivered_order_items"]
-    exchange = exchange_calls[0] if len(exchange_calls) == 1 else None
+
+    def successful_write_result(call: dict[str, Any]) -> bool:
+        message = tool_results.get(str(call.get("id", "")))
+        if not isinstance(message, dict) or message.get("error") is True:
+            return False
+        payload = _payload(message)
+        return not (isinstance(payload, str) and payload.startswith("AWA_PREWRITE_NO_GO:"))
+
+    successful_writes = [
+        call for call in calls
+        if call["name"] in WRITE_TOOLS and successful_write_result(call)
+    ]
+    successful_exchange_calls = []
+    for candidate in exchange_calls:
+        candidate_result = result(candidate)
+        candidate_args = candidate["arguments"]
+        if (
+            successful_write_result(candidate)
+            and isinstance(candidate_result, dict)
+            and candidate_result.get("status") == "exchange requested"
+            and str(candidate_result.get("order_id")) == str(candidate_args.get("order_id"))
+            and _same_ids(candidate_result.get("exchange_items"), candidate_args.get("item_ids"))
+            and _same_ids(candidate_result.get("exchange_new_items"), candidate_args.get("new_item_ids"))
+            and str(candidate_result.get("exchange_payment_method_id")) == str(candidate_args.get("payment_method_id"))
+            and _money(candidate_result.get("exchange_price_difference")) is not None
+        ):
+            successful_exchange_calls.append(candidate)
+
+    # Rejected attempts are part of the trace, but they did not execute a write.
+    # Evaluate against the sole successful exchange when present; otherwise inspect
+    # the last attempted exchange for observed pre-write evidence.
+    if successful_exchange_calls:
+        exchange = successful_exchange_calls[-1]
+    else:
+        exchange = exchange_calls[-1] if exchange_calls else None
     exchange_index = exchange["index"] if exchange else 10**9
     args = exchange["arguments"] if exchange else {}
     old_ids = args.get("item_ids") if isinstance(args.get("item_ids"), list) else []
@@ -250,7 +284,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         and str(after.get("exchange_payment_method_id")) == str(payment_id)
     )
     final_state_ok = bool(
-        isinstance(before, dict) and isinstance(after, dict) and len(exchange_calls) == 1
+        isinstance(before, dict) and isinstance(after, dict) and len(successful_exchange_calls) == 1
         and set(before) == ORDER_KEYS and set(after) == ORDER_KEYS
         and str(before.get("order_id")) == str(order_id) == str(after.get("order_id"))
         and before.get("user_id") == after.get("user_id")
@@ -296,7 +330,11 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "notification_claim_matches_contract": notification_claim,
         "no_unrequested_new_order": "create_order" not in names,
         "escalation_policy_respected": no_transfer,
-        "one_expected_write_only": len(writes) == 1 and writes[0]["name"] == "exchange_delivered_order_items",
+        "one_expected_write_only": (
+            len(successful_writes) == 1
+            and successful_writes[0]["name"] == "exchange_delivered_order_items"
+            and len(successful_exchange_calls) == 1
+        ),
         "final_order_status": after.get("status") if isinstance(after, dict) else None,
     }
     termination_reason = str(sim.get("termination_reason") or "").lower()
@@ -422,8 +460,10 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "task_id": str(sim.get("task_id")), "trial": sim.get("trial"),
         "termination_reason": sim.get("termination_reason"),
         "execution_complete": execution_complete,
-        "expected_write_observed": len(exchange_calls) == 1,
-        "task_completed": bool(len(exchange_calls) == 1 and final_state_ok),
+        "expected_write_observed": len(successful_exchange_calls) == 1,
+        "attempted_exchange_calls": len(exchange_calls),
+        "successful_write_count": len(successful_writes),
+        "task_completed": bool(len(successful_exchange_calls) == 1 and final_state_ok),
         "evaluation_completeness": (
             "complete" if not unobserved_checks
             else "partial" if execution_complete
