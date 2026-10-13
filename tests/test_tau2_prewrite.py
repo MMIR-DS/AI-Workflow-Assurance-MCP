@@ -446,6 +446,28 @@ def test_tau2_adapter_recovers_after_blocked_attempt_and_fresh_confirmation() ->
     assert result["evidence_summary"]["user_affirmed_after_disclosure"] is True
 
 
+def test_tau2_adapter_accepts_labeled_pairs_with_prices_between_item_ids() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156 and exchange these exact items: "
+        "1. Old Item: 1151293680 (Mechanical Keyboard, RGB, linear, full size; $272.33). "
+        "New Item: 7706410293 (Mechanical Keyboard, no backlight, clicky, full size; $269.16). "
+        "2. Old Item: 4983901480 (Smart Thermostat, black, Apple HomeKit; $262.47). "
+        "New Item: 7747408585 (Smart Thermostat, black, Google Assistant; $249.01). "
+        "The total price difference is -$16.63, a refund of $16.63 to credit_card_9513926. "
+        "Please confirm both old-to-new item pairs for this exchange."
+    )
+    trajectory[17]["content"] = (
+        "Yes, I confirm both exchanges and the $16.63 refund to credit_card_9513926."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["checked"]["customer_disclosed_item_pairs_match_requested_exchange"] is True
+    assert result["checked"]["exact_price_difference_and_direction_disclosed"] is True
+
+
 def test_tau2_adapter_blocks_order_snapshot_for_a_different_order_id() -> None:
     trajectory, call = _trajectory_and_call()
     snapshot = _tool_result_json(trajectory, "order-read-1")
