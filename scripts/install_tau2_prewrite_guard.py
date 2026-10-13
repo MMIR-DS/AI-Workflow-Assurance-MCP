@@ -22,17 +22,10 @@ REPLACEMENT = """        tool_results = []
         awa_write_orders_seen = set()
         for tool_call in tool_calls:
             # AWA_PREWRITE_GUARD_PATCH_V6: guard reviewed writes and default-deny unreviewed tool names.
-            awa_write_tools = {
-                "cancel_pending_order",
-                "exchange_delivered_order_items",
-                "modify_pending_order_address",
-                "modify_pending_order_items",
-                "modify_pending_order_payment",
-                "modify_user_address",
-                "return_delivered_order_items",
-                # No reviewed policy exists for new-order creation; deny it below.
-                "create_order",
-            }
+            from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS as awa_shared_write_tools
+
+            # New-order creation has no reviewed policy and is denied below as a write.
+            awa_write_tools = set(awa_shared_write_tools) | {"create_order"}
             # Only explicitly reviewed non-write/read/escalation tools may pass through.
             # New or renamed tools are denied until classified and tested here.
             awa_passthrough_tools = {
