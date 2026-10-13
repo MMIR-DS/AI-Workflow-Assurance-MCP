@@ -47,9 +47,9 @@ def _set_complete_confirmation(results: dict) -> None:
         f"old item {old_id} for {new_id}" for old_id, new_id in zip(old_ids, new_ids, strict=True)
     )
     if delta < 0:
-        price_disclosure = f"a $\${abs(delta):,.2f} refund to {payment_id}"
+        price_disclosure = f"a ${abs(delta):,.2f} refund to {payment_id}"
     elif delta > 0:
-        price_disclosure = f"an additional charge of $\${abs(delta):,.2f} on {payment_id}"
+        price_disclosure = f"an additional charge of ${abs(delta):,.2f} on {payment_id}"
     else:
         price_disclosure = f"$0.00; no price difference for {payment_id}"
 
