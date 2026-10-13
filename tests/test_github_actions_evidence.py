@@ -180,6 +180,7 @@ def test_dot_path_components_are_rejected(repository):
 
 def test_redirect_opener_is_configured_to_refuse_redirects():
     from urllib.request import Request
+
     from ai_workflow_assurance_mcp import github_actions_evidence as evidence
 
     with patch.object(evidence, "build_opener") as make_opener:
