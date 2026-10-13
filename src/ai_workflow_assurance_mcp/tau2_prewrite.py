@@ -372,19 +372,26 @@ def _confirmation_references_consistent(
 
 
 def _is_affirmative(text: str) -> bool:
-    normalized = re.sub(r"[^a-z0-9' ]+", " ", text.casefold())
-    # A positive token is not sufficient when the reply also qualifies or changes
-    # the requested action. Prefer a false block over treating mixed intent as consent.
-    if re.search(
-        r"\b(no|don't|do not|not yet|stop|wait|change|incorrect|instead|cancel|"
-        r"but|however|except|different|another|rather|unless|maybe|not that)\b",
+    normalized = re.sub(r"[^a-z0-9' ]+", " ", text.casefold()).strip()
+    # Reject explicit refusals and qualified/changed intent, not action words that
+    # can be the very operation being confirmed (for example, "Yes, cancel it").
+    explicit_refusal = re.search(r"^(?:no|nope|nah|never)\\b", normalized)
+    contradictory_qualification = re.search(
+        r"\\b(don't|do not|not yet|stop|wait|change|incorrect|instead|"
+        r"but|however|except|different|another|rather|unless|maybe|not that)\\b",
         normalized,
-    ):
+    )
+    negative_verdict = re.search(
+        r"\\b(?:not\\s+(?:correct|right|what I want)|"
+        r"that's not|that is not)\\b",
+        normalized,
+    )
+    if explicit_refusal or contradictory_qualification or negative_verdict:
         return False
     return bool(
         re.search(
-            r"\b(yes|confirm|confirmed|go ahead|proceed|that's right|that is right|"
-            r"sounds good|correct|exactly right|please do|do it)\b",
+            r"\\b(yes|confirm|confirmed|go ahead|proceed|that's right|that is right|"
+            r"sounds good|correct|exactly right|please do|do it)\\b",
             normalized,
         )
     )
