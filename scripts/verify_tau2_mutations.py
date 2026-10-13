@@ -118,7 +118,7 @@ def _prepare_valid_control(results: dict[str, Any]) -> dict[str, Any]:
     if assistant_index is None:
         raise ValueError("Control preparation requires the pre-write disclosure message.")
     messages[assistant_index]["content"] = (
-        f"To confirm order {order_id}: exchange {pairs}. "
+        f"To confirm: order {order_id}: exchange {pairs}. "
         f"The total price difference is {amount}. Please confirm."
     )
     user_index = next(
