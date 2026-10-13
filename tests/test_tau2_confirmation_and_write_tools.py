@@ -27,6 +27,10 @@ def test_negative_price_difference_requires_refund_direction_near_amount() -> No
         "The total price difference of $1,819.92 will be refunded to the card.",
         -1819.92,
     )
+    assert not _price_difference_disclosed(
+        "The total price difference is $1,016.63, refunded to the card.",
+        -16.63,
+    )
 
 
 def test_cancellation_confirmation_allows_affirmative_natural_phrasing() -> None:
