@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS
 from ai_workflow_assurance_mcp.tau2_prewrite import (
     _WRITE_TOOLS,
@@ -106,3 +108,14 @@ def test_price_disclosure_fails_closed_when_charge_and_refund_directions_conflic
     )
     assert _price_difference_disclosed(contradictory, -16.63) is False
     assert _price_difference_disclosed(contradictory, 16.63) is False
+
+
+def test_dispatch_policy_table_covers_every_reviewed_write_tool() -> None:
+    policy_names = set(
+        re.findall(r'^\s{12}"([a-z_]+)": \{$', REPLACEMENT, re.MULTILINE)
+    )
+    assert policy_names == WRITE_TOOLS
+    assert 'tool_call.name in awa_write_tools' in REPLACEMENT
+    assert "this retail write tool has no reviewed " in REPLACEMENT
+    assert '"validator": None' in REPLACEMENT
+    assert "independent per-item verification" in REPLACEMENT
