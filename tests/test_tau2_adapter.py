@@ -109,7 +109,7 @@ def test_saved_raw_trace_mutations_fail_closed_without_changing_tau2_oracle() ->
     results, spec = _load_inputs()
     outcomes = run_mutation_checks(results, spec)
     assert outcomes["summary"]["baseline_decision"] == "GO"
-    assert outcomes["summary"]["mutation_count"] == len(MUTATION_EXPECTATIONS) == 6
+    assert outcomes["summary"]["mutation_count"] == len(MUTATION_EXPECTATIONS) == 7
     assert outcomes["summary"]["all_mutations_no_go"] is True
     assert outcomes["summary"]["tau2_oracle_unchanged_for_all_mutations"] is True
     for name, expected_field in MUTATION_EXPECTATIONS.items():
