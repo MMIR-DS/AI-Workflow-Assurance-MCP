@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
 from scripts.adapt_tau2_results import evaluate_trace
 from scripts.verify_tau2_mutations import MUTATION_EXPECTATIONS, run_mutation_checks
 
@@ -16,6 +17,20 @@ def _load_inputs() -> tuple[dict, dict]:
         json.loads(FIXTURE.read_text(encoding="utf-8")),
         json.loads(SPEC_PATH.read_text(encoding="utf-8")),
     )
+
+
+def test_recorded_baseline_confirmation_passes_posthoc_and_prewrite_policy() -> None:
+    results, spec = _load_inputs()
+    case, _, _, release = evaluate_trace(results, spec)
+
+    trajectory = results["simulations"][0]["messages"][:19]
+    tool_call = trajectory[-1]["tool_calls"][0]
+    guarded = evaluate_tau2_prewrite(trajectory, tool_call)
+
+    assert case["actual"]["confirmation_policy_respected"] is True
+    assert guarded["decision"] == "GO"
+    assert guarded["allowed"] is True
+    assert release["decision"] == "GO"
 
 
 def test_task0_release_uses_order_catalog_and_action_return_payloads() -> None:
