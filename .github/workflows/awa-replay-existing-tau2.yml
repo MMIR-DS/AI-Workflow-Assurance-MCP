@@ -2,6 +2,24 @@ name: Replay saved tau2 trace through AWA — independent seven-mutation suite (
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/adapt_tau2_results.py"
+      - "scripts/verify_tau2_mutations.py"
+      - "tests/test_tau2_adapter.py"
+      - "tests/fixtures/tau2_task0_trace_minimal.json"
+      - "examples/tau2_retail_workflow.json"
+      - ".github/workflows/awa-replay-existing-tau2.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/adapt_tau2_results.py"
+      - "scripts/verify_tau2_mutations.py"
+      - "tests/test_tau2_adapter.py"
+      - "tests/fixtures/tau2_task0_trace_minimal.json"
+      - "examples/tau2_retail_workflow.json"
+      - ".github/workflows/awa-replay-existing-tau2.yml"
 
 permissions:
   contents: read
