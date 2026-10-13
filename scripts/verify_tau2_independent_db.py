@@ -15,6 +15,8 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from ai_workflow_assurance_mcp.tau2_prewrite import TAU2_WRITE_TOOLS
+
 ORDER_KEYS = {
     "order_id", "user_id", "address", "items", "status", "fulfillments",
     "payment_history", "cancel_reason", "exchange_items", "exchange_new_items",
@@ -25,11 +27,7 @@ MUTABLE_FIELDS = {
     "status", "exchange_items", "exchange_new_items",
     "exchange_payment_method_id", "exchange_price_difference",
 }
-WRITE_TOOLS = {
-    "cancel_pending_order", "exchange_delivered_order_items",
-    "modify_pending_order_address", "modify_pending_order_items",
-    "return_delivered_order_items", "modify_user_address",
-}
+WRITE_TOOLS = TAU2_WRITE_TOOLS
 
 
 def _payload(message: dict[str, Any] | None) -> Any:
