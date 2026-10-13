@@ -23,7 +23,7 @@ AWA_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(AWA_SRC) not in sys.path:
     sys.path.insert(0, str(AWA_SRC))
 
-from ai_workflow_assurance_mcp.tau2_prewrite import TAU2_WRITE_TOOLS
+from ai_workflow_assurance_mcp.tau2_prewrite import TAU2_WRITE_TOOLS  # noqa: E402
 
 ORDER_KEYS = {
     "order_id", "user_id", "address", "items", "status", "fulfillments",
