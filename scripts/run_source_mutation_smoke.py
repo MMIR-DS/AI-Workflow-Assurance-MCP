@@ -19,7 +19,11 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE_RELATIVE = Path("src/ai_workflow_assurance_mcp/core.py")
+CORE_SUPPORT_RELATIVE = Path("src/ai_workflow_assurance_mcp/core_support.py")
+CORE_EVALUATION_RELATIVE = Path("src/ai_workflow_assurance_mcp/core_evaluation.py")
+CORE_COMPARISON_RELATIVE = Path("src/ai_workflow_assurance_mcp/core_comparison.py")
+CORE_RELEASE_RELATIVE = Path("src/ai_workflow_assurance_mcp/core_release.py")
+CORE_VALIDATION_RELATIVE = Path("src/ai_workflow_assurance_mcp/core_validation.py")
 CLI_RELATIVE = Path("src/ai_workflow_assurance_mcp/cli.py")
 TEST_RELATIVE = Path("tests/test_core.py")
 CLI_TEST_RELATIVE = Path("tests/test_cli.py")
@@ -30,6 +34,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "bool_int_equality",
         "description": "Remove strict type equality for boolean comparisons.",
+        "file": "src/ai_workflow_assurance_mcp/core_support.py",
         "source": "return type(left) is type(right) and left == right",
         "replacement": "return left == right",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_nested_equality_does_not_treat_bool_as_integer",
@@ -37,6 +42,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "json_depth_boundary",
         "description": "Allow one additional container level beyond the documented JSON depth limit.",
+        "file": "src/ai_workflow_assurance_mcp/core_support.py",
         "source": "if depth >= max_depth:",
         "replacement": "if depth > max_depth:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_json_nesting_depth_is_limited_for_text_and_python_inputs",
@@ -44,6 +50,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "release_threshold_gate",
         "description": "Force threshold checks to fail even when the observed metric meets the limit.",
+        "file": "src/ai_workflow_assurance_mcp/core_release.py",
         "source": "passed = observed >= limit if comparator == \">=\" else observed <= limit",
         "replacement": "passed = False",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_pass_rate_threshold_is_inclusive",
@@ -51,6 +58,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "report_case_result_integrity",
         "description": "Invert the consistency check between a case result and its individual checks.",
+        "file": "src/ai_workflow_assurance_mcp/core_comparison.py",
         "source": "if result.get(\"passed\") != expected_case_passed:",
         "replacement": "if result.get(\"passed\") == expected_case_passed:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_is_no_go_when_critical_failures_exist",
@@ -58,6 +66,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "expected_label_drift_guard",
         "description": "Disable the guard against changed expected labels in baseline/candidate comparisons.",
+        "file": "src/ai_workflow_assurance_mcp/core_comparison.py",
         "source": "if changed_expected:",
         "replacement": "if False and changed_expected:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_expected_labels_cannot_change_between_compared_runs",
@@ -65,6 +74,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "critical_regression_precedence",
         "description": "Disable critical-regression precedence in the overall comparison trend.",
+        "file": "src/ai_workflow_assurance_mcp/core_comparison.py",
         "source": "if after_critical > before_critical:",
         "replacement": "if after_critical < before_critical:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_critical_regression_takes_precedence_over_pass_rate_improvement",
@@ -72,6 +82,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "release_spec_drift_guard",
         "description": "Disable the check that release policy matches the evaluated workflow specification.",
+        "file": "src/ai_workflow_assurance_mcp/core_release.py",
         "source": "if stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]:",
         "replacement": "if False and stable_json_digest(spec) != report[\"audit\"][\"spec_sha256\"]:",
         "test": "tests/test_core.py::WorkflowAssuranceTests::test_release_rejects_spec_drift_from_evaluation_report",
@@ -130,7 +141,11 @@ def run_mutation_smoke() -> dict[str, Any]:
         shutil.copytree(ROOT / "examples", worktree / "examples")
 
         source_paths = {
-            CORE_RELATIVE: worktree / CORE_RELATIVE,
+            CORE_SUPPORT_RELATIVE: worktree / CORE_SUPPORT_RELATIVE,
+            CORE_EVALUATION_RELATIVE: worktree / CORE_EVALUATION_RELATIVE,
+            CORE_COMPARISON_RELATIVE: worktree / CORE_COMPARISON_RELATIVE,
+            CORE_RELEASE_RELATIVE: worktree / CORE_RELEASE_RELATIVE,
+            CORE_VALIDATION_RELATIVE: worktree / CORE_VALIDATION_RELATIVE,
             CLI_RELATIVE: worktree / CLI_RELATIVE,
             TAU2_PREWRITE_COMMON_RELATIVE: worktree / TAU2_PREWRITE_COMMON_RELATIVE,
         }
@@ -158,7 +173,7 @@ def run_mutation_smoke() -> dict[str, Any]:
             }
 
         for mutant in MUTANTS:
-            relative = Path(mutant.get("file", str(CORE_RELATIVE)))
+            relative = Path(mutant.get("file", str(CORE_SUPPORT_RELATIVE)))
             source_path = source_paths[relative]
             original = originals[relative]
             match_count = original.count(mutant["source"])
