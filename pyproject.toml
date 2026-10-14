@@ -42,6 +42,12 @@ ai-workflow-assurance = "ai_workflow_assurance_mcp.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_workflow_assurance_mcp"]
+# Tau2 dispatch/audit implementations are source-checkout integrations, not part of the generic wheel.
+exclude = [
+  "src/ai_workflow_assurance_mcp/tau2_constants.py",
+  "src/ai_workflow_assurance_mcp/tau2_prewrite.py",
+  "src/ai_workflow_assurance_mcp/tau2_postwrite.py",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
