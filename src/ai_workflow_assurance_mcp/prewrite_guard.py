@@ -27,10 +27,12 @@ def _nonempty_string_list(value: Any) -> bool:
 def evaluate_prewrite(
     action: Any, evidence: Any, *, expected_order_status: str = "delivered"
 ) -> dict[str, Any]:
-    """Return GO only for a fully evidenced retail item exchange.
+    """Return GO only when supplied values satisfy the retail item-exchange policy.
 
-    Do not reuse this evaluator for other write types; each operation needs its
-    own action schema and operation-specific policy.
+    This function validates structure and consistency; it does not authenticate the
+    evidence values or prove their provenance. Callers must obtain them from trusted
+    sources and enforce the result at the actual write boundary. Do not reuse this
+    evaluator for other write types; each operation needs its own policy.
     """
     failures: list[str] = []
 
@@ -40,6 +42,7 @@ def evaluate_prewrite(
             "allowed": False,
             "blocking_checks": ["action_not_object"],
             "scope": "reference_preflight_only_not_a_write_interceptor",
+            "evidence_trust_boundary": "caller_supplied_not_authenticated",
         }
     if not isinstance(evidence, dict):
         return {
@@ -47,6 +50,7 @@ def evaluate_prewrite(
             "allowed": False,
             "blocking_checks": ["evidence_not_object"],
             "scope": "reference_preflight_only_not_a_write_interceptor",
+            "evidence_trust_boundary": "caller_supplied_not_authenticated",
         }
 
     order_id = action.get("order_id")
@@ -129,6 +133,7 @@ def evaluate_prewrite(
             "confirmation_precedes_write": sequence_valid,
         },
         "scope": "reference_preflight_only_not_a_write_interceptor",
+        "evidence_trust_boundary": "caller_supplied_not_authenticated",
         "enforcement_note": (
             "The caller must block the write unless decision is GO; this function does not "
             "execute, authorize, or intercept external operations."

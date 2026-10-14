@@ -14,12 +14,13 @@ def register_prewrite_tool(mcp: Any) -> None:
     """Register a read-only preflight tool on the configured MCP server."""
 
     @mcp.tool()
-    def preflight_sensitive_write(action_json: str, evidence_json: str) -> dict[str, Any]:
-        """Exchange-specific preflight for an item replacement on a delivered retail order.
+    def preflight_delivered_item_exchange(action_json: str, evidence_json: str) -> dict[str, Any]:
+        """Check the supplied evidence for a delivered-order item exchange only.
 
-        This is not a generic policy for arbitrary sensitive writes (for example, cancellation,
-        address changes, or payment-method changes). A NO_GO must be enforced by the caller.
-        This tool does not execute, authorize, or intercept writes.
+        This reference tool evaluates caller-supplied JSON; it does not authenticate that evidence,
+        independently verify customer identity, or execute/intercept the write. The host application
+        must block the actual write unless the result is GO and must obtain evidence from trusted
+        sources immediately before mutation.
         """
         try:
             action = parse_json_text(action_json, "action_json")
