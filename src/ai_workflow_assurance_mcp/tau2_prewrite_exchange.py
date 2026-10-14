@@ -6,7 +6,6 @@ from collections import Counter
 from typing import Any
 
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
-
 from ai_workflow_assurance_mcp.tau2_prewrite_common import (
     _assistant_variant_claims_match_catalog,
     _confirmation_references_consistent,
