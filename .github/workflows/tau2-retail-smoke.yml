@@ -93,7 +93,9 @@ jobs:
             --seed 300 \
             --max-concurrency 1 \
             --max-steps "$MAX_STEPS" \
-            --max-errors 4 \
+# AWA pre-write denials count as tool errors; allow recovery turns while the explicit
+# --max-steps and --timeout bounds still cap this manually triggered model run.
+            --max-errors 12 \
             --max-retries 0 \
             --timeout 480 \
             --save-to tau2-standalone-retail-task0 \

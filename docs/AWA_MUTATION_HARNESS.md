@@ -44,6 +44,7 @@ The current smoke set contains ten hand-selected mutants:
 - Disabling the expected-label drift guard for baseline/candidate comparisons.
 - Disabling critical-regression precedence in comparison trends.
 - Disabling the guard against using a release policy different from the evaluated specification.
+- Disabling the CLI's non-GO exit status when `--fail-on-non-go` is enabled.
 - Ignoring an `AWA_PREWRITE_NO_GO` result and reusing the earlier confirmation on an exchange retry.
 - Treating an unavailable catalog variant as available during a retry after fresh confirmation.
 
