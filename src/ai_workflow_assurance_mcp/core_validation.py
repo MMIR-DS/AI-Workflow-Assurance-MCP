@@ -5,18 +5,19 @@ from __future__ import annotations
 from typing import Any
 
 from ai_workflow_assurance_mcp.core_support import (
+    _SLUG,
     MAX_CASES,
     MAX_CRITERIA,
     MAX_JSON_DEPTH,
     MAX_VALIDATION_ERRORS,
     OPERATORS,
     SEVERITY_ORDER,
-    _SLUG,
     _bounded_errors,
     _exceeds_json_depth,
     _is_number,
     _valid_path,
 )
+
 
 def validate_spec(spec: Any) -> list[str]:
     """Return validation errors. An empty list means the specification is valid."""
