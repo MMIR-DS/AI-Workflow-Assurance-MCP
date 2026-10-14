@@ -77,11 +77,11 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     "generate_release_report",
                     "inspect_tau2_evidence_manifest",
                     "inspect_github_actions_run",
-                    "preflight_sensitive_write",
+                    "preflight_delivered_item_exchange",
                 }
 
                 preflight_tool = next(
-                    tool for tool in listed.tools if tool.name == "preflight_sensitive_write"
+                    tool for tool in listed.tools if tool.name == "preflight_delivered_item_exchange"
                 )
                 preflight_description = (preflight_tool.description or "").lower()
                 assert "exchange-specific" in preflight_description
@@ -177,14 +177,16 @@ def test_stdio_handshake_lists_tools_and_invokes_all_tools() -> None:
                     "proposed_write_sequence": 4,
                 }
                 preflight = await session.call_tool(
-                    "preflight_sensitive_write",
+                    "preflight_delivered_item_exchange",
                     {
                         "action_json": json.dumps(preflight_action),
                         "evidence_json": json.dumps(preflight_evidence),
                     },
                 )
                 assert not _is_error(preflight), _content_text(preflight)
-                assert json.loads(_content_text(preflight))["decision"] == "GO"
+                preflight_payload = json.loads(_content_text(preflight))
+                assert preflight_payload["decision"] == "GO"
+                assert preflight_payload["evidence_trust_boundary"] == "caller_supplied_not_authenticated"
                 invalid_github_evidence = await session.call_tool(
                     "inspect_github_actions_run",
                     {"repository": "owner/repo", "run_id": True, "expected_head_sha": "a" * 40},
