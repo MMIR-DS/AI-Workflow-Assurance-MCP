@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_workflow_assurance_mcp.tau2_prewrite_exchange import evaluate_tau2_prewrite
 from ai_workflow_assurance_mcp.tau2_prewrite_common import (
     _get,
     _messages,
