@@ -7,16 +7,15 @@ from typing import Any
 from ai_workflow_assurance_mcp.core_comparison import (
     _validate_report,
 )
-
 from ai_workflow_assurance_mcp.core_support import (
-    AssuranceInputError,
     SMALL_SAMPLE_WARNING_SIZE,
+    AssuranceInputError,
     stable_json_digest,
 )
-
 from ai_workflow_assurance_mcp.core_validation import (
     validate_spec,
 )
+
 
 def create_release_report(spec: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
     errors = validate_spec(spec) + _validate_report(report, "eval_report")
