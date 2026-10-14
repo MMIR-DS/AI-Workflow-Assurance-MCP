@@ -46,6 +46,7 @@ def test_matching_verified_action_and_prior_confirmation_allows_preflight() -> N
     assert result["allowed"] is True
     assert result["blocking_checks"] == []
     assert result["scope"] == "reference_preflight_only_not_a_write_interceptor"
+    assert result["evidence_trust_boundary"] == "caller_supplied_not_authenticated"
 
 
 def test_missing_exact_payment_disclosure_fails_closed() -> None:
