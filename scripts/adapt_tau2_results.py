@@ -166,7 +166,13 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     def result(call: dict[str, Any] | None) -> Any:
         return _payload(tool_results.get(str(call.get("id"))) if call and call.get("id") else None)
 
-    exchange_calls = [c for c in calls if c["name"] == "exchange_delivered_order_items"]
+    # A tool call is only an executed write when its correlated result is a
+    # structured order object. AWA_PREWRITE_NO_GO tool results are blocked
+    # attempts, not post-write state. Keep attempts separately so the report can
+    # still fail closed on repeated write attempts while evaluating the actual
+    # successful write and its resulting state accurately.
+    exchange_attempts = [c for c in calls if c["name"] == "exchange_delivered_order_items"]
+    exchange_calls = [c for c in exchange_attempts if isinstance(result(c), dict)]
     exchange = exchange_calls[0] if len(exchange_calls) == 1 else None
     exchange_index = exchange["index"] if exchange else 10**9
     args = exchange["arguments"] if exchange else {}
@@ -422,6 +428,10 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "task_id": str(sim.get("task_id")), "trial": sim.get("trial"),
         "termination_reason": sim.get("termination_reason"),
         "execution_complete": execution_complete,
+        "exchange_attempt_count": len(exchange_attempts),
+        "blocked_exchange_attempt_count": sum(
+            not isinstance(result(call), dict) for call in exchange_attempts
+        ),
         "expected_write_observed": len(exchange_calls) == 1,
         "task_completed": bool(len(exchange_calls) == 1 and final_state_ok),
         "evaluation_completeness": (
