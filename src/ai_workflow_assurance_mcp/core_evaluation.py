@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ai_workflow_assurance_mcp.core_support import (
-    AssuranceInputError,
     MAX_EVALUATION_CHECKS,
     SCHEMA_VERSION,
+    AssuranceInputError,
     _bounded_report_value,
     _is_number,
     _lookup_path,
@@ -18,11 +18,11 @@ from ai_workflow_assurance_mcp.core_support import (
     _typed_equal,
     stable_json_digest,
 )
-
 from ai_workflow_assurance_mcp.core_validation import (
     validate_cases,
     validate_spec,
 )
+
 
 def _expected_value(criterion: dict[str, Any], expected_root: Any) -> tuple[bool, Any]:
     if "expected_path" in criterion:
