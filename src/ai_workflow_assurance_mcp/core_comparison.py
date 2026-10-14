@@ -8,21 +8,20 @@ from typing import Any
 
 from ai_workflow_assurance_mcp.core_evaluation import (
     _evaluation_status,
-    evaluate_suite,
 )
-
 from ai_workflow_assurance_mcp.core_support import (
-    AssuranceInputError,
     MAX_CASES,
     MAX_EXPLANATION_ITEMS,
     MAX_JSON_DEPTH,
     SEVERITY_ORDER,
+    AssuranceInputError,
     _bounded_errors,
     _exceeds_json_depth,
     _is_number,
     _precise_average,
     _precise_sum,
 )
+
 
 def _validate_report(report: Any, label: str) -> list[str]:
     errors: list[str] = []
