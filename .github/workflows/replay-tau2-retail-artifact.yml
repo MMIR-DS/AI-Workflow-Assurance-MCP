@@ -1,0 +1,219 @@
+name: Re-evaluate saved Tau2 retail run with current AWA adapter
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Completed GitHub Actions run ID from tau2-retail-smoke.yml"
+        required: true
+        default: "38528827908"
+        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/replay-tau2-retail-artifact.yml"
+      - "scripts/adapt_tau2_results.py"
+      - "examples/tau2_retail_workflow.json"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/replay-tau2-retail-artifact.yml"
+      - "scripts/adapt_tau2_results.py"
+      - "examples/tau2_retail_workflow.json"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay-saved-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SOURCE_RUN_ID: ${{ inputs.source_run_id || '38528827908' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install AWA and test dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Validate source run and locate its Tau2 artifact
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          
+          token = os.environ["GH_TOKEN"]
+          run_id = os.environ.get("SOURCE_RUN_ID", "").strip()
+          if not run_id.isdigit():
+              raise SystemExit("SOURCE_RUN_ID must be a numeric GitHub Actions run ID.")
+          
+          api = os.environ["GITHUB_API_URL"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          
+          def get_json(url):
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          
+          run = get_json(f"{api}/repos/{repo}/actions/runs/{run_id}")
+          if run.get("path") != ".github/workflows/tau2-retail-smoke.yml":
+              raise SystemExit(
+                  f"Run {run_id} is not from tau2-retail-smoke.yml: {run.get('path')!r}"
+              )
+          if run.get("status") != "completed":
+              raise SystemExit(f"Source run {run_id} is not completed.")
+          
+          payload = get_json(
+              f"{api}/repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100"
+          )
+          candidates = [
+              artifact for artifact in payload.get("artifacts", [])
+              if artifact.get("name") == "tau2-awa-retail-assurance"
+              and artifact.get("expired") is False
+          ]
+          if len(candidates) != 1:
+              raise SystemExit(
+                  f"Expected one unexpired tau2-awa-retail-assurance artifact; found {len(candidates)}."
+              )
+          
+          artifact = candidates[0]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"artifact_id={artifact['id']}\n")
+          print(json.dumps({
+              "source_run_id": run_id,
+              "source_run_sha": run.get("head_sha"),
+              "source_run_conclusion": run.get("conclusion"),
+              "artifact_id": artifact["id"],
+              "artifact_size_bytes": artifact.get("size_in_bytes"),
+          }, indent=2))
+          PY
+
+      - name: Download and unpack the saved Tau2 trace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.source.outputs.artifact_id }}
+        run: |
+          # Authenticate only to the GitHub API endpoint; never forward the token to the artifact host.
+          curl --fail --silent --show-error --dump-header /tmp/tau2-artifact-response.headers --output /dev/null --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip"
+          DOWNLOAD_URL="$(python - <<PY
+          from pathlib import Path
+          locations = [
+              line.split(":", 1)[1].strip()
+              for line in Path("/tmp/tau2-artifact-response.headers").read_text().splitlines()
+              if line.lower().startswith("location:")
+          ]
+          if not locations:
+              raise SystemExit("GitHub did not return an artifact download redirect.")
+          print(locations[-1])
+          PY
+          )"
+          test -n "$DOWNLOAD_URL"
+          curl --fail --silent --show-error --location --retry 2 "$DOWNLOAD_URL" --output /tmp/tau2-source-artifact.zip
+          mkdir -p source-artifact
+          unzip -q /tmp/tau2-source-artifact.zip -d source-artifact
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          
+          matches = list(Path("source-artifact").glob(
+              "**/tau2-standalone-retail-task0/results.json"
+          ))
+          if len(matches) != 1:
+              raise SystemExit(f"Expected one saved Tau2 results.json; found {len(matches)}.")
+          trace = matches[0].resolve()
+          payload = json.loads(trace.read_text(encoding="utf-8"))
+          simulations = payload.get("simulations")
+          if not isinstance(simulations, list) or len(simulations) != 1:
+              raise SystemExit("Expected exactly one Tau2 simulation in the saved trace.")
+          info = payload.get("info") or {}
+          if not info.get("git_commit"):
+              raise SystemExit("Saved Tau2 trace is missing source git_commit provenance.")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"TRACE_FILE={trace}\n")
+          print(json.dumps({
+              "trace_file": str(trace),
+              "task_id": simulations[0].get("task_id"),
+              "trace_source_commit": info.get("git_commit"),
+              "simulation_count": len(simulations),
+          }, indent=2))
+          PY
+
+      - name: Re-evaluate the saved trace with the current adapter
+        run: |
+          set +e
+          PYTHONPATH=src python scripts/adapt_tau2_results.py \
+            --results "$TRACE_FILE" \
+            --spec examples/tau2_retail_workflow.json \
+            --output-dir awa-replayed-artifact
+          adapter_status=$?
+          set -e
+          echo "ADAPTER_STATUS=$adapter_status" >> "$GITHUB_ENV"
+
+      - name: Assert successful state is observed while unsafe retries remain NO_GO
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          
+          output = Path("awa-replayed-artifact")
+          metadata_rows = json.loads((output / "adapter_metadata.json").read_text(encoding="utf-8"))
+          cases = json.loads((output / "awa_cases.json").read_text(encoding="utf-8"))
+          evaluation = json.loads((output / "awa_eval_report.json").read_text(encoding="utf-8"))
+          release = json.loads((output / "awa_release_report.json").read_text(encoding="utf-8"))
+          if len(metadata_rows) != 1 or len(cases) != 1:
+              raise SystemExit("Expected exactly one adapter metadata row and one evaluated case.")
+          
+          metadata = metadata_rows[0]
+          actual = cases[0]["actual"]
+          checks = {
+              "four_exchange_attempts_observed": metadata.get("exchange_attempt_count") == 4,
+              "three_prewrite_blocks_observed": metadata.get("blocked_exchange_attempt_count") == 3,
+              "one_successful_write_observed": metadata.get("expected_write_observed") is True,
+              "final_task_state_recognized": metadata.get("task_completed") is True,
+              "confirmation_valid_for_executed_write": actual.get("confirmation_policy_respected") is True,
+              "final_state_matches_expected": actual.get("final_state_matches_expected") is True,
+              "payment_policy_respected": actual.get("payment_policy_respected") is True,
+              "price_difference_reconciles": actual.get("price_difference_reconciles") is True,
+              "repeated_attempts_remain_visible": actual.get("one_expected_write_only") is False,
+              "release_stays_no_go": release.get("decision") == "NO_GO",
+              "critical_failure_remains": evaluation.get("summary", {}).get("critical_failures", 0) >= 1,
+              "expected_no_go_exit_code": os.environ.get("ADAPTER_STATUS") == "2",
+          }
+          print(json.dumps({
+              "checks": checks,
+              "source_run_id": os.environ.get("SOURCE_RUN_ID"),
+              "model": metadata.get("model"),
+              "exchange_attempt_count": metadata.get("exchange_attempt_count"),
+              "blocked_exchange_attempt_count": metadata.get("blocked_exchange_attempt_count"),
+              "expected_write_observed": metadata.get("expected_write_observed"),
+              "task_completed": metadata.get("task_completed"),
+              "release_decision": release.get("decision"),
+              "critical_failures": evaluation.get("summary", {}).get("critical_failures"),
+              "high_failures": evaluation.get("summary", {}).get("high_failures"),
+              "pass_rate": evaluation.get("summary", {}).get("pass_rate"),
+              "adapter_exit_code": os.environ.get("ADAPTER_STATUS"),
+          }, indent=2))
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit(f"Trace-level replay assertions failed: {failed}")
+          PY
