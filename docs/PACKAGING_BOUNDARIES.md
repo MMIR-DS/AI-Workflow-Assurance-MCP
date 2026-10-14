@@ -2,11 +2,12 @@
 
 ## Generic distribution
 
-The `ai-workflow-assurance-mcp` wheel is the general-purpose evaluation package. Its public CLI and MCP server evaluate supplied workflow observations and expose the documented reference preflight. The wheel intentionally excludes these simulator-only implementation modules:
+The `ai-workflow-assurance-mcp` wheel is the general-purpose evaluation package. Its public CLI and MCP server evaluate supplied workflow observations and expose the documented reference preflight. The wheel intentionally excludes all modules matching `ai_workflow_assurance_mcp.tau2_*.py`, including:
 
 - `ai_workflow_assurance_mcp.tau2_constants`
 - `ai_workflow_assurance_mcp.tau2_prewrite`
 - `ai_workflow_assurance_mcp.tau2_postwrite`
+- `ai_workflow_assurance_mcp.tau2_prewrite_common` and the operation-specific `tau2_prewrite_*` modules
 
 These modules are used by the repository's pinned Tau2 simulator integration, patch installer, post-write audit and associated tests. They are not required by the generic wheel's entry points.
 
@@ -18,7 +19,7 @@ This change creates a wheel boundary; it does **not** create a separately instal
 
 ## Verification
 
-The clean-wheel-origin check imports AWA from the installed environment and fails if any of the three simulator-only modules are importable. CI runs the check on Linux and Windows. Source-tree tests continue to exercise these implementation modules directly.
+The clean-wheel-origin check imports AWA from the installed environment and fails if any package submodule whose name starts with `tau2_` is importable. This automatically covers the split policy modules as the source layout evolves. CI runs the check on Linux and Windows. Source-tree tests continue to exercise these implementation modules directly.
 
 To inspect a locally built wheel:
 
@@ -31,8 +32,9 @@ from pathlib import Path
 wheel = next(Path("dist").glob("*.whl"))
 with ZipFile(wheel) as archive:
     names = set(archive.namelist())
-for module in ("tau2_constants.py", "tau2_prewrite.py", "tau2_postwrite.py"):
-    assert not any(name.endswith("/" + module) for name in names), module
+for name in names:
+    if "/ai_workflow_assurance_mcp/tau2_" in name and name.endswith(".py"):
+        raise AssertionError(f"Tau2-only module leaked into generic wheel: {name}")
 print("Generic wheel excludes Tau2 simulator implementation modules.")
 PY
 ```
