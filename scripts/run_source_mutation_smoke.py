@@ -88,8 +88,9 @@ MUTANTS: list[dict[str, str]] = [
         "id": "prewrite_replay_after_no_go",
         "description": "Ignore a recorded AWA_PREWRITE_NO_GO and allow replay of the prior confirmation.",
         "file": "src/ai_workflow_assurance_mcp/tau2_prewrite.py",
-        "source": 'if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:',
-        "replacement": "if False:",
+        "source": '                if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:
+                    latest_index = max(latest_index, index)',
+        "replacement": '                if False:\n                    latest_index = max(latest_index, index)',
         "test": "tests/test_tau2_prewrite.py::test_tau2_adapter_blocks_replay_of_confirmation_after_no_go",
     },
     {
