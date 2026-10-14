@@ -97,7 +97,7 @@ Pinned pack checksum (when using the published ZIP):
 
 ## Optional Tau2 simulator showcase
 
-This repository also contains Tau2-specific pre-write and post-write tooling. It currently ships in the same Python distribution as the generic evaluator; a separately installable `awa-tau2` package has **not** been created. The generic evaluator itself only assesses supplied observations. Tau2-specific guards are simulator integrations, not a production control plane.
+This repository also contains Tau2-specific pre-write and post-write tooling. The large simulator dispatcher/pre-write/post-write implementation modules stay in the repository source tree for CI and the manual Tau2 showcase but are excluded from the generic Python wheel. Lightweight Tau2 manifest inspection remains in the generic package; a separately installable `awa-tau2` add-on has **not** been created. The generic evaluator itself only assesses supplied observations. Tau2-specific guards are simulator integrations, not a production control plane. See [packaging boundaries](docs/PACKAGING_BOUNDARIES.md).
 
 The workflow `.github/workflows/tau2-retail-smoke.yml` is **manual-only** and can call OpenRouter against a pinned public Tau2 retail task when deliberately triggered. It requires `OPENROUTER_API_KEY`, may incur model charges, and must not be run unintentionally. The adapter evaluates recorded observations and does not use Tau2 reward, `db_match`, or action-check fields as its release oracle.
 
