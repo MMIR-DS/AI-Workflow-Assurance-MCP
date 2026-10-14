@@ -654,14 +654,19 @@ def main() -> None:
     )
     assert len(results) == 1 and not results[0].error
     assert environment.calls == ["modify_pending_order_items"]
-    assert json.loads(results[0].content)["items"][0]["item_id"] == "7706410293"
+    result_order = json.loads(results[0].content)
+    assert sum(item.get("item_id") == "7706410293" for item in result_order["items"]) == 1
     assert orchestrator.num_errors == 0
 
     # A catalog mismatch is reported after execution and must never look like a
     # pre-write denial, because the mutation already happened and must not retry.
     trajectory, pending_items_call = _setup_pending_items(single_item=True)
     bad_postwrite = _single_item_postwrite_snapshot(trajectory, pending_items_call)
-    bad_postwrite["items"][0]["price"] = 1.23
+    bad_target = next(
+        item for item in bad_postwrite["items"]
+        if item.get("item_id") == "7706410293"
+    )
+    bad_target["price"] = 1.23
     results, environment, orchestrator = _dispatch(
         trajectory, pending_items_call,
         {pending_items_call.id: json.dumps(bad_postwrite)},
