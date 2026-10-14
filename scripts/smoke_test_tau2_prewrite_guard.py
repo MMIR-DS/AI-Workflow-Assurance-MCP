@@ -24,8 +24,9 @@ FIXTURE = ROOT / "tests" / "fixtures" / "tau2_task0_trace_minimal.json"
 
 
 class CountingEnvironment:
-    def __init__(self) -> None:
+    def __init__(self, response_overrides: dict[str, str] | None = None) -> None:
         self.calls: list[str] = []
+        self.response_overrides = response_overrides or {}
 
     def get_response(self, tool_call: ToolCall) -> ToolMessage:
         self.calls.append(tool_call.name)
@@ -33,7 +34,7 @@ class CountingEnvironment:
             id=tool_call.id,
             role="tool",
             requestor=tool_call.requestor,
-            content="SIMULATED_WRITE_EXECUTED",
+            content=self.response_overrides.get(tool_call.id, "SIMULATED_WRITE_EXECUTED"),
             error=False,
         )
 
@@ -51,14 +52,20 @@ def _setup() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
-def _dispatch(trajectory: list[dict[str, Any]], call: ToolCall) -> tuple[list[ToolMessage], CountingEnvironment, Any]:
-    return _dispatch_many(trajectory, [call])
+def _dispatch(
+    trajectory: list[dict[str, Any]],
+    call: ToolCall,
+    response_overrides: dict[str, str] | None = None,
+) -> tuple[list[ToolMessage], CountingEnvironment, Any]:
+    return _dispatch_many(trajectory, [call], response_overrides)
 
 
 def _dispatch_many(
-    trajectory: list[dict[str, Any]], calls: list[ToolCall]
+    trajectory: list[dict[str, Any]],
+    calls: list[ToolCall],
+    response_overrides: dict[str, str] | None = None,
 ) -> tuple[list[ToolMessage], CountingEnvironment, Any]:
-    environment = CountingEnvironment()
+    environment = CountingEnvironment(response_overrides)
     orchestrator = SimpleNamespace(environment=environment, trajectory=trajectory, num_errors=0)
     results = BaseOrchestrator._execute_tool_calls(orchestrator, calls)
     return results, environment, orchestrator
@@ -233,7 +240,7 @@ def _setup_payment() -> tuple[list[dict[str, Any]], ToolCall]:
     return trajectory, call
 
 
-def _setup_pending_items() -> tuple[list[dict[str, Any]], ToolCall]:
+def _setup_pending_items(*, single_item: bool = False) -> tuple[list[dict[str, Any]], ToolCall]:
     trajectory, _ = _setup()
     order_result = next(
         message for message in trajectory
@@ -242,21 +249,28 @@ def _setup_pending_items() -> tuple[list[dict[str, Any]], ToolCall]:
     order = json.loads(order_result["content"])
     order["status"] = "pending"
     order_result["content"] = json.dumps(order)
+    old_items = ["1151293680"] if single_item else ["1151293680", "4983901480"]
+    new_items = ["7706410293"] if single_item else ["7706410293", "7747408585"]
+    pairs = (
+        "exchange old item 1151293680 for 7706410293"
+        if single_item else
+        "exchange old item 1151293680 for 7706410293 and old item 4983901480 for 7747408585"
+    )
+    refund = "$3.17" if single_item else "$16.63"
     raw_call = {
         "id": "pending-items-call-001",
         "name": "modify_pending_order_items",
         "arguments": {
             "order_id": "#W2378156",
-            "item_ids": ["1151293680", "4983901480"],
-            "new_item_ids": ["7706410293", "7747408585"],
+            "item_ids": old_items,
+            "new_item_ids": new_items,
             "payment_method_id": "credit_card_9513926",
         },
     }
     trajectory[-1]["tool_calls"] = [raw_call]
     trajectory[16]["content"] = (
-        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. The total price difference is "
-        "a $16.63 refund to credit_card_9513926. Please confirm."
+        f"To confirm order #W2378156: {pairs}. The total price difference is "
+        f"a {refund} refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = "Yes, that's correct. Please proceed with the item update."
     call = ToolCall(
@@ -266,6 +280,36 @@ def _setup_pending_items() -> tuple[list[dict[str, Any]], ToolCall]:
         requestor="assistant",
     )
     return trajectory, call
+
+
+def _single_item_postwrite_snapshot(
+    trajectory: list[dict[str, Any]], call: ToolCall
+) -> dict[str, Any]:
+    order_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "order-read-1"
+    )
+    order = json.loads(order_result["content"])
+    catalog_result = next(
+        message for message in trajectory
+        if message.get("role") == "tool" and message.get("id") == "keyboard-product-1"
+    )
+    catalog = json.loads(catalog_result["content"])
+    old_item_id = call.arguments["item_ids"][0]
+    new_item_id = call.arguments["new_item_ids"][0]
+    old_rows = [item for item in order["items"] if item.get("item_id") == old_item_id]
+    if len(old_rows) != 1:
+        raise AssertionError("The fake pre-write order must contain exactly one selected old item.")
+    variant = catalog.get("variants", {}).get(new_item_id)
+    if not isinstance(variant, dict):
+        raise AssertionError("The fake catalog does not contain the requested replacement variant.")
+    row = old_rows[0]
+    row["item_id"] = new_item_id
+    row["product_id"] = catalog["product_id"]
+    row["price"] = variant["price"]
+    row["options"] = variant["options"]
+    order["status"] = "pending (item modified)"
+    return order
 
 
 def _setup_user_address() -> tuple[list[dict[str, Any]], ToolCall]:
@@ -591,18 +635,45 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    # Pending item modifications remain disabled until the pinned Tau2 multi-item
-    # executor is independently shown to preserve each replacement's catalog state.
+    # Multi-item pending changes are rejected before the environment callback.
     trajectory, pending_items_call = _setup_pending_items()
     results, environment, orchestrator = _dispatch(trajectory, pending_items_call)
     assert len(results) == 1 and results[0].error
-    assert environment.calls == [], "unverified pending-item updates must never reach the environment"
+    assert environment.calls == [], "multi-item pending writes must never reach the environment"
     assert "AWA_PREWRITE_NO_GO" in (results[0].content or "")
-    assert "pending-order item modification is disabled" in (results[0].content or "")
+    assert "exactly one distinct old/new item pair" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    # A denied pending-item update reserves the order for this batch; a second write
-    # cannot reuse the same pre-write trajectory snapshot.
+    # A single-item pending change requires both preflight GO and an independent
+    # post-write catalog audit before the successful result is returned.
+    trajectory, pending_items_call = _setup_pending_items(single_item=True)
+    good_postwrite = _single_item_postwrite_snapshot(trajectory, pending_items_call)
+    results, environment, orchestrator = _dispatch(
+        trajectory, pending_items_call,
+        {pending_items_call.id: json.dumps(good_postwrite)},
+    )
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["modify_pending_order_items"]
+    assert json.loads(results[0].content)["items"][0]["item_id"] == "7706410293"
+    assert orchestrator.num_errors == 0
+
+    # A catalog mismatch is reported after execution and must never look like a
+    # pre-write denial, because the mutation already happened and must not retry.
+    trajectory, pending_items_call = _setup_pending_items(single_item=True)
+    bad_postwrite = _single_item_postwrite_snapshot(trajectory, pending_items_call)
+    bad_postwrite["items"][0]["price"] = 1.23
+    results, environment, orchestrator = _dispatch(
+        trajectory, pending_items_call,
+        {pending_items_call.id: json.dumps(bad_postwrite)},
+    )
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == ["modify_pending_order_items"]
+    assert "AWA_POSTWRITE_AUDIT_NOT_PASS" in (results[0].content or "")
+    assert "Do not retry this write" in (results[0].content or "")
+    assert "AWA_PREWRITE_NO_GO" not in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
+    # A blocked multi-item update reserves the order within this batch.
     trajectory, pending_items_call = _setup_pending_items()
     _, exchange_call = _setup()
     results, environment, orchestrator = _dispatch_many(
@@ -610,7 +681,7 @@ def main() -> None:
     )
     assert len(results) == 2 and all(result.error for result in results)
     assert environment.calls == []
-    assert "pending-order item modification is disabled" in (results[0].content or "")
+    assert "exactly one distinct old/new item pair" in (results[0].content or "")
     assert "second write for the same order" in (results[1].content or "")
     assert orchestrator.num_errors == 2
 
