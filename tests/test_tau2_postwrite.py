@@ -8,6 +8,7 @@ from pathlib import Path
 from ai_workflow_assurance_mcp.tau2_postwrite import (
     audit_tau2_benchmark_result_postwrite,
     audit_tau2_order_items_against_catalog,
+    audit_tau2_single_pending_item_write_response,
     audit_tau2_trace_postwrite,
 )
 
@@ -850,3 +851,114 @@ def test_benchmark_artifact_with_empty_simulations_is_not_evaluable() -> None:
     assert result["decision"] == "NOT_EVALUABLE"
     assert result["blocking_checks"] == ["at_least_one_simulation_selected"]
     assert result["evidence_summary"]["not_evaluable_count"] == 1
+
+def _single_item_runtime_audit_inputs(
+    *, corrupt_target: bool = False, corrupt_untouched: bool = False, missing_catalog: bool = False
+) -> tuple[list[dict], dict, dict]:
+    before = _order_snapshot()
+    before["items"][0] = {
+        "product_id": "product-camera",
+        "item_id": "camera-old",
+        "price": 499.99,
+        "options": {"resolution": "1080p", "waterproof": "no", "color": "black"},
+    }
+    after = json.loads(json.dumps(before))
+    target = after["items"][0]
+    target.update({
+        "item_id": "camera-new",
+        "price": 466.75,
+        "options": dict(_CAMERA_OPTIONS),
+    })
+    after["status"] = "pending (item modified)"
+    if corrupt_target:
+        target["price"] = 1.23
+    if corrupt_untouched:
+        after["items"][1]["price"] = 999.00
+
+    catalog = _catalog_snapshots()[0]
+    trajectory = [
+        {
+            "role": "assistant",
+            "tool_calls": [{
+                "id": "single-audit-order-read",
+                "name": "get_order_details",
+                "arguments": {"order_id": "#W9348897"},
+            }],
+        },
+        {
+            "role": "tool", "id": "single-audit-order-read",
+            "content": json.dumps(before), "error": False,
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [{
+                "id": "single-audit-product-read",
+                "name": "get_product_details",
+                "arguments": {"product_id": "product-camera"},
+            }],
+        },
+    ]
+    if not missing_catalog:
+        trajectory.append({
+            "role": "tool", "id": "single-audit-product-read",
+            "content": json.dumps(catalog), "error": False,
+        })
+    call = {
+        "id": "single-audit-write",
+        "name": "modify_pending_order_items",
+        "arguments": {
+            "order_id": "#W9348897",
+            "item_ids": ["camera-old"],
+            "new_item_ids": ["camera-new"],
+            "payment_method_id": "credit_card_test",
+        },
+    }
+    trajectory.append({"role": "assistant", "tool_calls": [call]})
+    result = {
+        "role": "tool",
+        "id": "single-audit-write",
+        "content": json.dumps(after),
+        "error": False,
+    }
+    return trajectory, call, result
+
+
+def test_single_pending_item_postwrite_audit_passes_for_catalog_match_and_unchanged_other_rows() -> None:
+    trajectory, call, result_message = _single_item_runtime_audit_inputs()
+
+    result = audit_tau2_single_pending_item_write_response(trajectory, call, result_message)
+
+    assert result["decision"] == "PASS"
+    assert result["blocking_checks"] == []
+    assert result["checked"]["single_item_replacement_observed"] == "PASS"
+    assert result["checked"]["non_target_order_rows_unchanged"] == "PASS"
+    assert result["checked"]["item_prices_match_catalog"] == "PASS"
+    assert result["checked"]["item_options_match_catalog"] == "PASS"
+
+
+def test_single_pending_item_postwrite_audit_fails_on_target_catalog_mismatch() -> None:
+    trajectory, call, result_message = _single_item_runtime_audit_inputs(corrupt_target=True)
+
+    result = audit_tau2_single_pending_item_write_response(trajectory, call, result_message)
+
+    assert result["decision"] == "FAIL"
+    assert "replacement_matches_catalog" in result["blocking_checks"]
+
+
+def test_single_pending_item_postwrite_audit_fails_when_unrelated_row_changes() -> None:
+    trajectory, call, result_message = _single_item_runtime_audit_inputs(corrupt_untouched=True)
+
+    result = audit_tau2_single_pending_item_write_response(trajectory, call, result_message)
+
+    assert result["decision"] == "FAIL"
+    assert result["blocking_checks"] == ["non_target_order_rows_unchanged"]
+
+
+def test_single_pending_item_postwrite_audit_is_not_evaluable_without_catalog() -> None:
+    trajectory, call, result_message = _single_item_runtime_audit_inputs(missing_catalog=True)
+
+    result = audit_tau2_single_pending_item_write_response(trajectory, call, result_message)
+
+    assert result["decision"] == "NOT_EVALUABLE"
+    assert "latest_replacement_catalog_available" in result["blocking_checks"]
+
