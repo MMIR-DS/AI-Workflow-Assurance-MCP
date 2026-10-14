@@ -111,11 +111,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ steps.source.outputs.artifact_id }}
         run: |
-          curl --fail --silent --show-error --location --retry 2 \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "Accept: application/vnd.github+json" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
-            --output /tmp/tau2-source-artifact.zip
+          # Authenticate only to the GitHub API endpoint; never forward the token to the artifact host.
+          curl --fail --silent --show-error --dump-header /tmp/tau2-artifact-response.headers --output /dev/null --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip"
+          DOWNLOAD_URL="$(python - <<PY
+          from pathlib import Path
+          locations = [
+              line.split(":", 1)[1].strip()
+              for line in Path("/tmp/tau2-artifact-response.headers").read_text().splitlines()
+              if line.lower().startswith("location:")
+          ]
+          if not locations:
+              raise SystemExit("GitHub did not return an artifact download redirect.")
+          print(locations[-1])
+          PY
+          )"
+          test -n "$DOWNLOAD_URL"
+          curl --fail --silent --show-error --location --retry 2 "$DOWNLOAD_URL" --output /tmp/tau2-source-artifact.zip
           mkdir -p source-artifact
           unzip -q /tmp/tau2-source-artifact.zip -d source-artifact
           python - <<'PY'
