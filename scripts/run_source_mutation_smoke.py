@@ -23,7 +23,7 @@ CORE_RELATIVE = Path("src/ai_workflow_assurance_mcp/core.py")
 CLI_RELATIVE = Path("src/ai_workflow_assurance_mcp/cli.py")
 TEST_RELATIVE = Path("tests/test_core.py")
 CLI_TEST_RELATIVE = Path("tests/test_cli.py")
-TAU2_PREWRITE_RELATIVE = Path("src/ai_workflow_assurance_mcp/tau2_prewrite.py")
+TAU2_PREWRITE_COMMON_RELATIVE = Path("src/ai_workflow_assurance_mcp/tau2_prewrite_common.py")
 TAU2_TEST_RELATIVE = Path("tests/test_tau2_prewrite.py")
 
 MUTANTS: list[dict[str, str]] = [
@@ -87,7 +87,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "prewrite_replay_after_no_go",
         "description": "Ignore a recorded AWA_PREWRITE_NO_GO and allow replay of the prior confirmation.",
-        "file": "src/ai_workflow_assurance_mcp/tau2_prewrite.py",
+        "file": "src/ai_workflow_assurance_mcp/tau2_prewrite_common.py",
         "source": '                if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:\n                    latest_index = max(latest_index, index)',
         "replacement": '                if False:\n                    latest_index = max(latest_index, index)',
         "test": "tests/test_tau2_prewrite.py::test_tau2_adapter_blocks_replay_of_confirmation_after_no_go",
@@ -132,7 +132,7 @@ def run_mutation_smoke() -> dict[str, Any]:
         source_paths = {
             CORE_RELATIVE: worktree / CORE_RELATIVE,
             CLI_RELATIVE: worktree / CLI_RELATIVE,
-            TAU2_PREWRITE_RELATIVE: worktree / TAU2_PREWRITE_RELATIVE,
+            TAU2_PREWRITE_COMMON_RELATIVE: worktree / TAU2_PREWRITE_COMMON_RELATIVE,
         }
         originals = {relative: path.read_text(encoding="utf-8") for relative, path in source_paths.items()}
 
