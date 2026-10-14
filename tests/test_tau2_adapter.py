@@ -433,3 +433,57 @@ def test_terminal_user_stop_without_expected_exchange_write_is_no_go() -> None:
     assert "final_state_matches_expected" in case["unobserved_checks"]
     assert release["decision"] == "NO_GO"
     assert report["summary"]["critical_failures"] >= 1
+
+
+def test_blocked_exchange_attempts_do_not_hide_the_later_successful_write() -> None:
+    results, spec = _load_inputs()
+    _set_complete_confirmation(results)
+    messages = results["simulations"][0]["messages"]
+    successful_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    successful_call = next(
+        call for call in messages[successful_index]["tool_calls"]
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+
+    blocked_messages = []
+    for attempt in range(2):
+        call_id = f"blocked-exchange-attempt-{attempt}"
+        blocked_call = json.loads(json.dumps(successful_call))
+        blocked_call["id"] = call_id
+        blocked_messages.extend([
+            {"role": "assistant", "content": None, "tool_calls": [blocked_call]},
+            {
+                "role": "tool",
+                "id": call_id,
+                "content": (
+                    "AWA_PREWRITE_NO_GO: exchange blocked before execution. "
+                    "The disclosure was incomplete; do not repeat the write attempt."
+                ),
+            },
+        ])
+    messages[successful_index:successful_index] = blocked_messages
+
+    case, metadata, report, release = evaluate_trace(results, spec)
+
+    # The adapter must inspect the one actual successful write rather than
+    # mistaking two blocked pre-write attempts for missing/ambiguous state.
+    assert metadata["exchange_attempt_count"] == 3
+    assert metadata["blocked_exchange_attempt_count"] == 2
+    assert metadata["expected_write_observed"] is True
+    assert metadata["task_completed"] is True
+    assert case["actual"]["confirmation_policy_respected"] is True
+    assert case["actual"]["final_state_matches_expected"] is True
+    assert case["actual"]["payment_policy_respected"] is True
+    assert case["actual"]["price_difference_reconciles"] is True
+
+    # Repeated blocked attempts remain visible and keep the release gate closed.
+    assert case["actual"]["one_expected_write_only"] is False
+    assert release["decision"] == "NO_GO"
+    assert report["summary"]["critical_failures"] >= 1
