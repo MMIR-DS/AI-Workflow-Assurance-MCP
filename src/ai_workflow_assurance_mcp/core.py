@@ -22,8 +22,6 @@ from ai_workflow_assurance_mcp.core_release import (
     create_release_report as create_release_report,
 )
 from ai_workflow_assurance_mcp.core_support import (
-    _PATH_PART as _PATH_PART,
-    _SLUG as _SLUG,
     MAX_CASES as MAX_CASES,
     MAX_CRITERIA as MAX_CRITERIA,
     MAX_ERROR_CHARS as MAX_ERROR_CHARS,
@@ -34,8 +32,10 @@ from ai_workflow_assurance_mcp.core_support import (
     MAX_PATH_PARTS as MAX_PATH_PARTS,
     MAX_VALIDATION_ERRORS as MAX_VALIDATION_ERRORS,
     OPERATORS as OPERATORS,
+    _PATH_PART as _PATH_PART,
     SCHEMA_VERSION as SCHEMA_VERSION,
     SEVERITY_ORDER as SEVERITY_ORDER,
+    _SLUG as _SLUG,
     SMALL_SAMPLE_WARNING_SIZE as SMALL_SAMPLE_WARNING_SIZE,
     AssuranceInputError as AssuranceInputError,
     _bounded_errors as _bounded_errors,
