@@ -103,6 +103,9 @@ The runtime smoke test uses Tau2's actual patched `BaseOrchestrator._execute_too
 - the saved baseline, whose final confirmation omits the order ID and old item IDs, returns `NO_GO` and makes zero environment calls;
 - an unreviewed `create_order` request is denied by the dispatcher and makes zero environment calls;
 - a synthetic complete disclosure followed by an affirmative reply returns `GO` and makes exactly one fake environment call;
+- replaying the old disclosure and confirmation after `AWA_PREWRITE_NO_GO` is blocked with zero environment calls;
+- a fresh affirmative reply after an incomplete re-disclosure is still blocked with zero environment calls;
+- a complete fresh disclosure and affirmative reply after `AWA_PREWRITE_NO_GO` are re-evaluated against catalog, order, payment, and price evidence before one fake environment call is permitted;
 - a second exchange for the same order in one batch is blocked, so only the first approved exchange reaches the fake environment callback;
 - a valid pending-order cancellation reaches the fake callback only after exact refund disclosure, while missing disclosure is blocked before callback;
 - a valid pending-order address change reaches the fake callback only after exact address disclosure, while a missing field is blocked before callback;
