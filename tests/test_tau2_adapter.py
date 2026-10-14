@@ -468,7 +468,15 @@ def test_blocked_exchange_attempts_do_not_hide_the_later_successful_write() -> N
                 ),
             },
         ])
-    messages[successful_index:successful_index] = blocked_messages
+    confirmation_index = next(
+        index for index, message in enumerate(messages[:successful_index])
+        if message.get("role") == "assistant"
+        and not message.get("tool_calls")
+        and "To confirm:" in str(message.get("content") or "")
+    )
+    # Place the rejected attempts before the final disclosure and fresh
+    # confirmation, matching the runtime's required retry sequence.
+    messages[confirmation_index:confirmation_index] = blocked_messages
 
     case, metadata, report, release = evaluate_trace(results, spec)
 
