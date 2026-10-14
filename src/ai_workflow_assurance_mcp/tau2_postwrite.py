@@ -1050,6 +1050,11 @@ def audit_tau2_single_pending_item_write_response(
     roll back a write that has already executed.
     """
     messages = _trace_messages(trajectory)
+    if not _trace_messages_are_well_formed(messages):
+        return _single_pending_item_audit_result(
+            "NOT_EVALUABLE", "trajectory_messages_are_well_formed",
+            "The pre-write trajectory is missing or malformed.",
+        )
     arguments = _field(tool_call, "arguments", {})
     if not isinstance(arguments, Mapping):
         return _single_pending_item_audit_result(
