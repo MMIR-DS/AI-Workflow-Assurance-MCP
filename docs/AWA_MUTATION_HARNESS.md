@@ -28,7 +28,7 @@ Do not treat `GO` as a general guarantee of agent safety. AWA evaluates supplied
 
 ## Focused source-code mutation smoke test
 
-A separate, deliberately small source-code mutation check is also included. It copies the core module and a focused regression test into a temporary directory, changes one source expression at a time, and checks that the corresponding test fails against each mutated implementation:
+A separate, deliberately small source-code mutation check is also included. It copies the relevant source modules and their targeted regression tests into a temporary directory, changes one source expression at a time, and checks that the corresponding test fails against each mutated implementation:
 
 ```bash
 python scripts/run_source_mutation_smoke.py
@@ -36,7 +36,7 @@ python scripts/run_source_mutation_smoke.py
 python scripts/run_source_mutation_smoke.py --output artifacts/mutation-report.json
 ```
 
-The current smoke set contains seven hand-selected mutants:
+The current smoke set contains ten hand-selected mutants:
 - Removing strict boolean-versus-integer equality handling.
 - Relaxing the JSON nesting-depth boundary by one level.
 - Forcing a release threshold check to fail even when the observed metric meets the configured limit.
@@ -44,7 +44,9 @@ The current smoke set contains seven hand-selected mutants:
 - Disabling the expected-label drift guard for baseline/candidate comparisons.
 - Disabling critical-regression precedence in comparison trends.
 - Disabling the guard against using a release policy different from the evaluated specification.
+- Ignoring an `AWA_PREWRITE_NO_GO` result and reusing the earlier confirmation on an exchange retry.
+- Treating an unavailable catalog variant as available during a retry after fresh confirmation.
 
 The JSON report includes the Python/platform and GitHub run metadata when available. CI uploads one report artifact per Python version. The baseline tests must pass before mutations are applied. A mutant counts as **killed** only when its targeted test fails; a surviving mutant or invalid mutation anchor fails the command and CI. The temporary copy is discarded afterward, so the production source is not edited by the run.
 
-This is focused source-code mutation testing, but it is **not** a comprehensive mutation score for the project: only seven hand-selected mutants are included. Expand the set as meaningful regression tests are added, or adopt a general mutation-testing tool for broader operator coverage.
+This is focused source-code mutation testing, but it is **not** a comprehensive mutation score for the project: only ten hand-selected mutants are included. Expand the set as meaningful regression tests are added, or adopt a general mutation-testing tool for broader operator coverage.

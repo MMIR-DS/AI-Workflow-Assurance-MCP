@@ -64,6 +64,41 @@ def _dispatch_many(
     return results, environment, orchestrator
 
 
+
+def _setup_retry_after_no_go(
+    *, disclosure: str | None, confirmation: str | None
+) -> tuple[list[dict[str, Any]], ToolCall]:
+    """Build a second exchange attempt after a recorded AWA denial."""
+    trajectory, first_call = _setup()
+    trajectory.append({
+        "role": "tool",
+        "id": first_call.id,
+        "requestor": "assistant",
+        "error": True,
+        "content": "AWA_PREWRITE_NO_GO: the previous exchange was blocked before execution.",
+    })
+    if disclosure is not None:
+        trajectory.append({"role": "assistant", "content": disclosure})
+    if confirmation is not None:
+        trajectory.append({"role": "user", "content": confirmation})
+
+    retry_call = ToolCall(
+        id="retry-after-no-go",
+        name=first_call.name,
+        arguments=dict(first_call.arguments),
+        requestor="assistant",
+    )
+    trajectory.append({
+        "role": "assistant",
+        "tool_calls": [{
+            "id": retry_call.id,
+            "name": retry_call.name,
+            "arguments": retry_call.arguments,
+        }],
+    })
+    return trajectory, retry_call
+
+
 def _setup_cancel() -> tuple[list[dict[str, Any]], ToolCall]:
     trajectory, _ = _setup()
     order_result = next(
@@ -414,6 +449,42 @@ def main() -> None:
         "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
     )
     results, environment, orchestrator = _dispatch(trajectory, call)
+    assert len(results) == 1 and not results[0].error
+    assert environment.calls == ["exchange_delivered_order_items"]
+    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
+    assert orchestrator.num_errors == 0
+
+    # A previous AWA_PREWRITE_NO_GO invalidates the old disclosure/confirmation.
+    trajectory, retry_call = _setup_retry_after_no_go(disclosure=None, confirmation=None)
+    results, environment, orchestrator = _dispatch(trajectory, retry_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == [], "replayed confirmation must not execute a retry"
+    assert "user_reconfirmed_after_latest_blocked_attempt" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
+    # A new affirmative reply is insufficient when the new disclosure is incomplete.
+    trajectory, retry_call = _setup_retry_after_no_go(
+        disclosure="To confirm order #W2378156, please proceed with the exchange.",
+        confirmation="Yes, I confirm.",
+    )
+    results, environment, orchestrator = _dispatch(trajectory, retry_call)
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == [], "incomplete re-disclosure must not execute a retry"
+    assert "complete_customer_facing_exchange_disclosure" in (results[0].content or "")
+    assert orchestrator.num_errors == 1
+
+    # Reconfirming an eligible exchange after complete re-disclosure may execute once.
+    trajectory, retry_call = _setup_retry_after_no_go(
+        disclosure=(
+            "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+            "and old item 4983901480 for 7747408585. The total price difference is "
+            "a $16.63 refund to credit_card_9513926. Please confirm."
+        ),
+        confirmation=(
+            "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+        ),
+    )
+    results, environment, orchestrator = _dispatch(trajectory, retry_call)
     assert len(results) == 1 and not results[0].error
     assert environment.calls == ["exchange_delivered_order_items"]
     assert results[0].content == "SIMULATED_WRITE_EXECUTED"

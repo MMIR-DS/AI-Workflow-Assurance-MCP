@@ -77,7 +77,7 @@ python scripts/run_assurance_mutation_harness.py
 python -m unittest tests.test_mutation_harness
 ```
 
-Run the focused source-code mutation smoke test (eight hand-selected mutants; not comprehensive mutation testing):
+Run the focused source-code mutation smoke test (ten hand-selected mutants; not comprehensive mutation testing):
 
 ```bash
 python scripts/run_source_mutation_smoke.py

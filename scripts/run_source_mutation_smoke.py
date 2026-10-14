@@ -1,4 +1,4 @@
-"""Run focused, deterministic source-code mutation checks against core regression tests.
+"""Run focused, deterministic source-code mutation checks against core, CLI, and Tau2 pre-write regression tests.
 
 This is a small mutation smoke test, not a substitute for a full mutation-testing
 engine. Each mutant changes one known source expression and must be killed by a
@@ -23,6 +23,8 @@ CORE_RELATIVE = Path("src/ai_workflow_assurance_mcp/core.py")
 CLI_RELATIVE = Path("src/ai_workflow_assurance_mcp/cli.py")
 TEST_RELATIVE = Path("tests/test_core.py")
 CLI_TEST_RELATIVE = Path("tests/test_cli.py")
+TAU2_PREWRITE_RELATIVE = Path("src/ai_workflow_assurance_mcp/tau2_prewrite.py")
+TAU2_TEST_RELATIVE = Path("tests/test_tau2_prewrite.py")
 
 MUTANTS: list[dict[str, str]] = [
     {
@@ -81,6 +83,22 @@ MUTANTS: list[dict[str, str]] = [
         "source": 'if args.command == "release" and args.fail_on_non_go and result["decision"] != "GO":',
         "replacement": "if False:",
         "test": "tests/test_cli.py::test_cli_release_fail_on_non_go_exits_one_after_emitting_report",
+    },
+    {
+        "id": "prewrite_replay_after_no_go",
+        "description": "Ignore a recorded AWA_PREWRITE_NO_GO and allow replay of the prior confirmation.",
+        "file": "src/ai_workflow_assurance_mcp/tau2_prewrite.py",
+        "source": '                if isinstance(content, str) and "AWA_PREWRITE_NO_GO" in content:\n                    latest_index = max(latest_index, index)',
+        "replacement": '                if False:\n                    latest_index = max(latest_index, index)',
+        "test": "tests/test_tau2_prewrite.py::test_tau2_adapter_blocks_replay_of_confirmation_after_no_go",
+    },
+    {
+        "id": "prewrite_unavailable_variant_retry",
+        "description": "Treat an unavailable catalog variant as available during a retry.",
+        "file": "src/ai_workflow_assurance_mcp/tau2_prewrite.py",
+        "source": '"available": variant.get("available") is True,',
+        "replacement": '"available": True,',
+        "test": "tests/test_tau2_prewrite.py::test_tau2_adapter_blocks_retry_with_unavailable_variant_after_fresh_confirmation",
     }
 ]
 
@@ -107,11 +125,14 @@ def run_mutation_smoke() -> dict[str, Any]:
         (worktree / "tests").mkdir()
         shutil.copy2(ROOT / TEST_RELATIVE, worktree / TEST_RELATIVE)
         shutil.copy2(ROOT / CLI_TEST_RELATIVE, worktree / CLI_TEST_RELATIVE)
+        shutil.copy2(ROOT / TAU2_TEST_RELATIVE, worktree / TAU2_TEST_RELATIVE)
+        shutil.copytree(ROOT / "tests" / "fixtures", worktree / "tests" / "fixtures")
         shutil.copytree(ROOT / "examples", worktree / "examples")
 
         source_paths = {
             CORE_RELATIVE: worktree / CORE_RELATIVE,
             CLI_RELATIVE: worktree / CLI_RELATIVE,
+            TAU2_PREWRITE_RELATIVE: worktree / TAU2_PREWRITE_RELATIVE,
         }
         originals = {relative: path.read_text(encoding="utf-8") for relative, path in source_paths.items()}
 

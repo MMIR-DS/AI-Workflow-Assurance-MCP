@@ -681,6 +681,90 @@ def test_tau2_adapter_blocks_replay_of_confirmation_after_no_go() -> None:
     assert "explicit_confirmation_does_not_match_action" not in result["blocking_checks"]
 
 
+def test_tau2_adapter_blocks_incomplete_reconfirmation_after_no_go() -> None:
+    trajectory, first_call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+    trajectory.append({
+        "role": "tool",
+        "id": first_call["id"],
+        "content": "AWA_PREWRITE_NO_GO: the previous write was blocked.",
+        "error": True,
+    })
+    trajectory.append({
+        "role": "assistant",
+        "content": "To confirm order #W2378156, please proceed with the exchange.",
+    })
+    trajectory.append({"role": "user", "content": "Yes, I confirm."})
+    retry_call = {
+        "id": "retry-with-incomplete-disclosure",
+        "name": first_call["name"],
+        "arguments": dict(first_call["arguments"]),
+    }
+    trajectory.append({"role": "assistant", "tool_calls": [retry_call]})
+
+    result = evaluate_tau2_prewrite(trajectory, retry_call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["evidence_summary"]["user_reconfirmed_after_latest_blocked_attempt"] is True
+    assert result["checked"]["complete_customer_facing_exchange_disclosure"] is False
+    assert "complete_customer_facing_exchange_disclosure" in result["blocking_checks"]
+
+
+def test_tau2_adapter_blocks_retry_with_unavailable_variant_after_fresh_confirmation() -> None:
+    trajectory, first_call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+    trajectory.append({
+        "role": "tool",
+        "id": first_call["id"],
+        "content": "AWA_PREWRITE_NO_GO: the previous write was blocked.",
+        "error": True,
+    })
+
+    retry_arguments = dict(first_call["arguments"])
+    retry_arguments["new_item_ids"] = ["9025753381", "7747408585"]
+    trajectory.append({
+        "role": "assistant",
+        "content": (
+            "To confirm order #W2378156: exchange old item 1151293680 for "
+            "9025753381 (a full-size, clicky, RGB-backlit keyboard) and old item "
+            "4983901480 for 7747408585 (a black Google Assistant-compatible "
+            "thermostat). The total price difference is a $54.21 refund to "
+            "credit_card_9513926. Please confirm."
+        ),
+    })
+    trajectory.append({
+        "role": "user",
+        "content": "Yes, that's correct. Proceed with the exchange as described.",
+    })
+    retry_call = {
+        "id": "retry-with-unavailable-variant",
+        "name": first_call["name"],
+        "arguments": retry_arguments,
+    }
+    trajectory.append({"role": "assistant", "tool_calls": [retry_call]})
+
+    result = evaluate_tau2_prewrite(trajectory, retry_call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["evidence_summary"]["user_reconfirmed_after_latest_blocked_attempt"] is True
+    assert result["checked"]["new_items_are_verified_available_variants"] is False
+    assert "new_items_are_verified_available_variants" in result["blocking_checks"]
+
+
 def test_tau2_cancel_adapter_allows_pending_order_after_exact_refund_disclosure() -> None:
     from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_cancel_prewrite
 
