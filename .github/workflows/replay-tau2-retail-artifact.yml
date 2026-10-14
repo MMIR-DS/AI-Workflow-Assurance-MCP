@@ -186,8 +186,8 @@ jobs:
           metadata = metadata_rows[0]
           actual = cases[0]["actual"]
           checks = {
-              "three_exchange_attempts_observed": metadata.get("exchange_attempt_count") == 3,
-              "two_prewrite_blocks_observed": metadata.get("blocked_exchange_attempt_count") == 2,
+              "four_exchange_attempts_observed": metadata.get("exchange_attempt_count") == 4,
+              "three_prewrite_blocks_observed": metadata.get("blocked_exchange_attempt_count") == 3,
               "one_successful_write_observed": metadata.get("expected_write_observed") is True,
               "final_task_state_recognized": metadata.get("task_completed") is True,
               "confirmation_valid_for_executed_write": actual.get("confirmation_policy_respected") is True,
