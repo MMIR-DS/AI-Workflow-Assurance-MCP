@@ -18,10 +18,21 @@ from typing import Any
 
 _PROBE = r"""
 import importlib.metadata
+import importlib.util
 import json
 import sysconfig
 from pathlib import Path
 import ai_workflow_assurance_mcp as package
+
+SIMULATOR_ONLY_MODULES = (
+    "ai_workflow_assurance_mcp.tau2_constants",
+    "ai_workflow_assurance_mcp.tau2_prewrite",
+    "ai_workflow_assurance_mcp.tau2_postwrite",
+)
+simulator_module_presence = {
+    name: importlib.util.find_spec(name) is not None for name in SIMULATOR_ONLY_MODULES
+}
+simulator_specific_modules_excluded = not any(simulator_module_presence.values())
 
 purelib = Path(sysconfig.get_paths()["purelib"]).resolve()
 module_path = Path(package.__file__).resolve()
@@ -40,6 +51,8 @@ print(json.dumps({
     "metadata_version": metadata_version,
     "package_version": package_version,
     "import_from_installed_package": import_from_installed_package,
+    "simulator_module_presence": simulator_module_presence,
+    "simulator_specific_modules_excluded": simulator_specific_modules_excluded,
 }, sort_keys=True))
 """
 
@@ -98,6 +111,12 @@ def main() -> int:
     ):
         raise SystemExit(
             "Installed distribution metadata version does not match the imported package version."
+        )
+
+    if probe.get("simulator_specific_modules_excluded") is not True:
+        raise SystemExit(
+            "The generic wheel contains Tau2-only implementation modules: "
+            f"{probe.get('simulator_module_presence')!r}"
         )
 
     report = {
