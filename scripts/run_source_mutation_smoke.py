@@ -95,7 +95,7 @@ MUTANTS: list[dict[str, str]] = [
     {
         "id": "prewrite_unavailable_variant_retry",
         "description": "Treat an unavailable catalog variant as available during a retry.",
-        "file": "src/ai_workflow_assurance_mcp/tau2_prewrite.py",
+        "file": "src/ai_workflow_assurance_mcp/tau2_prewrite_common.py",
         "source": '"available": variant.get("available") is True,',
         "replacement": '"available": True,',
         "test": "tests/test_tau2_prewrite.py::test_tau2_adapter_blocks_retry_with_unavailable_variant_after_fresh_confirmation",
