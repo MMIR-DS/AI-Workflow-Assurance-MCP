@@ -978,26 +978,33 @@ def test_tau2_payment_adapter_blocks_same_as_current_method() -> None:
     assert "payment_method_is_changed" in result["blocking_checks"]
 
 
-def _pending_items_trajectory_and_call() -> tuple[list[dict], dict]:
+def _pending_items_trajectory_and_call(*, single_item: bool = True) -> tuple[list[dict], dict]:
     trajectory, _ = _trajectory_and_call()
     order = _tool_result_json(trajectory, "order-read-1")
     order["status"] = "pending"
     _replace_tool_result_json(trajectory, "order-read-1", order)
+    old_items = ["1151293680"] if single_item else ["1151293680", "4983901480"]
+    new_items = ["7706410293"] if single_item else ["7706410293", "7747408585"]
+    refund = "$3.17" if single_item else "$16.63"
+    pairs = (
+        "exchange old item 1151293680 for 7706410293"
+        if single_item else
+        "exchange old item 1151293680 for 7706410293 and old item 4983901480 for 7747408585"
+    )
     call = {
         "id": "pending-items-call-001",
         "name": "modify_pending_order_items",
         "arguments": {
             "order_id": "#W2378156",
-            "item_ids": ["1151293680", "4983901480"],
-            "new_item_ids": ["7706410293", "7747408585"],
+            "item_ids": old_items,
+            "new_item_ids": new_items,
             "payment_method_id": "credit_card_9513926",
         },
     }
     trajectory[-1]["tool_calls"] = [call]
     trajectory[16]["content"] = (
-        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. The total price difference is "
-        "a $16.63 refund to credit_card_9513926. Please confirm."
+        f"To confirm order #W2378156: {pairs}. The total price difference is "
+        f"a {refund} refund to credit_card_9513926. Please confirm."
     )
     trajectory[17]["content"] = "Yes, that's correct. Please proceed with the item update."
     return trajectory, call
@@ -1014,6 +1021,17 @@ def test_tau2_pending_items_adapter_allows_supported_pending_order_modification(
     assert result["allowed"] is True
     assert result["evidence_summary"]["order_status"] == "pending"
     assert result["evidence_summary"]["pending_order_item_modification_not_previously_attempted"] is True
+
+
+def test_tau2_pending_items_adapter_blocks_multi_item_modification() -> None:
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_pending_items_prewrite
+
+    trajectory, call = _pending_items_trajectory_and_call(single_item=False)
+    result = evaluate_tau2_pending_items_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["blocking_checks"] == ["single_item_modification_only"]
 
 
 def test_tau2_pending_items_adapter_blocks_delivered_order() -> None:
