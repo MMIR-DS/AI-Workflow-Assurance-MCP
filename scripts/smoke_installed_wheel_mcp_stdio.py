@@ -55,7 +55,7 @@ EXPECTED_TOOLS = {
     "generate_release_report",
     "inspect_tau2_evidence_manifest",
     "inspect_github_actions_run",
-    "preflight_sensitive_write",
+    "preflight_delivered_item_exchange",
 }
 
 
@@ -337,7 +337,7 @@ with open(os.environ["AWA_MCP_SMOKE_NETWORK_GUARD_ACTIVE"], "w", encoding="utf-8
                 "proposed_write_sequence": 4,
             }
             preflight = await session.call_tool(
-                "preflight_sensitive_write",
+                "preflight_delivered_item_exchange",
                 {
                     "action_json": json.dumps(preflight_action),
                     "evidence_json": json.dumps(preflight_evidence),
@@ -345,10 +345,12 @@ with open(os.environ["AWA_MCP_SMOKE_NETWORK_GUARD_ACTIVE"], "w", encoding="utf-8
             )
             if _is_error(preflight):
                 raise AssertionError(_content_text(preflight))
-            checks["preflight_sensitive_write"] = (
-                _payload(preflight).get("decision") == "GO"
+            preflight_payload = _payload(preflight)
+            checks["preflight_delivered_item_exchange"] = (
+                preflight_payload.get("decision") == "GO"
+                and preflight_payload.get("evidence_trust_boundary") == "caller_supplied_not_authenticated"
             )
-            if not checks["preflight_sensitive_write"]:
+            if not checks["preflight_delivered_item_exchange"]:
                 raise AssertionError("Valid synthetic preflight did not return GO.")
 
             report = {
