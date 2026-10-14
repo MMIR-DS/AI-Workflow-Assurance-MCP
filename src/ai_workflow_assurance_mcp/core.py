@@ -6,8 +6,24 @@ comparison, and release modules. Import from this module to preserve the stable 
 
 from __future__ import annotations
 
+from ai_workflow_assurance_mcp.core_comparison import (
+    _validate_report as _validate_report,
+    compare_reports as compare_reports,
+    explain_report_failures as explain_report_failures,
+)
+from ai_workflow_assurance_mcp.core_evaluation import (
+    _evaluate_criterion as _evaluate_criterion,
+    _evaluation_status as _evaluation_status,
+    _expected_value as _expected_value,
+    _utc_now as _utc_now,
+    evaluate_suite as evaluate_suite,
+)
+from ai_workflow_assurance_mcp.core_release import (
+    create_release_report as create_release_report,
+)
 from ai_workflow_assurance_mcp.core_support import (
-    AssuranceInputError as AssuranceInputError,
+    _PATH_PART as _PATH_PART,
+    _SLUG as _SLUG,
     MAX_CASES as MAX_CASES,
     MAX_CRITERIA as MAX_CRITERIA,
     MAX_ERROR_CHARS as MAX_ERROR_CHARS,
@@ -21,8 +37,7 @@ from ai_workflow_assurance_mcp.core_support import (
     SCHEMA_VERSION as SCHEMA_VERSION,
     SEVERITY_ORDER as SEVERITY_ORDER,
     SMALL_SAMPLE_WARNING_SIZE as SMALL_SAMPLE_WARNING_SIZE,
-    _PATH_PART as _PATH_PART,
-    _SLUG as _SLUG,
+    AssuranceInputError as AssuranceInputError,
     _bounded_errors as _bounded_errors,
     _bounded_report_value as _bounded_report_value,
     _canonicalize_for_digest as _canonicalize_for_digest,
@@ -40,28 +55,9 @@ from ai_workflow_assurance_mcp.core_support import (
     summarize_unknown_thresholds as summarize_unknown_thresholds,
     summarize_workflow_metadata as summarize_workflow_metadata,
 )
-
 from ai_workflow_assurance_mcp.core_validation import (
     validate_cases as validate_cases,
     validate_spec as validate_spec,
-)
-
-from ai_workflow_assurance_mcp.core_evaluation import (
-    _evaluate_criterion as _evaluate_criterion,
-    _evaluation_status as _evaluation_status,
-    _expected_value as _expected_value,
-    _utc_now as _utc_now,
-    evaluate_suite as evaluate_suite,
-)
-
-from ai_workflow_assurance_mcp.core_comparison import (
-    _validate_report as _validate_report,
-    compare_reports as compare_reports,
-    explain_report_failures as explain_report_failures,
-)
-
-from ai_workflow_assurance_mcp.core_release import (
-    create_release_report as create_release_report,
 )
 
 __all__ = [
