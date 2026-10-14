@@ -117,5 +117,8 @@ def test_dispatch_policy_table_covers_every_reviewed_write_tool() -> None:
     assert policy_names == WRITE_TOOLS
     assert 'tool_call.name in awa_write_tools' in REPLACEMENT
     assert "this retail write tool has no reviewed " in REPLACEMENT
-    assert '"validator": None' in REPLACEMENT
-    assert "independent per-item verification" in REPLACEMENT
+    assert '"validator": evaluate_tau2_pending_items_prewrite' in REPLACEMENT
+    assert '"single_item_only": True' in REPLACEMENT
+    assert "audit_tau2_single_pending_item_write_response" in REPLACEMENT
+    assert "AWA_POSTWRITE_AUDIT_NOT_PASS" in REPLACEMENT
+    assert "multi-item mutations remain disabled" in REPLACEMENT

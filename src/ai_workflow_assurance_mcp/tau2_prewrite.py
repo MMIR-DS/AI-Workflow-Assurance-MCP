@@ -1402,7 +1402,26 @@ def _has_prior_attempt_not_blocked_by_awa(
 
 
 def evaluate_tau2_pending_items_prewrite(trajectory: Any, tool_call: Any) -> dict[str, Any]:
-    """Apply the item policy to pending orders and enforce Tau2's one-modification limit."""
+    """Preflight one-item pending-order changes; multi-item mutation is not authorized."""
+    arguments = _get(tool_call, "arguments", {})
+    old_items = arguments.get("item_ids") if isinstance(arguments, dict) else None
+    new_items = arguments.get("new_item_ids") if isinstance(arguments, dict) else None
+    if not (
+        isinstance(old_items, list) and len(old_items) == 1
+        and isinstance(new_items, list) and len(new_items) == 1
+        and isinstance(old_items[0], str) and old_items[0]
+        and isinstance(new_items[0], str) and new_items[0]
+        and old_items[0] != new_items[0]
+    ):
+        return {
+            "decision": "NO_GO",
+            "allowed": False,
+            "blocking_checks": ["single_item_modification_only"],
+            "checked": {"single_item_modification_only": False},
+            "evidence_summary": {"single_item_modification_only": False},
+            "scope": "pinned_tau2_simulator_single_item_policy_not_production_authorization",
+        }
+
     result = evaluate_tau2_prewrite(
         trajectory,
         tool_call,

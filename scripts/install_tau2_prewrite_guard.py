@@ -52,6 +52,10 @@ REPLACEMENT = """        tool_results = []
             evaluate_tau2_payment_prewrite,
             evaluate_tau2_cancel_prewrite,
             evaluate_tau2_return_prewrite,
+            evaluate_tau2_pending_items_prewrite,
+        )
+        from ai_workflow_assurance_mcp.tau2_postwrite import (
+            audit_tau2_single_pending_item_write_response,
         )
 
         def awa_blocked_result(tool_call, message):
@@ -75,9 +79,29 @@ REPLACEMENT = """        tool_results = []
                 "dispatch batch is blocked. Re-read the order and retry in a new turn."
             )
 
-        # validator=None is intentional only for the permanently disabled
-        # pending-order item mutation path. It remains fail-closed until a
-        # transactional executor and independent per-item verification exist.
+        def awa_audit_single_item_response(tool_call, tool_result):
+            audit = audit_tau2_single_pending_item_write_response(
+                self.trajectory, tool_call, tool_result
+            )
+            if audit.get("decision") == "PASS":
+                return tool_result
+            blocking = ", ".join(audit.get("blocking_checks", [])) or "unspecified"
+            return ToolMessage(
+                id=tool_call.id,
+                role="tool",
+                requestor=tool_call.requestor,
+                error=True,
+                content=(
+                    "AWA_POSTWRITE_AUDIT_NOT_PASS: the pending-item write was already "
+                    "executed, but its independent post-write audit did not PASS "
+                    f"(decision={audit.get('decision')}; checks={blocking}). "
+                    "Do not retry this write. Inspect the current order state."
+                ),
+            )
+
+        # Pending-item mutation is restricted to one old/new pair. The pinned
+        # executor has a known multi-item bug; the single-row result is audited
+        # against catalog price/options and unchanged non-target rows after execution.
         awa_write_policies = {
             "exchange_delivered_order_items": {
                 "validator": evaluate_tau2_prewrite,
@@ -116,16 +140,15 @@ REPLACEMENT = """        tool_results = []
                 ),
             },
             "modify_pending_order_items": {
-                "validator": None,
+                "validator": evaluate_tau2_pending_items_prewrite,
                 "entity_argument": "order_id",
                 "entity_kind": "order",
-                "disabled_message": (
-                    "AWA_PREWRITE_NO_GO: pending-order item modification is disabled "
-                    "before execution. Public reports describe a possible Tau2 bug "
-                    "that can copy the final replacement variant's price/options to "
-                    "other items in a multi-item update. The pinned executor has not "
-                    "passed independent per-item post-state verification; no write "
-                    "was executed."
+                "single_item_only": True,
+                "blocked_message": (
+                    "AWA_PREWRITE_NO_GO: pending-item modification was blocked before "
+                    "execution. Exactly one old item and one replacement are supported; "
+                    "multi-item mutations remain disabled. Refresh order/catalog evidence "
+                    "and obtain complete fresh confirmation. Blocking checks: {blocking}."
                 ),
             },
             "modify_pending_order_payment": {
@@ -207,7 +230,24 @@ REPLACEMENT = """        tool_results = []
                             # this batch cannot reuse the same pre-write snapshot.
                             awa_write_orders_seen.add(normalized_entity_id)
 
-                        if policy.get("disabled_message"):
+                        if policy.get("single_item_only") and not (
+                            isinstance(arguments.get("item_ids"), list)
+                            and len(arguments["item_ids"]) == 1
+                            and isinstance(arguments["item_ids"][0], str)
+                            and bool(arguments["item_ids"][0])
+                            and isinstance(arguments.get("new_item_ids"), list)
+                            and len(arguments["new_item_ids"]) == 1
+                            and isinstance(arguments["new_item_ids"][0], str)
+                            and bool(arguments["new_item_ids"][0])
+                            and arguments["item_ids"][0] != arguments["new_item_ids"][0]
+                        ):
+                            tool_result = awa_blocked_result(
+                                tool_call,
+                                "AWA_PREWRITE_NO_GO: pending-item modifications support "
+                                "exactly one distinct old/new item pair. Multi-item writes "
+                                "remain blocked before execution; no write was executed.",
+                            )
+                        elif policy.get("disabled_message"):
                             tool_result = awa_blocked_result(
                                 tool_call,
                                 policy["disabled_message"],
@@ -219,6 +259,13 @@ REPLACEMENT = """        tool_results = []
                             )
                             if preflight["decision"] == "GO":
                                 tool_result = self.environment.get_response(tool_call)
+                                if (
+                                    tool_call.name == "modify_pending_order_items"
+                                    and not tool_result.error
+                                ):
+                                    tool_result = awa_audit_single_item_response(
+                                        tool_call, tool_result
+                                    )
                             else:
                                 blocking = (
                                     ", ".join(preflight["blocking_checks"])

@@ -16,7 +16,7 @@ def test_patcher_replaces_exactly_one_expected_dispatch_loop() -> None:
 
     assert PATCH_MARKER in patched
     # Validators are dispatched through one shared table and one approved write call site.
-    # Pending-item modification and create_order are both default-denied.
+    # Pending-item changes are limited to one pair and audited after execution; create_order remains denied.
     assert patched.count("self.environment.get_response(tool_call)") == 2
     assert 'policy = awa_write_policies.get(tool_call.name)' in patched
     assert 'preflight = policy["validator"](' in patched
@@ -24,8 +24,11 @@ def test_patcher_replaces_exactly_one_expected_dispatch_loop() -> None:
     assert "evaluate_tau2_cancel_prewrite," in patched
     assert "evaluate_tau2_address_prewrite," in patched
     assert "evaluate_tau2_payment_prewrite," in patched
-    assert "evaluate_tau2_pending_items_prewrite" not in patched
-    assert "pending-order item modification is disabled" in patched
+    assert "evaluate_tau2_pending_items_prewrite" in patched
+    assert "audit_tau2_single_pending_item_write_response" in patched
+    assert "AWA_POSTWRITE_AUDIT_NOT_PASS" in patched
+    assert "exactly one distinct old/new item pair" in patched
+    assert "pending-order item modification is disabled" not in patched
     assert '"modify_pending_order_items"' in patched
     assert '"create_order"' in patched
     assert "evaluate_tau2_user_address_prewrite," in patched
