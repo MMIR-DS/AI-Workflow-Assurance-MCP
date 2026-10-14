@@ -8,6 +8,7 @@ The `ai-workflow-assurance-mcp` wheel is the general-purpose evaluation package.
 - `ai_workflow_assurance_mcp.tau2_prewrite`
 - `ai_workflow_assurance_mcp.tau2_postwrite`
 - `ai_workflow_assurance_mcp.tau2_prewrite_common` and the operation-specific `tau2_prewrite_*` modules
+- `ai_workflow_assurance_mcp.tau2_postwrite_catalog`, `tau2_postwrite_trace`, `tau2_postwrite_benchmark`, and `tau2_postwrite_pending_item`
 
 These modules are used by the repository's pinned Tau2 simulator integration, patch installer, post-write audit and associated tests. They are not required by the generic wheel's entry points.
 
