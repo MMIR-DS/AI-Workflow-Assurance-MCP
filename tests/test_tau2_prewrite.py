@@ -8,8 +8,8 @@ import pytest
 from ai_workflow_assurance_mcp.tau2_prewrite import (
     evaluate_tau2_address_prewrite,
     evaluate_tau2_cancel_prewrite,
-    evaluate_tau2_pending_items_prewrite,
     evaluate_tau2_payment_prewrite,
+    evaluate_tau2_pending_items_prewrite,
     evaluate_tau2_prewrite,
     evaluate_tau2_return_prewrite,
     evaluate_tau2_user_address_prewrite,
