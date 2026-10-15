@@ -3,6 +3,7 @@
 ## 0.1.7 (Unreleased)
 
 - Distinguish explicit Tau2 pre-write guard denials from malformed/error results and correlated order-state results; report write-attempt policy separately from observed task completion, and keep the release gate fail-closed after repeated blocked write attempts.
+- Default the manual model-backed Tau2 smoke to 20 maximum steps and document its one-task/one-trial evidence review; keep 40/60-step runs as explicit opt-ins.
 
 - Fail closed on question-form or hedged Tau2 confirmations, unknown preflight action fields, and unsupported repeated item identifiers; require order-quantity evidence for repeated old items, enforce complete identifier-token matching, and regression-test the bounded Tau2 smoke command and pipeline failure propagation.
 - Clarify the preflight MCP tool as an exchange-specific reference evaluator with the machine-readable `caller_supplied_not_authenticated` trust boundary; it does not independently authenticate evidence or intercept arbitrary writes.
