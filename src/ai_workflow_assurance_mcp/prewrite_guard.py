@@ -28,9 +28,17 @@ def _nonempty_string_list(value: Any) -> bool:
 
 
 def evaluate_prewrite(
-    action: Any, evidence: Any, *, expected_order_status: str = "delivered"
+    action: Any,
+    evidence: Any,
+    *,
+    expected_order_status: str = "delivered",
+    allow_repeated_old_item_ids: bool = False,
 ) -> dict[str, Any]:
     """Return GO only when supplied values satisfy the retail item-exchange policy.
+
+    Repeated old item IDs are rejected by default. Simulator-specific callers may
+    opt in only when they independently verify item multiplicity against the order
+    snapshot and fail closed when the requested quantity is not supported.
 
     This function validates structure and consistency; it does not authenticate the
     evidence values or prove their provenance. Callers must obtain them from trusted
@@ -71,7 +79,7 @@ def evaluate_prewrite(
         and _nonempty_string_list(old_items)
         and _nonempty_string_list(new_items)
         and len(old_items) == len(new_items)
-        and len(set(old_items)) == len(old_items)
+        and (allow_repeated_old_item_ids or len(set(old_items)) == len(old_items))
         and len(set(new_items)) == len(new_items)
         and _nonempty_string(payment_id)
         and set(old_items).isdisjoint(set(new_items))
