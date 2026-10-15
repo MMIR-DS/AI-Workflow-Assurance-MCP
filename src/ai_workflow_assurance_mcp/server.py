@@ -1,4 +1,4 @@
-"""MCP transport adapter. All substantive logic lives in ``core.py``."""
+"""MCP transport adapter; core.py is a compatibility facade over focused modules."""
 
 from __future__ import annotations
 
