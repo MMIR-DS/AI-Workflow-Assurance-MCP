@@ -515,10 +515,12 @@ def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
     normalized = re.sub(r"[^a-z0-9' ]+", " ", raw_text)
     normalized = " ".join(normalized.split())
 
-    # A question remains a question even if the punctuation was omitted.
+    # Reject question syntax anywhere, including an indirect question following a
+    # superficially positive opener ("Yes, can you confirm ...").
+    if re.search(r"\b(?:can|could|would|should|do|does|did|is|are|am|was|were|have|has|had|may|will)\s+(?:you|i|we|they|he|she|it|that|this|there|anything|something|the)\b", normalized):
+        return False
     if re.match(
-        r"^(?:can|could|would|should|do|does|did|is|are|am|was|were|have|has|had|"
-        r"what|why|when|where|who|whom|which|how|may|will)\b",
+        r"^(?:what|why|when|where|who|whom|which|how)\b",
         normalized,
     ):
         return False
@@ -546,10 +548,12 @@ def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
         return False
     if action != "cancel" and re.search(r"\bcancel(?:led|lation)?\b", normalized):
         return False
+    # Consent must lead the reply, not appear as a substring later in a question or hedge.
     return bool(
-        re.search(
-            r"\b(yes|confirm|confirmed|go ahead|proceed|that's right|that is right|"
-            r"sounds good|correct|exactly right|please do|do it)\b",
+        re.match(
+            r"^(?:yes|yeah|yep|sure|absolutely|confirmed|i confirm|i agree|i accept|"
+            r"that's right|that is right|sounds good|exactly right|correct|please do|"
+            r"do it|go ahead|proceed)\\b",
             normalized,
         )
     )
