@@ -467,8 +467,17 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     }
     if costs:
         case["cost_usd"] = sum(costs)
-    if isinstance(sim.get("duration"), (int, float)):
-        case["latency_ms"] = round(sim["duration"] * 1000)
+    duration = sim.get("duration")
+    # Tau2 can emit duration=0 for a request that failed before any task
+    # interaction (for example, an upstream model-provider infrastructure error).
+    # Do not report that as a zero-latency task observation.
+    if (
+        str(sim.get("termination_reason") or "").lower() != "infrastructure_error"
+        and isinstance(duration, (int, float))
+        and not isinstance(duration, bool)
+        and duration > 0
+    ):
+        case["latency_ms"] = round(duration * 1000)
     metadata = {
         "task_id": str(sim.get("task_id")), "trial": sim.get("trial"),
         "termination_reason": sim.get("termination_reason"),
