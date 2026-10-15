@@ -3,7 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
+import pytest
+
+from ai_workflow_assurance_mcp.tau2_prewrite import (
+    evaluate_tau2_address_prewrite,
+    evaluate_tau2_cancel_prewrite,
+    evaluate_tau2_pending_items_prewrite,
+    evaluate_tau2_payment_prewrite,
+    evaluate_tau2_prewrite,
+    evaluate_tau2_return_prewrite,
+    evaluate_tau2_user_address_prewrite,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "tau2_task0_trace_minimal.json"
@@ -16,6 +26,20 @@ def _trajectory_and_call() -> tuple[list[dict], dict]:
     messages = messages[:19]
     call = messages[-1]["tool_calls"][0]
     return messages, call
+
+
+def _fully_disclosed_exchange_trajectory_and_call() -> tuple[list[dict], dict]:
+    trajectory, call = _trajectory_and_call()
+    trajectory[14]["content"] = (
+        "Item ID 7706410293 is a full-size, clicky keyboard with no backlight. "
+        "Item ID 7747408585 is a black Google Assistant-compatible thermostat."
+    )
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    return trajectory, call
 
 
 def _tool_result_json(trajectory: list[dict], call_id: str) -> dict:
@@ -1353,3 +1377,33 @@ def test_tau2_user_address_blocks_address_values_without_default_address_action(
 
     assert result["decision"] == "NO_GO"
     assert "exact_new_address_and_customer_disclosed" in result["blocking_checks"]
+
+
+
+@pytest.mark.parametrize(
+    ("builder", "evaluator"),
+    [
+        (_fully_disclosed_exchange_trajectory_and_call, evaluate_tau2_prewrite),
+        (_cancel_trajectory_and_call, evaluate_tau2_cancel_prewrite),
+        (_address_trajectory_and_call, evaluate_tau2_address_prewrite),
+        (_payment_trajectory_and_call, evaluate_tau2_payment_prewrite),
+        (_pending_items_trajectory_and_call, evaluate_tau2_pending_items_prewrite),
+        (_user_address_trajectory_and_call, evaluate_tau2_user_address_prewrite),
+        (_return_trajectory_and_call, evaluate_tau2_return_prewrite),
+    ],
+)
+def test_every_write_policy_rejects_hedged_confirmation(builder, evaluator) -> None:
+    trajectory, call = builder()
+    valid_reply = next(
+        message for message in reversed(trajectory) if message.get("role") == "user"
+    )
+    assert evaluator(trajectory, call)["decision"] == "GO"
+
+    valid_reply["content"] = "Not sure. Go ahead."
+    result = evaluator(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    summary = result.get("evidence_summary", {})
+    if "user_affirmed_after_disclosure" in summary:
+        assert summary["user_affirmed_after_disclosure"] is False
