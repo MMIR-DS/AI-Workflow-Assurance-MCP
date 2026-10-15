@@ -12,7 +12,6 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-
 PREWRITE_ACTION_FIELDS = ("order_id", "old_item_ids", "new_item_ids", "payment_method_id")
 
 
