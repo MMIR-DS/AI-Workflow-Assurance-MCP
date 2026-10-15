@@ -101,3 +101,17 @@ def test_write_exception_propagates_without_being_misreported_as_success() -> No
         assert str(exc) == "simulated database failure"
     else:
         raise AssertionError("write failure should propagate")
+
+
+def test_unknown_action_fields_never_reach_the_write_callback() -> None:
+    action, evidence = _valid_inputs()
+    action["ship_to"] = "attacker-controlled destination"
+    action["waive_fee"] = True
+    calls: list[dict] = []
+
+    result = execute_if_prewrite_allowed(action, evidence, calls.append)
+
+    assert result["decision"] == "NO_GO"
+    assert result["executed"] is False
+    assert calls == []
+    assert "action_contains_unexpected_fields" in result["blocking_checks"]
