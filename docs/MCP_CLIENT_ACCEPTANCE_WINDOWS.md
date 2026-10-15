@@ -80,7 +80,7 @@ In VS Code, confirm all of the following:
    - `generate_release_report`
    - `inspect_tau2_evidence_manifest`
    - `inspect_github_actions_run`
-   - `preflight_sensitive_write`
+   - `preflight_delivered_item_exchange`
 3. Invoke `validate_workflow_spec` directly from the client's available tool UI, using this argument. Keep the nested JSON as a **string** in `workflow_spec_json`:
 
 ```json
