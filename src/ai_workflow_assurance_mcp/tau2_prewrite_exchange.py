@@ -229,7 +229,14 @@ def evaluate_tau2_prewrite(
         ),
         "proposed_write_sequence": current_message_index + 1,
     }
-    result = evaluate_prewrite(action, evidence, expected_order_status=expected_order_status)
+    result = evaluate_prewrite(
+        action,
+        evidence,
+        expected_order_status=expected_order_status,
+        # This adapter independently checks duplicate old-item multiplicity against
+        # the exact order snapshot before the decision can remain GO.
+        allow_repeated_old_item_ids=True,
+    )
     # The generic reference evaluator uses a broad failure label. Translate it to
     # a truthful reason for the Tau2 adapter, where confirmation fields are context-bound.
     if "explicit_confirmation_does_not_match_action" in result.get("blocking_checks", []):
