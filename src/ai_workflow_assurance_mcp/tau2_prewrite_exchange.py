@@ -233,9 +233,9 @@ def evaluate_tau2_prewrite(
         action,
         evidence,
         expected_order_status=expected_order_status,
-        # This adapter independently checks duplicate old-item multiplicity against
-        # the exact order snapshot before the decision can remain GO.
-        allow_repeated_old_item_ids=True,
+        # Supply item IDs from the matching order snapshot; the generic evaluator
+        # independently checks multiplicity, and this adapter rechecks it below.
+        order_item_ids=order_item_ids if order_snapshot_matches_request else None,
     )
     # The generic reference evaluator uses a broad failure label. Translate it to
     # a truthful reason for the Tau2 adapter, where confirmation fields are context-bound.
