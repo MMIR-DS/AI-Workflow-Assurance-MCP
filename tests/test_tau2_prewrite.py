@@ -1379,7 +1379,6 @@ def test_tau2_user_address_blocks_address_values_without_default_address_action(
     assert "exact_new_address_and_customer_disclosed" in result["blocking_checks"]
 
 
-
 @pytest.mark.parametrize(
     ("builder", "evaluator"),
     [
