@@ -9,7 +9,10 @@ intercept a write; the calling application must enforce an allow decision.
 """
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
+
+PREWRITE_ACTION_FIELDS = ("order_id", "old_item_ids", "new_item_ids", "payment_method_id")
 
 
 def _nonempty_string(value: Any) -> bool:
@@ -25,9 +28,17 @@ def _nonempty_string_list(value: Any) -> bool:
 
 
 def evaluate_prewrite(
-    action: Any, evidence: Any, *, expected_order_status: str = "delivered"
+    action: Any,
+    evidence: Any,
+    *,
+    expected_order_status: str = "delivered",
+    order_item_ids: Any = None,
 ) -> dict[str, Any]:
     """Return GO only when supplied values satisfy the retail item-exchange policy.
+
+    Repeated old item IDs are rejected unless the caller supplies the observed order
+    item-ID list and that list contains enough occurrences. Callers must independently
+    obtain that snapshot from a trusted source; this evaluator does not authenticate it.
 
     This function validates structure and consistency; it does not authenticate the
     evidence values or prove their provenance. Callers must obtain them from trusted
@@ -57,12 +68,32 @@ def evaluate_prewrite(
     old_items = action.get("old_item_ids")
     new_items = action.get("new_item_ids")
     payment_id = action.get("payment_method_id")
+    unknown_action_fields = set(action).difference(PREWRITE_ACTION_FIELDS)
+
+    if unknown_action_fields:
+        failures.append("action_contains_unexpected_fields")
+
+    order_multiplicity_valid = (
+        isinstance(order_item_ids, list)
+        and all(_nonempty_string(item_id) for item_id in order_item_ids)
+        and Counter(old_items) <= Counter(order_item_ids)
+        if _nonempty_string_list(old_items)
+        else False
+    )
+    old_item_multiplicity_valid = (
+        len(set(old_items)) == len(old_items) or order_multiplicity_valid
+        if _nonempty_string_list(old_items)
+        else False
+    )
 
     action_valid = (
-        _nonempty_string(order_id)
+        not unknown_action_fields
+        and _nonempty_string(order_id)
         and _nonempty_string_list(old_items)
         and _nonempty_string_list(new_items)
         and len(old_items) == len(new_items)
+        and old_item_multiplicity_valid
+        and len(set(new_items)) == len(new_items)
         and _nonempty_string(payment_id)
         and set(old_items).isdisjoint(set(new_items))
     )
@@ -128,6 +159,7 @@ def evaluate_prewrite(
             "action_shape": action_valid,
             "identity_and_ownership": identity_valid,
             "delivered_order": evidence.get("order_status") == "delivered",
+            "order_status_matches_expected": evidence.get("order_status") == expected_order_status,
             "confirmation_matches_action": confirmation_valid,
             "customer_disclosure_matches_action": disclosure_valid,
             "confirmation_precedes_write": sequence_valid,

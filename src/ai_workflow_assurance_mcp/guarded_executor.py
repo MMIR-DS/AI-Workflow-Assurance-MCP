@@ -9,7 +9,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable
 
-from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
+from ai_workflow_assurance_mcp.prewrite_guard import (
+    PREWRITE_ACTION_FIELDS,
+    evaluate_prewrite,
+)
 
 
 def execute_if_prewrite_allowed(
@@ -45,7 +48,11 @@ def execute_if_prewrite_allowed(
 
     # Only this branch may cross the callback boundary. The host must route all
     # sensitive writes through this function to make the control mandatory.
-    result = write_operation(deepcopy(action_snapshot))
+    validated_action = {
+        field: deepcopy(action_snapshot[field])
+        for field in PREWRITE_ACTION_FIELDS
+    }
+    result = write_operation(validated_action)
     return {
         "decision": "GO",
         "executed": True,

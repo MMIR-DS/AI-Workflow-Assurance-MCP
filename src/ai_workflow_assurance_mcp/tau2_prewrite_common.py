@@ -68,8 +68,23 @@ def _normalize_disclosure_text(text: str) -> str:
 
 
 def _contains_all(text: str, values: list[str]) -> bool:
+    """Require complete identifier tokens while retaining phrase matching for prose values."""
     normalized_text = _normalize_disclosure_text(text)
-    return all(_normalize_disclosure_text(value) in normalized_text for value in values)
+    for value in values:
+        normalized_value = _normalize_disclosure_text(value)
+        if not normalized_value:
+            return False
+
+        # IDs, codes, and short single-token values must not match a longer token.
+        if re.fullmatch(r"#?[a-z0-9][a-z0-9_-]*", normalized_value):
+            pattern = re.compile(
+                r"(?<![a-z0-9_-])" + re.escape(normalized_value) + r"(?![a-z0-9_-])"
+            )
+            if not pattern.search(normalized_text):
+                return False
+        elif normalized_value not in normalized_text:
+            return False
+    return True
 
 
 def _mentioned_order_ids(text: str) -> list[str]:
@@ -489,12 +504,40 @@ def _confirmation_references_consistent(
 
 
 def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
-    """Recognize confirmation while treating action conflicts as task-specific."""
-    normalized = re.sub(r"[^a-z0-9' ]+", " ", text.casefold())
+    """Accept explicit, unhedged confirmation; ambiguous replies fail closed."""
+    if not isinstance(text, str):
+        return False
+
+    raw_text = text.strip().casefold()
+    if not raw_text or "?" in raw_text or "？" in raw_text:
+        return False
+
+    normalized = re.sub(r"[^a-z0-9' ]+", " ", raw_text)
+    normalized = " ".join(normalized.split())
+
+    # Reject question syntax anywhere, including an indirect question following a
+    # superficially positive opener ("Yes, can you confirm ...").
+    if re.search(r"\b(?:can|could|would|should|do|does|did|is|are|am|was|were|have|has|had|may|will)\s+(?:you|i|we|they|he|she|it|that|this|there|anything|something|the)\b", normalized):
+        return False
+    if re.match(
+        r"^(?:what|why|when|where|who|whom|which|how)\b",
+        normalized,
+    ):
+        return False
+
     if action == "cancel":
-        # "No longer needed" is a legitimate cancellation reason, not a negation
-        # of the user's affirmative authorization.
+        # "No longer needed" is a cancellation reason, not a negation of consent.
         normalized = re.sub(r"\bno longer needed\b", "no_longer_needed", normalized)
+
+    hedged = re.search(
+        r"\b(?:not sure|unsure|uncertain|not certain|maybe|perhaps|probably|possibly|"
+        r"i think|i guess|i suppose|i'm not sure|i am not sure|i'm unsure|i am unsure|"
+        r"i'm uncertain|i am uncertain|not convinced|i need to check|i need to confirm|"
+        r"i want to check|i want to confirm|let me check|let me confirm)\b",
+        normalized,
+    )
+    if hedged:
+        return False
 
     negative = re.search(
         r"\b(no|don't|do not|not yet|stop|wait|change|incorrect|instead|"
@@ -505,10 +548,12 @@ def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
         return False
     if action != "cancel" and re.search(r"\bcancel(?:led|lation)?\b", normalized):
         return False
+    # Consent must lead the reply, not appear as a substring later in a question or hedge.
     return bool(
-        re.search(
-            r"\b(yes|confirm|confirmed|go ahead|proceed|that's right|that is right|"
-            r"sounds good|correct|exactly right|please do|do it)\b",
+        re.match(
+            r"^(?:yes|yeah|yep|sure|absolutely|confirmed|i confirm|i agree|i accept|"
+            r"that's right|that is right|sounds good|exactly right|correct|please do|"
+            r"do it|go ahead|proceed)\b",
             normalized,
         )
     )
