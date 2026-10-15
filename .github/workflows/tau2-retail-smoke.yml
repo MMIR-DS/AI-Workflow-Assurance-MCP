@@ -79,27 +79,7 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         shell: bash
-        run: |
-          set -o pipefail
-          PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run tau2 run \
-            --domain retail \
-            --agent llm_agent \
-            --agent-llm "$MODEL" \
-            --agent-llm-args '{"max_tokens": 2048, "temperature": 0.0}' \
-            --user-llm "$MODEL" \
-            --user-llm-args '{"max_tokens": 2048, "temperature": 0.0}' \
-            --num-trials 1 \
-            --task-ids 0 \
-            --seed 300 \
-            --max-concurrency 1 \
-            --max-steps "$MAX_STEPS" \
-# AWA pre-write denials count as tool errors; allow recovery turns while the explicit
-# --max-steps and --timeout bounds still cap this manually triggered model run.
-            --max-errors 12 \
-            --max-retries 0 \
-            --timeout 480 \
-            --save-to tau2-standalone-retail-task0 \
-            2>&1 | tee ../tau2-benchmark.log
+        run: bash ../scripts/run_tau2_retail_smoke.sh
       - name: Generate AWA case, evaluation, and release reports
         if: success()
         run: |
