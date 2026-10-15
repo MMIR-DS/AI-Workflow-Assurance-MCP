@@ -53,13 +53,19 @@ For manual integration on Windows with VS Code, follow the [MCP client acceptanc
 
 For other MCP clients, launch the installed server using its `ai-workflow-assurance-mcp` entry point and verify that client's actual initialization, tool discovery, and invocation behavior. The automated smoke is protocol-level coverage; it does not prove compatibility with every MCP client or deployment configuration. Do not expose the process as a network service without a separate threat model and deployment review.
 
-## 5. Verify the built artifact and CI
+## 5. Run the bounded model-backed Tau2 smoke
+
+The `tau2 retail + AWA assurance prototype (bounded)` workflow is a **manual, model-backed experiment**, separate from no-model CI. Run it from the repository's Actions page only when the `OPENROUTER_API_KEY` repository secret is configured and model usage/cost is acceptable. Use the conservative defaults: `openrouter/google/gemini-2.5-flash` and `MAX_STEPS=20`. The workflow is pinned to one Tau2 task, one trial, one seed, and concurrency 1; it is still only a single sampled execution, not a reliability estimate.
+
+Inspect the `tau2-awa-retail-assurance` artifact and report files rather than interpreting the workflow badge alone. In particular, compare `task_completed`, `expected_write_observed`, `blocked_exchange_attempt_count`, `observed_exchange_state_result_count`, `unclassified_exchange_attempt_count`, `one_expected_write_only`, and the release decision. A successful final order-state result establishes observed task completion; it does **not** erase earlier blocked write attempts or automatically make the release decision `GO`. The conservative release gate remains closed if more than one write-tool call was attempted. Preserve the run URL, candidate commit SHA, artifact, model identifier, and selected maximum steps. Never represent this one model-backed run as production assurance.
+
+## 6. Verify the built artifact and CI
 
 The CI workflow builds a wheel and installs it outside the source tree. Before calling the MCP protocol smoke, it launches a probe from a temporary working directory with `PYTHONPATH` removed and asserts that the imported module resolves beneath that virtual environment's installed-package directory, that both console entry points belong to the environment, and that distribution/package versions agree. CI also checks the installed CLI entry point, runs the test suite and lint, validates the deterministic assurance harness report (including its `overall_passed` flag), runs the harness unit tests, smoke-tests the installed-wheel MCP stdio boundary, verifies documented CLI JSON contracts, checks release-gate exit behavior, and executes the source mutation smoke test on Python 3.10–3.13.
 
 Before tagging, confirm that the latest workflow run for the exact candidate commit is green on every supported CI matrix version. Do not infer success from an earlier commit's run or from a partial set of checks. Passing CI is evidence about the tested commit and test cases only; it does not replace manual MCP-client integration or review of the example CLI outputs.
 
-## 6. Review scope and release notes
+## 7. Review scope and release notes
 
 - State clearly that AWA evaluates supplied observations and does not execute or sandbox arbitrary agents.
 - Disclose that synthetic examples and simulated benchmarks are not evidence of broad production reliability.
