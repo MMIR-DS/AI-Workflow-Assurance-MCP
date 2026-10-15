@@ -146,3 +146,25 @@ def test_preflight_does_not_mutate_caller_inputs() -> None:
     evaluate_prewrite(action, evidence)
     assert action == original_action
     assert evidence == original_evidence
+
+
+def test_repeated_old_item_ids_require_matching_order_quantity_evidence() -> None:
+    action, evidence = _valid_inputs()
+    action["old_item_ids"] = ["ITEM-11", "ITEM-11"]
+    action["new_item_ids"] = ["ITEM-31", "ITEM-32"]
+    evidence["confirmation"]["old_item_ids"] = ["ITEM-11", "ITEM-11"]
+    evidence["confirmation"]["new_item_ids"] = ["ITEM-31", "ITEM-32"]
+    evidence["customer_facing_confirmation"]["old_item_ids"] = ["ITEM-11", "ITEM-11"]
+    evidence["customer_facing_confirmation"]["new_item_ids"] = ["ITEM-31", "ITEM-32"]
+
+    without_quantity = evaluate_prewrite(action, evidence)
+    with_sufficient_quantity = evaluate_prewrite(
+        action, evidence, order_item_ids=["ITEM-11", "ITEM-11"]
+    )
+    with_insufficient_quantity = evaluate_prewrite(
+        action, evidence, order_item_ids=["ITEM-11"]
+    )
+
+    assert without_quantity["decision"] == "NO_GO"
+    assert with_sufficient_quantity["decision"] == "GO"
+    assert with_insufficient_quantity["decision"] == "NO_GO"
