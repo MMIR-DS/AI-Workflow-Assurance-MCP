@@ -12,6 +12,9 @@ from __future__ import annotations
 from typing import Any
 
 
+PREWRITE_ACTION_FIELDS = ("order_id", "old_item_ids", "new_item_ids", "payment_method_id")
+
+
 def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -57,12 +60,19 @@ def evaluate_prewrite(
     old_items = action.get("old_item_ids")
     new_items = action.get("new_item_ids")
     payment_id = action.get("payment_method_id")
+    unknown_action_fields = set(action).difference(PREWRITE_ACTION_FIELDS)
+
+    if unknown_action_fields:
+        failures.append("action_contains_unexpected_fields")
 
     action_valid = (
-        _nonempty_string(order_id)
+        not unknown_action_fields
+        and _nonempty_string(order_id)
         and _nonempty_string_list(old_items)
         and _nonempty_string_list(new_items)
         and len(old_items) == len(new_items)
+        and len(set(old_items)) == len(old_items)
+        and len(set(new_items)) == len(new_items)
         and _nonempty_string(payment_id)
         and set(old_items).isdisjoint(set(new_items))
     )
@@ -128,6 +138,7 @@ def evaluate_prewrite(
             "action_shape": action_valid,
             "identity_and_ownership": identity_valid,
             "delivered_order": evidence.get("order_status") == "delivered",
+            "order_status_matches_expected": evidence.get("order_status") == expected_order_status,
             "confirmation_matches_action": confirmation_valid,
             "customer_disclosure_matches_action": disclosure_valid,
             "confirmation_precedes_write": sequence_valid,
