@@ -2,6 +2,8 @@
 
 ## 0.1.7 (Unreleased)
 
+- Distinguish explicit Tau2 pre-write guard denials from malformed/error results and correlated order-state results; report write-attempt policy separately from observed task completion, and keep the release gate fail-closed after repeated blocked write attempts.
+
 - Fail closed on question-form or hedged Tau2 confirmations, unknown preflight action fields, and unsupported repeated item identifiers; require order-quantity evidence for repeated old items, enforce complete identifier-token matching, and regression-test the bounded Tau2 smoke command and pipeline failure propagation.
 - Clarify the preflight MCP tool as an exchange-specific reference evaluator with the machine-readable `caller_supplied_not_authenticated` trust boundary; it does not independently authenticate evidence or intercept arbitrary writes.
 - Exclude Tau2-specific implementation modules from the generic wheel while retaining source-checkout simulator tooling, and split core evaluation and Tau2 pre/post-write logic into focused modules behind compatibility facades.

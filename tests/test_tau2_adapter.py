@@ -201,6 +201,36 @@ def test_missing_tool_evidence_fails_closed() -> None:
     assert report["summary"]["critical_failures"] >= 1
 
 
+def test_error_object_is_not_misclassified_as_an_exchange_state_result() -> None:
+    results, spec = _load_inputs()
+    _set_complete_confirmation(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_call = next(
+        call
+        for message in messages
+        if message.get("role") == "assistant"
+        for call in (message.get("tool_calls") or [])
+        if isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+    )
+    tool_result = next(
+        message for message in messages
+        if message.get("role") == "tool"
+        and str(message.get("id")) == str(exchange_call.get("id"))
+    )
+    tool_result["content"] = json.dumps({"error": "database unavailable"})
+
+    case, metadata, _, release = evaluate_trace(results, spec)
+
+    assert metadata["exchange_attempt_count"] == 1
+    assert metadata["blocked_exchange_attempt_count"] == 0
+    assert metadata["observed_exchange_state_result_count"] == 0
+    assert metadata["unclassified_exchange_attempt_count"] == 1
+    assert metadata["expected_write_observed"] is False
+    assert metadata["task_completed"] is False
+    assert case["actual"]["one_expected_write_only"] is False
+    assert release["decision"] == "NO_GO"
+
+
 def _independent_db_test_inputs() -> tuple[dict, dict, dict, dict, set[str], bool, bool]:
     results, _ = _load_inputs()
     sim = results["simulations"][0]
@@ -484,8 +514,12 @@ def test_blocked_exchange_attempts_do_not_hide_the_later_successful_write() -> N
     # mistaking two blocked pre-write attempts for missing/ambiguous state.
     assert metadata["exchange_attempt_count"] == 3
     assert metadata["blocked_exchange_attempt_count"] == 2
+    assert metadata["observed_exchange_state_result_count"] == 1
+    assert metadata["unclassified_exchange_attempt_count"] == 0
     assert metadata["expected_write_observed"] is True
     assert metadata["task_completed"] is True
+    assert metadata["write_attempt_policy"]["write_tool_call_count"] == 3
+    assert metadata["write_attempt_policy"]["single_expected_write_attempt_policy_passed"] is False
     assert case["actual"]["confirmation_policy_respected"] is True
     assert case["actual"]["final_state_matches_expected"] is True
     assert case["actual"]["payment_policy_respected"] is True

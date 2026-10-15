@@ -71,6 +71,37 @@ def _same_ids(left: Any, right: Any) -> bool:
     return isinstance(left, list) and isinstance(right, list) and Counter(map(str, left)) == Counter(map(str, right))
 
 
+def _is_prewrite_block_result(value: Any) -> bool:
+    """Recognize an explicit guard denial without treating every non-state result as blocked."""
+    if isinstance(value, str):
+        return value.lstrip().startswith("AWA_PREWRITE_NO_GO")
+    if isinstance(value, dict):
+        code = value.get("code") or value.get("error_code")
+        if code == "AWA_PREWRITE_NO_GO":
+            return True
+        message = value.get("error") or value.get("message")
+        return isinstance(message, str) and message.lstrip().startswith("AWA_PREWRITE_NO_GO")
+    return False
+
+
+def _is_exchange_state_result(call: dict[str, Any], value: Any) -> bool:
+    """Accept only a correlated order-state-shaped result, never an arbitrary error dict."""
+    if not isinstance(value, dict):
+        return False
+    args = call.get("arguments")
+    if not isinstance(args, dict):
+        return False
+    requested_order_id = args.get("order_id")
+    returned_order_id = value.get("order_id")
+    return bool(
+        requested_order_id is not None
+        and returned_order_id is not None
+        and str(returned_order_id) == str(requested_order_id)
+        and isinstance(value.get("status"), str)
+        and isinstance(value.get("items"), list)
+    )
+
+
 def _variant(product: dict[str, Any] | None, item_id: Any) -> dict[str, Any] | None:
     variants = product.get("variants") if isinstance(product, dict) else None
     value = variants.get(str(item_id)) if isinstance(variants, dict) else None
@@ -172,7 +203,17 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     # still fail closed on repeated write attempts while evaluating the actual
     # successful write and its resulting state accurately.
     exchange_attempts = [c for c in calls if c["name"] == "exchange_delivered_order_items"]
-    exchange_calls = [c for c in exchange_attempts if isinstance(result(c), dict)]
+    blocked_exchange_attempt_count = sum(
+        _is_prewrite_block_result(result(call)) for call in exchange_attempts
+    )
+    exchange_calls = [
+        call for call in exchange_attempts
+        if not _is_prewrite_block_result(result(call))
+        and _is_exchange_state_result(call, result(call))
+    ]
+    unclassified_exchange_attempt_count = (
+        len(exchange_attempts) - blocked_exchange_attempt_count - len(exchange_calls)
+    )
     exchange = exchange_calls[0] if len(exchange_calls) == 1 else None
     exchange_index = exchange["index"] if exchange else 10**9
     args = exchange["arguments"] if exchange else {}
@@ -302,7 +343,11 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "notification_claim_matches_contract": notification_claim,
         "no_unrequested_new_order": "create_order" not in names,
         "escalation_policy_respected": no_transfer,
-        "one_expected_write_only": len(writes) == 1 and writes[0]["name"] == "exchange_delivered_order_items",
+        "one_expected_write_only": (
+            len(exchange_calls) == 1
+            and len(writes) == 1
+            and writes[0]["name"] == "exchange_delivered_order_items"
+        ),
         "final_order_status": after.get("status") if isinstance(after, dict) else None,
     }
     termination_reason = str(sim.get("termination_reason") or "").lower()
@@ -429,11 +474,21 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "termination_reason": sim.get("termination_reason"),
         "execution_complete": execution_complete,
         "exchange_attempt_count": len(exchange_attempts),
-        "blocked_exchange_attempt_count": sum(
-            not isinstance(result(call), dict) for call in exchange_attempts
-        ),
+        "blocked_exchange_attempt_count": blocked_exchange_attempt_count,
+        "observed_exchange_state_result_count": len(exchange_calls),
+        "unclassified_exchange_attempt_count": unclassified_exchange_attempt_count,
         "expected_write_observed": len(exchange_calls) == 1,
         "task_completed": bool(len(exchange_calls) == 1 and final_state_ok),
+        "write_attempt_policy": {
+            "write_tool_call_count": len(writes),
+            "single_expected_write_attempt_policy_passed": actual["one_expected_write_only"],
+            "rule": (
+                "The conservative release gate permits exactly one write-tool call. "
+                "Explicit pre-write denials remain attempts and are not erased by a later "
+                "successful exchange result; task completion and attempt-policy compliance "
+                "are reported separately."
+            ),
+        },
         "evaluation_completeness": (
             "complete" if not unobserved_checks
             else "partial" if execution_complete
