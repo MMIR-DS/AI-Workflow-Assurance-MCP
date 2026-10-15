@@ -553,7 +553,7 @@ def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
         re.match(
             r"^(?:yes|yeah|yep|sure|absolutely|confirmed|i confirm|i agree|i accept|"
             r"that's right|that is right|sounds good|exactly right|correct|please do|"
-            r"do it|go ahead|proceed)\\b",
+            r"do it|go ahead|proceed)\b",
             normalized,
         )
     )
