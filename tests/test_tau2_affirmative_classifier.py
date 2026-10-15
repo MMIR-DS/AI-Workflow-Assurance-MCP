@@ -10,6 +10,8 @@ from ai_workflow_assurance_mcp.tau2_prewrite_common import _contains_all, _is_af
     [
         "Can you confirm the price difference first?",
         "Can you confirm the price difference first",
+        "Right, can you confirm the price difference first",
+        "Yes, can you confirm the price difference first",
         "Is that correct? I'm not sure about the second item.",
         "Do I need to confirm anything?",
         "Do I need to confirm anything",
