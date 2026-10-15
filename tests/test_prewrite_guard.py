@@ -93,16 +93,42 @@ def test_empty_action_item_id_fails_closed() -> None:
     assert "action_incomplete_or_invalid" in result["blocking_checks"]
 
 
-def test_repeated_item_ids_are_supported_when_old_and_new_counts_match() -> None:
+def test_repeated_old_or_new_item_ids_fail_closed() -> None:
+    for field, duplicate_values in (
+        ("old_item_ids", ["ITEM-11", "ITEM-11"]),
+        ("new_item_ids", ["ITEM-12", "ITEM-12"]),
+    ):
+        action, evidence = _valid_inputs()
+        action[field] = duplicate_values
+
+        result = evaluate_prewrite(action, evidence)
+
+        assert result["decision"] == "NO_GO"
+        assert result["allowed"] is False
+        assert "action_incomplete_or_invalid" in result["blocking_checks"]
+
+
+def test_unknown_action_fields_fail_closed() -> None:
     action, evidence = _valid_inputs()
-    action["old_item_ids"] = ["ITEM-11", "ITEM-11"]
-    action["new_item_ids"] = ["ITEM-12", "ITEM-12"]
-    evidence["confirmation"]["old_item_ids"] = ["ITEM-11", "ITEM-11"]
-    evidence["confirmation"]["new_item_ids"] = ["ITEM-12", "ITEM-12"]
-    evidence["customer_facing_confirmation"]["old_item_ids"] = ["ITEM-11", "ITEM-11"]
-    evidence["customer_facing_confirmation"]["new_item_ids"] = ["ITEM-12", "ITEM-12"]
+    action["ship_to"] = "attacker-controlled destination"
+    action["waive_fee"] = True
+
     result = evaluate_prewrite(action, evidence)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert "action_contains_unexpected_fields" in result["blocking_checks"]
+
+
+def test_checked_status_reports_configured_expected_status() -> None:
+    action, evidence = _valid_inputs()
+    evidence["order_status"] = "pending"
+
+    result = evaluate_prewrite(action, evidence, expected_order_status="pending")
+
     assert result["decision"] == "GO"
+    assert result["checked"]["delivered_order"] is False
+    assert result["checked"]["order_status_matches_expected"] is True
 
 
 def test_missing_evidence_and_wrong_types_fail_closed() -> None:
