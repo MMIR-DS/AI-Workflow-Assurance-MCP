@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.adapt_tau2_results import evaluate_trace
+from scripts.adapt_tau2_results import evaluate_trace, normalize_simulation
 from scripts.verify_tau2_mutations import MUTATION_EXPECTATIONS, run_mutation_checks
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -529,3 +529,17 @@ def test_blocked_exchange_attempts_do_not_hide_the_later_successful_write() -> N
     assert case["actual"]["one_expected_write_only"] is False
     assert release["decision"] == "NO_GO"
     assert report["summary"]["critical_failures"] >= 1
+
+
+def test_infrastructure_error_does_not_count_as_zero_task_latency() -> None:
+    results, _ = _load_inputs()
+    sim = results["simulations"][0]
+    sim["messages"] = []
+    sim["termination_reason"] = "infrastructure_error"
+    sim["duration"] = 0.0
+
+    case, metadata = normalize_simulation(results, sim)
+
+    assert metadata["termination_reason"] == "infrastructure_error"
+    assert metadata["task_completed"] is False
+    assert "latency_ms" not in case
