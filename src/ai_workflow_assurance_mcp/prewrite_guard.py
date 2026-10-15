@@ -9,6 +9,7 @@ intercept a write; the calling application must enforce an allow decision.
 """
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 
@@ -32,13 +33,13 @@ def evaluate_prewrite(
     evidence: Any,
     *,
     expected_order_status: str = "delivered",
-    allow_repeated_old_item_ids: bool = False,
+    order_item_ids: Any = None,
 ) -> dict[str, Any]:
     """Return GO only when supplied values satisfy the retail item-exchange policy.
 
-    Repeated old item IDs are rejected by default. Simulator-specific callers may
-    opt in only when they independently verify item multiplicity against the order
-    snapshot and fail closed when the requested quantity is not supported.
+    Repeated old item IDs are rejected unless the caller supplies the observed order
+    item-ID list and that list contains enough occurrences. Callers must independently
+    obtain that snapshot from a trusted source; this evaluator does not authenticate it.
 
     This function validates structure and consistency; it does not authenticate the
     evidence values or prove their provenance. Callers must obtain them from trusted
@@ -73,13 +74,26 @@ def evaluate_prewrite(
     if unknown_action_fields:
         failures.append("action_contains_unexpected_fields")
 
+    order_multiplicity_valid = (
+        isinstance(order_item_ids, list)
+        and all(_nonempty_string(item_id) for item_id in order_item_ids)
+        and Counter(old_items) <= Counter(order_item_ids)
+        if _nonempty_string_list(old_items)
+        else False
+    )
+    old_item_multiplicity_valid = (
+        len(set(old_items)) == len(old_items) or order_multiplicity_valid
+        if _nonempty_string_list(old_items)
+        else False
+    )
+
     action_valid = (
         not unknown_action_fields
         and _nonempty_string(order_id)
         and _nonempty_string_list(old_items)
         and _nonempty_string_list(new_items)
         and len(old_items) == len(new_items)
-        and (allow_repeated_old_item_ids or len(set(old_items)) == len(old_items))
+        and old_item_multiplicity_valid
         and len(set(new_items)) == len(new_items)
         and _nonempty_string(payment_id)
         and set(old_items).isdisjoint(set(new_items))
