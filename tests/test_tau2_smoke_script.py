@@ -152,6 +152,7 @@ def test_tau2_smoke_command_rejects_unbounded_token_values(tmp_path: Path) -> No
     assert "MAX_TOKENS must be one of" in result.stderr
     assert not capture_path.exists()
 
+
 def test_tau2_smoke_surfaces_openrouter_in_flight_budget_error_without_masking_status(
     tmp_path: Path,
 ) -> None:
