@@ -56,6 +56,9 @@ jobs:
       - name: Install missing runtime dependency used by tau2 data checks
         working-directory: tau2-bench
         run: uv pip install --python .venv/bin/python 'websockets==15.0.1'
+      - name: Apply reviewed retail lookup guidance to pinned Tau2 agent
+        working-directory: tau2-bench
+        run: python ../scripts/patch_tau2_retail_agent_prompt.py --tau2-root .
       - name: Install AWA pre-write guard into pinned Tau2 dispatch path
         working-directory: tau2-bench
         run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
