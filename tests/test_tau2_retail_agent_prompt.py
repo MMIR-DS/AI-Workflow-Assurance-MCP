@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from scripts.patch_tau2_retail_agent_prompt import PROMPT_MARKER, patch_agent_source
 
-
 BASELINE = '''from typing import Optional
 
 AGENT_INSTRUCTION = """
