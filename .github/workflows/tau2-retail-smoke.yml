@@ -85,19 +85,31 @@ jobs:
         working-directory: tau2-bench
         run: uv run tau2 check-data
       - name: Run one retail task and one trial (bounded; tau2 only)
+        id: tau2_run
         working-directory: tau2-bench
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         shell: bash
         run: bash ../scripts/run_tau2_retail_smoke.sh
-      - name: Generate AWA case, evaluation, and release reports
-        if: success()
+      - name: Generate AWA case, evaluation, and release reports when results exist
+        if: always() && hashFiles('tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json') != ''
         run: |
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
             --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
             --spec examples/tau2_retail_workflow.json \
             --output-dir awa-adapter-output
-      - name: Preserve trace, result, and logs
+      - name: Write operational execution status
+        if: always()
+        env:
+          TAU2_OUTCOME: ${{ steps.tau2_run.outcome }}
+        run: |
+          python scripts/write_tau2_execution_status.py \
+            --tau2-outcome "$TAU2_OUTCOME" \
+            --log tau2-benchmark.log \
+            --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
+            --release-report awa-adapter-output/awa_release_report.json \
+            --output tau2-execution-status.json
+      - name: Preserve trace, result, logs, and operational status
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -106,5 +118,6 @@ jobs:
             tau2-bench/data/simulations/**
             awa-adapter-output/**
             tau2-benchmark.log
+            tau2-execution-status.json
           if-no-files-found: warn
           retention-days: 14
