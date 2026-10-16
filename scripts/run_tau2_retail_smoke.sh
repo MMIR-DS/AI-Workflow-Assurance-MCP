@@ -15,9 +15,9 @@ case "$MAX_STEPS" in
 esac
 
 case "$MAX_TOKENS" in
-  1024|1280|2048) ;;
+  512|1024|1280|2048) ;;
   *)
-    printf 'MAX_TOKENS must be one of 1024, 1280, or 2048 (got: %s)\n' "$MAX_TOKENS" >&2
+    printf 'MAX_TOKENS must be one of 512, 1024, 1280, or 2048 (got: %s)\n' "$MAX_TOKENS" >&2
     exit 2
     ;;
 esac
