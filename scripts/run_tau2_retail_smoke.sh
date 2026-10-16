@@ -47,10 +47,10 @@ tau2_status=$?
 set -e
 
 if grep -Fq "in_flight_budget_exhausted" ../tau2-benchmark.log; then
-  printf '%s\\n' "::warning::OpenRouter returned HTTP 402 (in_flight_budget_exhausted). This is a provider credit/concurrency condition, not an AWA policy result. No automatic retry was made; wait for in-flight requests to settle, then manually rerun once if appropriate."
+  printf '%s\n' "::warning::OpenRouter returned HTTP 402 (in_flight_budget_exhausted). This is a provider credit/concurrency condition, not an AWA policy result. No automatic retry was made; wait for in-flight requests to settle, then manually rerun once if appropriate."
 fi
 if grep -Fq "This model isn't mapped yet" ../tau2-benchmark.log; then
-  printf '%s\\n' "::notice::LiteLLM did not find local pricing metadata for this model. This warning is separate from request success/failure and is not proof of a model-call failure."
+  printf '%s\n' "::notice::LiteLLM did not find local pricing metadata for this model. This warning is separate from request success/failure and is not proof of a model-call failure."
 fi
 
 exit "$tau2_status"
