@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from scripts.patch_tau2_retail_agent_prompt import PROMPT_MARKER, patch_agent_source
 
 
