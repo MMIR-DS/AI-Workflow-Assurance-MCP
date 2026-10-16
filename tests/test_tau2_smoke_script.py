@@ -29,7 +29,7 @@ def _prepare_fake_uv(tmp_path: Path) -> tuple[Path, Path, Path]:
     fake_uv.write_text(
         "#!/usr/bin/env bash\n"
         "printf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"
-        "printf 'fake tau2 output\\n'\n"
+        "printf '%s\\n' \"$FAKE_UV_OUTPUT\"\\n"
         'exit "$FAKE_UV_EXIT"\n',
         encoding="utf-8",
     )
@@ -44,6 +44,7 @@ def _env(bin_dir: Path, capture_path: Path, *, uv_exit: int = 0) -> dict[str, st
             "PATH": str(bin_dir) + os.pathsep + env.get("PATH", ""),
             "CAPTURE_ARGS": str(capture_path),
             "FAKE_UV_EXIT": str(uv_exit),
+            "FAKE_UV_OUTPUT": "fake tau2 output",
             "OPENROUTER_API_KEY": "test-key-not-used-for-network",
             "OPENROUTER_API_BASE": "https://openrouter.ai/api/v1",
             "MODEL": "openrouter/test/model",
@@ -150,3 +151,30 @@ def test_tau2_smoke_command_rejects_unbounded_token_values(tmp_path: Path) -> No
     assert result.returncode == 2
     assert "MAX_TOKENS must be one of" in result.stderr
     assert not capture_path.exists()
+
+def test_tau2_smoke_surfaces_openrouter_in_flight_budget_error_without_masking_status(
+    tmp_path: Path,
+) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["FAKE_UV_OUTPUT"] = (
+        "HTTP 402\\nreason: in_flight_budget_exhausted\\n"
+        "This model isn't mapped yet"
+    )
+    env["FAKE_UV_EXIT"] = "23"
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 23
+    assert "::warning::OpenRouter returned HTTP 402 (in_flight_budget_exhausted)" in result.stdout
+    assert "::notice::LiteLLM did not find local pricing metadata" in result.stdout
+\n
