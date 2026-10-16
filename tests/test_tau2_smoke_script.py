@@ -160,7 +160,7 @@ def test_tau2_smoke_surfaces_openrouter_in_flight_budget_error_without_masking_s
     bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
     env = _env(bin_dir, capture_path)
     env["FAKE_UV_OUTPUT"] = (
-        "HTTP 402\\nreason: in_flight_budget_exhausted\\n"
+        "HTTP 402\nreason: in_flight_budget_exhausted\n"
         "This model isn't mapped yet"
     )
     env["FAKE_UV_EXIT"] = "23"
