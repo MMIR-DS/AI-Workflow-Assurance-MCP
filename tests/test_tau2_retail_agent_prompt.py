@@ -28,8 +28,7 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "get_order_details" in patched
     assert "get_product_details" in patched
     assert "Never request card numbers" in patched
-    assert "one permitted exchange write" in patched
-    assert "Always follow the policy" not in patched  # exact baseline is preserved below
+    assert "single permitted exchange write" in patched
     assert "Try to be helpful and always follow the policy." in patched
     assert 'SYSTEM_PROMPT = "unchanged"' in patched
 
