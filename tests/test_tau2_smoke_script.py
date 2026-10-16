@@ -132,6 +132,30 @@ def test_tau2_smoke_command_rejects_unbounded_step_values(tmp_path: Path) -> Non
 
 
 
+
+def test_tau2_smoke_command_passes_512_token_budget_to_both_models(tmp_path: Path) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["MAX_TOKENS"] = "512"
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    args = capture_path.read_text(encoding="utf-8").splitlines()
+    expected = json.dumps({"max_tokens": 512, "temperature": 0.0})
+    assert args[args.index("--agent-llm-args") + 1] == expected
+    assert args[args.index("--user-llm-args") + 1] == expected
+
+
 def test_tau2_smoke_command_rejects_unbounded_token_values(tmp_path: Path) -> None:
     bash = _bash()
     bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
