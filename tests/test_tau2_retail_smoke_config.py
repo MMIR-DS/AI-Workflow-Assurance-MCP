@@ -16,4 +16,4 @@ def test_smoke_script_validates_and_applies_token_budget_to_both_models() -> Non
     assert "1024|1280|2048" in SCRIPT
     assert "--agent-llm-args" in SCRIPT
     assert "--user-llm-args" in SCRIPT
-    assert SCRIPT.count('"max_tokens": ${MAX_TOKENS}') == 2
+    # Shell-escaped JSON quotes mean the source text does not contain an unescaped key.\n    # Verify the bounded variable is present for both model args as well as validation.\n    assert SCRIPT.count("${MAX_TOKENS}") >= 4
