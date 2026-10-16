@@ -23,6 +23,8 @@ case "$MAX_TOKENS" in
 esac
 
 # AWA denials count as tool errors; allow recovery turns while explicit bounds remain active.
+# Capture the benchmark status so provider diagnostics can be surfaced before failing the step.
+set +e
 PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run tau2 run \
   --domain retail \
   --agent llm_agent \
@@ -40,3 +42,15 @@ PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run tau2 run \
   --timeout 480 \
   --save-to tau2-standalone-retail-task0 \
   2>&1 | tee ../tau2-benchmark.log
+
+tau2_status=$?
+set -e
+
+if grep -Fq "in_flight_budget_exhausted" ../tau2-benchmark.log; then
+  printf '%s\\n' "::warning::OpenRouter returned HTTP 402 (in_flight_budget_exhausted). This is a provider credit/concurrency condition, not an AWA policy result. No automatic retry was made; wait for in-flight requests to settle, then manually rerun once if appropriate."
+fi
+if grep -Fq "This model isn't mapped yet" ../tau2-benchmark.log; then
+  printf '%s\\n' "::notice::LiteLLM did not find local pricing metadata for this model. This warning is separate from request success/failure and is not proof of a model-call failure."
+fi
+
+exit "$tau2_status"
