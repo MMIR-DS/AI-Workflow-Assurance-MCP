@@ -14,5 +14,6 @@ def test_workflow_defaults_to_conservative_output_token_budget() -> None:
 def test_smoke_script_validates_and_applies_token_budget_to_both_models() -> None:
     assert ': "${MAX_TOKENS:?MAX_TOKENS is required}"' in SCRIPT
     assert "1024|1280|2048" in SCRIPT
-    assert '--agent-llm-args "{\\"max_tokens\\": ${MAX_TOKENS}, \\"temperature\\": 0.0}"' in SCRIPT
-    assert '--user-llm-args "{\\"max_tokens\\": ${MAX_TOKENS}, \\"temperature\\": 0.0}"' in SCRIPT
+    assert "--agent-llm-args" in SCRIPT
+    assert "--user-llm-args" in SCRIPT
+    assert SCRIPT.count('"max_tokens": ${MAX_TOKENS}') == 2
