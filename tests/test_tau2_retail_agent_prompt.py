@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from scripts.patch_tau2_retail_agent_prompt import PROMPT_MARKER, patch_agent_source
 
 
@@ -41,5 +40,9 @@ def test_patch_is_idempotent() -> None:
 
 
 def test_patch_rejects_unknown_agent_prompt_shape() -> None:
-    with pytest.raises(ValueError, match="AGENT_INSTRUCTION"):
+    try:
         patch_agent_source('AGENT_INSTRUCTION = "changed"')
+    except ValueError as exc:
+        assert "AGENT_INSTRUCTION" in str(exc)
+    else:
+        raise AssertionError("Unexpected prompt shape must be rejected.")
