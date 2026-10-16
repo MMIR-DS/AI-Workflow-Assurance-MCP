@@ -29,7 +29,7 @@ def _prepare_fake_uv(tmp_path: Path) -> tuple[Path, Path, Path]:
     fake_uv.write_text(
         "#!/usr/bin/env bash\n"
         "printf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"
-        "printf '%s\\\\n' \"$FAKE_UV_OUTPUT\"\n"
+        "printf '%s\\n' \"$FAKE_UV_OUTPUT\"\n"
         'exit "$FAKE_UV_EXIT"\n',
         encoding="utf-8",
     )
