@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -47,6 +48,7 @@ def _env(bin_dir: Path, capture_path: Path, *, uv_exit: int = 0) -> dict[str, st
             "OPENROUTER_API_BASE": "https://openrouter.ai/api/v1",
             "MODEL": "openrouter/test/model",
             "MAX_STEPS": "40",
+            "MAX_TOKENS": "1024",
         }
     )
     return env
@@ -70,6 +72,8 @@ def test_tau2_smoke_command_passes_bounded_flags_as_one_invocation(tmp_path: Pat
     args = capture_path.read_text(encoding="utf-8").splitlines()
     assert args[:3] == ["run", "tau2", "run"]
     for flag, value in (
+        ("--agent-llm-args", json.dumps({"max_tokens": 1024, "temperature": 0.0})),
+        ("--user-llm-args", json.dumps({"max_tokens": 1024, "temperature": 0.0})),
         ("--max-steps", "40"),
         ("--max-errors", "12"),
         ("--max-retries", "0"),
@@ -123,4 +127,26 @@ def test_tau2_smoke_command_rejects_unbounded_step_values(tmp_path: Path) -> Non
 
     assert result.returncode == 2
     assert "MAX_STEPS must be one of" in result.stderr
+    assert not capture_path.exists()
+
+
+
+def test_tau2_smoke_command_rejects_unbounded_token_values(tmp_path: Path) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["MAX_TOKENS"] = "999999"
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "MAX_TOKENS must be one of" in result.stderr
     assert not capture_path.exists()
