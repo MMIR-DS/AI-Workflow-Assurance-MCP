@@ -32,6 +32,7 @@ def test_workflow_preserves_partial_evidence_and_separates_execution_status() ->
     assert 'TAU2_LITELLM_NUM_RETRIES: "0"' in WORKFLOW
     assert "termination_reason" in SCRIPT
     assert "openrouter_credits" in SCRIPT
+    assert "Lowering MAX_TOKENS will not reduce input prompt tokens" in SCRIPT
 
 
 def test_acceptance_docs_list_every_supported_token_cap() -> None:
