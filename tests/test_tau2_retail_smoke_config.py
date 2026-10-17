@@ -28,6 +28,8 @@ def test_workflow_preserves_partial_evidence_and_separates_execution_status() ->
     assert "steps.tau2_run.outcome" in WORKFLOW
     assert "tau2-execution-status.json" in WORKFLOW
     assert "scripts/write_tau2_execution_status.py" in WORKFLOW
+    assert "scripts/patch_tau2_litellm_retries.py" in WORKFLOW
+    assert 'TAU2_LITELLM_NUM_RETRIES: "0"' in WORKFLOW
 
 
 def test_acceptance_docs_list_every_supported_token_cap() -> None:
