@@ -31,9 +31,7 @@ def _prepare_fake_uv(tmp_path: Path) -> tuple[Path, Path, Path]:
         "printf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"
         "printf '%s\\n' \"$FAKE_UV_OUTPUT\"\n"
         "mkdir -p data/simulations/tau2-standalone-retail-task0\n"
-        "cat > data/simulations/tau2-standalone-retail-task0/results.json <<'AWA_TEST_JSON'\n"
-        "{\"simulations\":[{\"termination_reason\":\"user_stop\"}]}\n"
-        "AWA_TEST_JSON\n"
+        "printf '%s\n' \"$FAKE_UV_RESULTS_JSON\" > data/simulations/tau2-standalone-retail-task0/results.json\n"
         'exit "$FAKE_UV_EXIT"\n',
         encoding="utf-8",
     )
@@ -49,6 +47,7 @@ def _env(bin_dir: Path, capture_path: Path, *, uv_exit: int = 0) -> dict[str, st
             "CAPTURE_ARGS": str(capture_path),
             "FAKE_UV_EXIT": str(uv_exit),
             "FAKE_UV_OUTPUT": "fake tau2 output",
+            "FAKE_UV_RESULTS_JSON": "{\"simulations\":[{\"termination_reason\":\"user_stop\"}]}",
             "OPENROUTER_API_KEY": "test-key-not-used-for-network",
             "OPENROUTER_API_BASE": "https://openrouter.ai/api/v1",
             "MODEL": "openrouter/test/model",
@@ -229,3 +228,26 @@ def test_tau2_smoke_marks_prompt_token_budget_error_as_failure(tmp_path: Path) -
 
     assert result.returncode == 1
     assert "Lowering MAX_TOKENS will not reduce input prompt tokens" in result.stdout
+
+
+def test_tau2_smoke_reports_invalid_results_json_without_claiming_infrastructure_error(
+    tmp_path: Path,
+) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["FAKE_UV_RESULTS_JSON"] = '{"simulations":['
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "::error::Could not validate Tau2 results.json" in result.stdout
+    assert "recorded termination_reason=infrastructure_error" not in result.stdout

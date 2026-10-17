@@ -61,24 +61,37 @@ if [[ -f "$results_path" ]]; then
 import json
 import sys
 
-with open(sys.argv[1], encoding="utf-8") as handle:
-    results = json.load(handle)
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        results = json.load(handle)
+except (OSError, json.JSONDecodeError) as exc:
+    print(f"Could not read valid Tau2 results JSON: {exc}", file=sys.stderr)
+    sys.exit(2)
+
+if not isinstance(results, dict):
+    print("Tau2 results must be a JSON object.", file=sys.stderr)
+    sys.exit(2)
 simulations = results.get("simulations")
-sys.exit(
-    1
-    if isinstance(simulations, list)
-    and any(
-        isinstance(simulation, dict)
-        and str(simulation.get("termination_reason", "")).lower() == "infrastructure_error"
-        for simulation in simulations
-    )
-    else 0
+if not isinstance(simulations, list) or not simulations:
+    print("Tau2 results must contain a non-empty simulations array.", file=sys.stderr)
+    sys.exit(2)
+
+has_infrastructure_error = any(
+    isinstance(simulation, dict)
+    and str(simulation.get("termination_reason", "")).lower() == "infrastructure_error"
+    for simulation in simulations
 )
+sys.exit(10 if has_infrastructure_error else 0)
 PY
   then
     :
   else
-    printf '%s\n' "::error::Tau2 recorded termination_reason=infrastructure_error; inspect tau2-benchmark.log and tau2-execution-status.json."
+    result_check_status=$?
+    if [[ "$result_check_status" -eq 10 ]]; then
+      printf '%s\n' "::error::Tau2 recorded termination_reason=infrastructure_error; inspect tau2-benchmark.log and tau2-execution-status.json."
+    else
+      printf '%s\n' "::error::Could not validate Tau2 results.json (checker exit ${result_check_status}); inspect tau2-benchmark.log and the preserved artifact."
+    fi
     mark_failed
   fi
 else
