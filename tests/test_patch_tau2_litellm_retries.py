@@ -4,13 +4,13 @@ import os
 from unittest.mock import patch
 
 import pytest
+
 from scripts.patch_tau2_litellm_retries import (
     ORIGINAL,
     PATCH_MARKER,
     REPLACEMENT,
     patch_llm_source,
 )
-
 
 BASELINE = '''import os
 from litellm import completion
