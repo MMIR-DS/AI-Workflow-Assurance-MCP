@@ -9,9 +9,6 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
-MAX_RETRY_AFTER_SECONDS = 120
-MAX_PROVIDER_ATTEMPTS = 2  # initial request plus at most one retry
-
 
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
@@ -23,7 +20,7 @@ def _read_json(path: Path) -> dict[str, Any] | None:
 
 def _retry_after_seconds(log_text: str) -> int | None:
     """Extract Retry-After from a preserved header/log line; never guess a delay."""
-    match = re.search(r"(?im)^\s*retry-after\s*:\s*([^\s,;]+)", log_text)
+    match = re.search(r"(?im)\bretry-after\s*:\s*([^\r\n]+)", log_text)
     if not match:
         return None
     raw = match.group(1).strip()
@@ -64,30 +61,27 @@ def build_status(
         execution_status = "unknown"
 
     retry_after = _retry_after_seconds(log_text)
-    retry_recommended = provider_error == "in_flight_budget_exhausted"
+    manual_rerun_recommended = provider_error == "in_flight_budget_exhausted"
     release = _read_json(release_report_path)
     decision = release.get("decision") if release else None
     if decision not in {"GO", "HOLD", "NO_GO"}:
         decision = "NOT_EVALUABLE"
 
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "execution_status": execution_status,
         "tau2_step_outcome": normalized_outcome or "unknown",
         "provider_error": provider_error,
         "retry_policy": {
-            "retry_recommended": retry_recommended,
+            "manual_rerun_recommended": manual_rerun_recommended,
             "retry_after_seconds_observed": retry_after,
-            "retry_after_seconds_capped": (
-                min(retry_after, MAX_RETRY_AFTER_SECONDS)
-                if retry_after is not None else None
-            ),
-            "max_provider_attempts": MAX_PROVIDER_ATTEMPTS,
+            "max_provider_attempts": 1,
             "automatic_retry_enabled": False,
             "note": (
-                "Diagnostic recommendation only; this report does not perform retries. "
-                "Honor a valid Retry-After, cap waiting at 120 seconds, and allow at most "
-                "one retry only after the pinned client preserves response metadata."
+                "The bounded workflow sets TAU2_LITELLM_NUM_RETRIES=0 to disable "
+                "hidden per-call provider retries. This status report never retries or "
+                "waits; an operator may start a separate manual run after the provider "
+                "condition clears. Retry-After is recorded only when it survives in logs."
             ),
         },
         "results_file_present": results_path.is_file(),
