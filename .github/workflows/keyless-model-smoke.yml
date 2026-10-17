@@ -72,7 +72,7 @@ jobs:
           exit 1
       - name: Probe inference and optional tool-call schema
         env:
-          RUN_TOOL_PROBE: ${{ inputs.run_tool_probe }}
+          RUN_TOOL_PROBE: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tool_probe }}
           REPORT_PATH: ${{ runner.temp }}/keyless-model-report.json
           MODEL_SHA_PATH: ${{ runner.temp }}/model-sha256.txt
         run: python scripts/keyless_model_probe.py
