@@ -82,3 +82,55 @@ def test_archived_trace_is_rejected_but_complete_disclosure_positive_control_pas
     assert positive["passed"] is True
     assert report["release_eligible"] is False
 
+def test_prewrite_guard_matches_release_gate_for_disclosure_controls() -> None:
+    """Keep the live pre-write policy and post-hoc release evaluation aligned.
+
+    This uses the same trace prefix ending at the proposed exchange call for the guard,
+    then evaluates the completed trace through the adapter and release gate. The positive
+    case is a synthetic control, not fresh model evidence.
+    """
+    from ai_workflow_assurance_mcp.core import create_release_report, evaluate_suite
+    from ai_workflow_assurance_mcp.tau2_prewrite import evaluate_tau2_prewrite
+    from scripts.adapt_tau2_results import normalize_simulation
+    from scripts.run_tau2_offline_scenario_suite import (
+        DEFAULT_SPEC,
+        DEFAULT_TRACE,
+        SCENARIOS,
+        _find_call,
+        _sim,
+    )
+
+    scenarios = {scenario.scenario_id: scenario for scenario in SCENARIOS}
+    spec = json.loads(DEFAULT_SPEC.read_text(encoding="utf-8"))
+    controls = (
+        ("recorded_trace_baseline", "NO_GO"),
+        ("complete_disclosure_positive_control", "GO"),
+    )
+
+    for scenario_id, expected_decision in controls:
+        results = json.loads(DEFAULT_TRACE.read_text(encoding="utf-8"))
+        scenarios[scenario_id].mutate(results)
+        simulation = _sim(results)
+        write_index, write_call = _find_call(results, "exchange_delivered_order_items")
+
+        # Mirror the dispatch boundary: the guard sees only observations available
+        # before the proposed write, including that call but not its result.
+        prewrite_trajectory = simulation["messages"][: write_index + 1]
+        prewrite = evaluate_tau2_prewrite(prewrite_trajectory, write_call)
+
+        # The post-hoc adapter sees the whole trace, including the recorded write result.
+        case, _metadata = normalize_simulation(results, simulation)
+        evaluation = evaluate_suite(spec, [case])
+        release = create_release_report(spec, evaluation)
+
+        assert prewrite["decision"] == expected_decision, {
+            "scenario_id": scenario_id,
+            "prewrite": prewrite,
+        }
+        assert release["decision"] == expected_decision, {
+            "scenario_id": scenario_id,
+            "release": release,
+        }
+        assert prewrite["allowed"] is (expected_decision == "GO")
+        assert prewrite["decision"] == release["decision"], scenario_id
+
