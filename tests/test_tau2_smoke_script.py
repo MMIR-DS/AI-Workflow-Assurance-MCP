@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -28,7 +29,9 @@ def _prepare_fake_uv(tmp_path: Path) -> tuple[Path, Path, Path]:
     fake_uv.write_text(
         "#!/usr/bin/env bash\n"
         "printf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"
-        "printf 'fake tau2 output\\n'\n"
+        "printf '%s\\n' \"$FAKE_UV_OUTPUT\"\n"
+        "mkdir -p data/simulations/tau2-standalone-retail-task0\n"
+        "printf '%s\n' \"$FAKE_UV_RESULTS_JSON\" > data/simulations/tau2-standalone-retail-task0/results.json\n"
         'exit "$FAKE_UV_EXIT"\n',
         encoding="utf-8",
     )
@@ -43,10 +46,13 @@ def _env(bin_dir: Path, capture_path: Path, *, uv_exit: int = 0) -> dict[str, st
             "PATH": str(bin_dir) + os.pathsep + env.get("PATH", ""),
             "CAPTURE_ARGS": str(capture_path),
             "FAKE_UV_EXIT": str(uv_exit),
+            "FAKE_UV_OUTPUT": "fake tau2 output",
+            "FAKE_UV_RESULTS_JSON": "{\"simulations\":[{\"termination_reason\":\"user_stop\"}]}",
             "OPENROUTER_API_KEY": "test-key-not-used-for-network",
             "OPENROUTER_API_BASE": "https://openrouter.ai/api/v1",
             "MODEL": "openrouter/test/model",
             "MAX_STEPS": "40",
+            "MAX_TOKENS": "1024",
         }
     )
     return env
@@ -70,6 +76,8 @@ def test_tau2_smoke_command_passes_bounded_flags_as_one_invocation(tmp_path: Pat
     args = capture_path.read_text(encoding="utf-8").splitlines()
     assert args[:3] == ["run", "tau2", "run"]
     for flag, value in (
+        ("--agent-llm-args", json.dumps({"max_tokens": 1024, "temperature": 0.0})),
+        ("--user-llm-args", json.dumps({"max_tokens": 1024, "temperature": 0.0})),
         ("--max-steps", "40"),
         ("--max-errors", "12"),
         ("--max-retries", "0"),
@@ -124,3 +132,125 @@ def test_tau2_smoke_command_rejects_unbounded_step_values(tmp_path: Path) -> Non
     assert result.returncode == 2
     assert "MAX_STEPS must be one of" in result.stderr
     assert not capture_path.exists()
+
+
+
+
+@pytest.mark.parametrize("token_cap", [320, 512])
+def test_tau2_smoke_command_passes_supported_token_budget_to_both_models(
+    tmp_path: Path, token_cap: int
+) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["MAX_TOKENS"] = str(token_cap)
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    args = capture_path.read_text(encoding="utf-8").splitlines()
+    expected = json.dumps({"max_tokens": token_cap, "temperature": 0.0})
+    assert args[args.index("--agent-llm-args") + 1] == expected
+    assert args[args.index("--user-llm-args") + 1] == expected
+
+
+def test_tau2_smoke_command_rejects_unbounded_token_values(tmp_path: Path) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["MAX_TOKENS"] = "999999"
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "MAX_TOKENS must be one of" in result.stderr
+    assert not capture_path.exists()
+
+
+def test_tau2_smoke_surfaces_openrouter_in_flight_budget_error_without_masking_status(
+    tmp_path: Path,
+) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["FAKE_UV_OUTPUT"] = (
+        "HTTP 402\nreason: in_flight_budget_exhausted\n"
+        "This model isn't mapped yet"
+    )
+    env["FAKE_UV_EXIT"] = "23"
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 23
+    assert "::warning::OpenRouter returned HTTP 402 (in_flight_budget_exhausted)" in result.stdout
+    assert "::notice::LiteLLM did not find local pricing metadata" in result.stdout
+
+
+def test_tau2_smoke_marks_prompt_token_budget_error_as_failure(tmp_path: Path) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["FAKE_UV_OUTPUT"] = (
+        "OpenrouterException: Prompt tokens limit exceeded: 5167 > 3265 "
+        "metadata limit_source=openrouter_credits"
+    )
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "Lowering MAX_TOKENS will not reduce input prompt tokens" in result.stdout
+
+
+def test_tau2_smoke_reports_invalid_results_json_without_claiming_infrastructure_error(
+    tmp_path: Path,
+) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["FAKE_UV_RESULTS_JSON"] = '{"simulations":['
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "::error::Could not validate Tau2 results.json" in result.stdout
+    assert "recorded termination_reason=infrastructure_error" not in result.stdout

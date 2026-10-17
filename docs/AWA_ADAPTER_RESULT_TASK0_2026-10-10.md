@@ -27,6 +27,13 @@ The tool payloads yield **-$16.63**; the exchange response records **-$16.63**, 
 
 A unit test also forces tau2's reward, `db_match` and action checks to false while keeping the observed tool payloads unchanged. AWA still returns GO, demonstrating that the release decision is not derived from those tau2 oracle fields.
 
+## Current-policy status note (2026-10-17)
+
+The `GO` recorded above is historical and reflects the adapter/policy evaluation at that time. The current guard-aligned confirmation policy is stricter: the archived trace's confirmation disclosure names the replacement variants and payment method, but omits the order ID and the explicit old-to-new item pairs. Under the current adapter and release specification, replaying this saved trace therefore returns `NO_GO` despite the recorded task having completed. This is intentional fail-closed behavior, not evidence of a new model failure.
+
+The no-model scenario suite uses a synthetic positive control that repairs only that disclosure and confirms that the same recorded tool payloads can pass when confirmation evidence meets the current policy. That positive control is synthetic replay evidence, not a newly executed agent or a release authorization.
+
+
 ## Six no-model-call mutation checks
 
 The GitHub Actions replay loaded the archived task-0 result and created six altered copies of the recorded trace/tool responses. Each mutation was required to produce `NO_GO` while the saved tau2 reward, database-match and action-check metadata remained unchanged:
