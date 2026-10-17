@@ -381,6 +381,11 @@ def run_scenario_suite(
             "observed_exchange_state_result_count": metadata.get("observed_exchange_state_result_count"),
             "unclassified_exchange_attempt_count": metadata.get("unclassified_exchange_attempt_count"),
             "one_expected_write_only": case.get("actual", {}).get("one_expected_write_only"),
+            "failed_criteria": [
+                {"criterion_id": key, "expected": expected, "actual": case.get("actual", {}).get(key)}
+                for key, expected in case.get("expected", {}).items()
+                if case.get("actual", {}).get(key) != expected
+            ],
             "passed": not mismatches and release.get("decision") == scenario.expected_decision,
             "mismatches": mismatches,
         })

@@ -2,6 +2,7 @@
 
 WRITE_TOOLS = frozenset({
     "cancel_pending_order",
+    "create_order",
     "exchange_delivered_order_items",
     "modify_pending_order_address",
     "modify_pending_order_items",
