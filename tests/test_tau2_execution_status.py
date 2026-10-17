@@ -100,3 +100,40 @@ def test_unrecognized_release_decision_is_not_evaluable(tmp_path: Path) -> None:
     status = build_status("success", "", tmp_path / "results.json", release)
     assert status["assurance_decision"] == "NOT_EVALUABLE"
     assert status["assurance_report_present"] is False
+
+def test_openrouter_insufficient_credit_error_is_not_treated_as_transient(
+    tmp_path: Path,
+) -> None:
+    log = (
+        'OpenrouterException - {"error":{"message":"This request requires more '
+        'credits, or fewer max_tokens. You requested up to 512 tokens, but can '
+        'only afford 391.","code":402,"metadata":{"limit_source":"openrouter_credits"}}}'
+    )
+    status = build_status(
+        "success",
+        log,
+        tmp_path / "results.json",
+        tmp_path / "missing-release.json",
+    )
+    assert status["execution_status"] == "infrastructure_error"
+    assert status["provider_error"] == "insufficient_credits_or_token_budget"
+    assert status["retry_policy"]["manual_rerun_recommended"] is False
+    assert status["retry_policy"]["automatic_retry_enabled"] is False
+
+
+def test_recorded_infrastructure_termination_overrides_success_exit(
+    tmp_path: Path,
+) -> None:
+    results = tmp_path / "results.json"
+    results.write_text(
+        json.dumps({"simulations": [{"termination_reason": "infrastructure_error"}]}),
+        encoding="utf-8",
+    )
+    status = build_status(
+        "success",
+        "",
+        results,
+        tmp_path / "missing-release.json",
+    )
+    assert status["execution_status"] == "infrastructure_error"
+    assert status["simulation_termination_reasons"] == ["infrastructure_error"]
