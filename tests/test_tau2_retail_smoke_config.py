@@ -36,5 +36,5 @@ def test_workflow_preserves_partial_evidence_and_separates_execution_status() ->
 
 def test_acceptance_docs_list_every_supported_token_cap() -> None:
     docs = (ROOT / "docs/RELEASE_ACCEPTANCE.md").read_text(encoding="utf-8")
-    assert "512, 1024, 1280, or 2048" in docs
+    assert "384, 512, 1024, 1280, or 2048" in docs
     assert "tau2-execution-status.json" in docs
