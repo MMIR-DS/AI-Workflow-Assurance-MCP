@@ -1,7 +1,16 @@
 name: Keyless Local Model Lab
 
-# Manual-only: model downloads and CPU inference consume runner time.
+# Run on relevant pushes to this isolated lab branch, or manually once on the default branch.
+# The path filter avoids rerunning the model download for documentation-only edits.
 on:
+  push:
+    branches:
+      - feat/keyless-local-model-lab
+    paths:
+      - '.github/workflows/keyless-model-smoke.yml'
+      - 'scripts/keyless_model_probe.py'
+      - 'tests/test_tau2_offline_scenario_suite.py'
+      - 'pyproject.toml'
   workflow_dispatch:
     inputs:
       run_tool_probe:
