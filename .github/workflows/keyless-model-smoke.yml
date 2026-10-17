@@ -31,7 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      MODEL_PATH: ${{ runner.temp }}/qwen2.5-0.5b-instruct-q4_k_m.gguf
       MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/2ed9be962c95f7625f4963ff51ed472e4538187a/qwen2.5-0.5b-instruct-q4_k_m.gguf
       LOCAL_MODEL_URL: http://127.0.0.1:8000/v1
     steps:
@@ -48,6 +47,8 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Download public model without credentials
         shell: bash
+        env:
+          MODEL_PATH: ${{ runner.temp }}/qwen2.5-0.5b-instruct-q4_k_m.gguf
         run: |
           set -euo pipefail
           curl --fail --location --retry 3 --connect-timeout 20 "$MODEL_URL" --output "$MODEL_PATH"
@@ -56,6 +57,8 @@ jobs:
           sha256sum "$MODEL_PATH" | tee "${{ runner.temp }}/model-sha256.txt"
       - name: Start loopback-only model server
         shell: bash
+        env:
+          MODEL_PATH: ${{ runner.temp }}/qwen2.5-0.5b-instruct-q4_k_m.gguf
         run: |
           set -euo pipefail
           nohup python -m llama_cpp.server --model "$MODEL_PATH" --model_alias keyless-qwen --host 127.0.0.1 --port 8000 --n_ctx 4096 --n_threads 2 --n_gpu_layers 0 --chat_format chatml > "${{ runner.temp }}/llama-server.log" 2>&1 &
