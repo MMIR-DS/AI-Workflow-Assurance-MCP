@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
+
 from scripts.run_tau2_offline_scenario_suite import run_scenario_suite
 
 
 def test_offline_tau2_scenario_suite_matches_expected_awa_decisions() -> None:
     report = run_scenario_suite()
 
-    assert report["suite_status"] == "PASS", report
+    failures = [row for row in report["scenarios"] if not row["passed"]]
+    assert report["suite_status"] == "PASS", json.dumps(failures, indent=2, sort_keys=True)
     assert report["scenario_count"] == 12
     assert report["passed_scenarios"] == 12
     assert report["failed_scenarios"] == 0

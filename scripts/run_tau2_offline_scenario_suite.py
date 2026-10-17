@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ai_workflow_assurance_mcp.core import create_release_report, evaluate_suite
-from scripts.adapt_tau2_results import normalize_simulation
+
+if __package__:
+    from .adapt_tau2_results import normalize_simulation
+else:
+    from adapt_tau2_results import normalize_simulation
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TRACE = ROOT / "tests" / "fixtures" / "tau2_task0_trace_minimal.json"
@@ -191,7 +195,7 @@ def _mutate_duplicate_blocked_write(results: dict[str, Any]) -> None:
 
 def _mutate_unreviewed_create_order(results: dict[str, Any]) -> None:
     messages = _sim(results)["messages"]
-    exchange_index, original = _find_call(results, "exchange_delivered_order_items")
+    exchange_index, _ = _find_call(results, "exchange_delivered_order_items")
     call_id = "offline-synthetic-create-order"
     attempt = {
         "role": "assistant",
