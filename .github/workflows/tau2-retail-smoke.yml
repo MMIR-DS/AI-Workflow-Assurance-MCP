@@ -19,7 +19,7 @@ on:
         required: true
         default: "1024"
         type: choice
-        options: ["384", "512", "1024", "1280", "2048"]
+        options: ["320", "384", "512", "1024", "1280", "2048"]
 
 permissions:
   contents: read

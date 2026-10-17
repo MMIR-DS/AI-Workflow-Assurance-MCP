@@ -7,13 +7,13 @@ SCRIPT = (ROOT / "scripts/run_tau2_retail_smoke.sh").read_text(encoding="utf-8")
 
 def test_workflow_defaults_to_conservative_output_token_budget() -> None:
     assert 'default: "1024"' in WORKFLOW
-    assert 'options: ["384", "512", "1024", "1280", "2048"]' in WORKFLOW
+    assert 'options: ["320", "384", "512", "1024", "1280", "2048"]' in WORKFLOW
     assert "MAX_TOKENS: ${{ inputs.max_tokens || '1024' }}" in WORKFLOW
 
 
 def test_smoke_script_validates_and_applies_token_budget_to_both_models() -> None:
     assert ': "${MAX_TOKENS:?MAX_TOKENS is required}"' in SCRIPT
-    assert "384|512|1024|1280|2048" in SCRIPT
+    assert "320|384|512|1024|1280|2048" in SCRIPT
     assert "--agent-llm-args" in SCRIPT
     assert "--user-llm-args" in SCRIPT
     # Shell-escaped JSON quotes mean the source text contains escaped key quotes.
@@ -37,5 +37,5 @@ def test_workflow_preserves_partial_evidence_and_separates_execution_status() ->
 
 def test_acceptance_docs_list_every_supported_token_cap() -> None:
     docs = (ROOT / "docs/RELEASE_ACCEPTANCE.md").read_text(encoding="utf-8")
-    assert "384, 512, 1024, 1280, or 2048" in docs
+    assert "320, 384, 512, 1024, 1280, or 2048" in docs
     assert "tau2-execution-status.json" in docs

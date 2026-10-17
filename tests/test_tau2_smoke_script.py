@@ -136,11 +136,14 @@ def test_tau2_smoke_command_rejects_unbounded_step_values(tmp_path: Path) -> Non
 
 
 
-def test_tau2_smoke_command_passes_512_token_budget_to_both_models(tmp_path: Path) -> None:
+@pytest.mark.parametrize("token_cap", [320, 512])
+def test_tau2_smoke_command_passes_supported_token_budget_to_both_models(
+    tmp_path: Path, token_cap: int
+) -> None:
     bash = _bash()
     bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
     env = _env(bin_dir, capture_path)
-    env["MAX_TOKENS"] = "512"
+    env["MAX_TOKENS"] = str(token_cap)
 
     result = subprocess.run(
         [bash, str(SCRIPT)],
@@ -154,7 +157,7 @@ def test_tau2_smoke_command_passes_512_token_budget_to_both_models(tmp_path: Pat
 
     assert result.returncode == 0, result.stderr
     args = capture_path.read_text(encoding="utf-8").splitlines()
-    expected = json.dumps({"max_tokens": 512, "temperature": 0.0})
+    expected = json.dumps({"max_tokens": token_cap, "temperature": 0.0})
     assert args[args.index("--agent-llm-args") + 1] == expected
     assert args[args.index("--user-llm-args") + 1] == expected
 
