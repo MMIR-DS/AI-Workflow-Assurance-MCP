@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.patch_tau2_retail_agent_prompt import PROMPT_MARKER, patch_agent_source
+from scripts.patch_tau2_retail_agent_prompt import PROMPT_MARKER, REPLACEMENT, patch_agent_source
 
 BASELINE = '''from typing import Optional
 
@@ -24,9 +24,11 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert PROMPT_MARKER in patched
     assert "get_order_details" in patched
     assert "get_product_details" in patched
-    assert "Never request card numbers" in patched
-    assert "single permitted exchange write" in patched
-    assert "Try to be helpful and always follow the policy." in patched
+    assert "Never request payment credentials or card details" in patched
+    assert "one permitted exchange write" in patched
+    assert "Follow the <policy>" in patched
+    assert "If AWA denies a write, do not retry it." in patched
+    assert len(REPLACEMENT) <= 1400
     assert 'SYSTEM_PROMPT = "unchanged"' in patched
 
 
