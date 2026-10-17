@@ -46,10 +46,17 @@ PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run tau2 run \
 tau2_status=$?
 set -e
 
+# Record an execution-level failure without overwriting a more specific non-zero
+# Tau2 exit status that a caller/test may need to diagnose.
+mark_failed() {
+  if [[ "$tau2_status" -eq 0 ]]; then
+    tau2_status=1
+  fi
+}
+
 results_path="data/simulations/tau2-standalone-retail-task0/results.json"
 if [[ -f "$results_path" ]]; then
   # Tau2 can serialize an infrastructure_error while still exiting with status 0.
-  # Treat that recorded outcome as a failed model-backed execution.
   if python - "$results_path" <<'PY'
 import json
 import sys
@@ -72,19 +79,22 @@ PY
     :
   else
     printf '%s\n' "::error::Tau2 recorded termination_reason=infrastructure_error; inspect tau2-benchmark.log and tau2-execution-status.json."
-    tau2_status=1
+    mark_failed
   fi
 else
   printf '%s\n' "::error::Tau2 did not produce the expected results.json file."
-  tau2_status=1
+  mark_failed
 fi
 
 if grep -Fq "in_flight_budget_exhausted" ../tau2-benchmark.log; then
   printf '%s\n' "::warning::OpenRouter returned HTTP 402 (in_flight_budget_exhausted). This is a transient in-flight budget condition, not an AWA policy result. No automatic retry was made; rerun separately after the provider condition clears."
-  tau2_status=1
+  mark_failed
+elif grep -Eiq "Prompt tokens limit exceeded: [0-9]+ > [0-9]+" ../tau2-benchmark.log; then
+  printf '%s\n' "::error::OpenRouter rejected the prompt because its token count exceeds the key/workspace prompt-token budget. Lowering MAX_TOKENS will not reduce input prompt tokens; adjust the OpenRouter key limit/available credits or reduce the prompt/tool context before another model-backed run."
+  mark_failed
 elif grep -Eiq "weight_exceeds_budget|openrouter_credits|can only afford|requires more credits, or fewer max_tokens" ../tau2-benchmark.log; then
-  printf '%s\n' "::warning::OpenRouter rejected the request because its estimated credit/token reservation exceeded the available budget. Select a lower cap (384 is now available) or adjust credits/key limits before rerunning; a blind retry is not recommended."
-  tau2_status=1
+  printf '%s\n' "::warning::OpenRouter rejected the request because its estimated credit/token reservation exceeded the available budget. Adjust available credits/key limits; a lower output cap may help only when the rejection concerns the requested completion budget, not an oversized prompt."
+  mark_failed
 fi
 if grep -Fq "This model isn't mapped yet" ../tau2-benchmark.log; then
   printf '%s\n' "::notice::LiteLLM did not find local pricing metadata for this model. This warning is separate from request success/failure and is not proof of a model-call failure."
