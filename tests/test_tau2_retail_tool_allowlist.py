@@ -10,8 +10,9 @@ from ai_workflow_assurance_mcp.tau2_constants import (
 )
 from scripts.patch_tau2_retail_tool_allowlist import (
     ORIGINAL_FACTORY,
+    ORIGINAL_RETURN,
     PATCH_MARKER,
-    REPLACEMENT_FACTORY,
+    REPLACEMENT_RETURN,
     patch_agent_source,
 )
 
@@ -70,7 +71,7 @@ def test_patch_is_idempotent_and_validates_marker_integrity() -> None:
     once = patch_agent_source(BASELINE)
     assert patch_agent_source(once) == once
     assert once.count(PATCH_MARKER) == 1
-    assert once.count(REPLACEMENT_FACTORY) == 1
+    assert once.count(REPLACEMENT_RETURN) == 1
     assert ORIGINAL_FACTORY not in once
 
 
