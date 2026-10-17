@@ -120,7 +120,7 @@ def main() -> int:
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
-        json.dumps(status, indent=2, sort_keys=True) + "\\n", encoding="utf-8"
+        json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     print(json.dumps(status, indent=2, sort_keys=True))
     return 0
