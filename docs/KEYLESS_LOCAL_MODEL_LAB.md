@@ -21,6 +21,6 @@ No secrets or API keys are required. The public model download and GitHub Action
 
 ## Reproducibility and safety
 
-The report includes the SHA-256 of the downloaded model for traceability. The model URL points to a public repository, but the file digest is not pinned in the workflow; therefore the hash records what was downloaded and is not a supply-chain authenticity guarantee.
+The workflow pins the public model repository to a specific revision and verifies the downloaded file against its published SHA-256 before starting inference. The report also retains the computed hash for traceability. This guards against accidental file drift, but does not independently prove the publisher's identity or the integrity of the upstream account.
 
 The server binds to loopback only. The probe uses no production connectors, credentials, MCP write tools, or business database. No model-generated result can change the AWA release decision; release remains `HOLD` pending separately reviewed, fresh and evaluable model-backed workflow evidence.
