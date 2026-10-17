@@ -82,6 +82,15 @@ jobs:
         run: |
           python scripts/adapt_retail_exchange_observation.py --observation examples/retail_exchange_observation_v1.json --spec examples/tau2_retail_workflow.json --output-dir "$RUNNER_TEMP/retail-exchange-demo"
           python -c "import json, pathlib; p=json.loads(pathlib.Path('$RUNNER_TEMP/retail-exchange-demo/awa_release_report.json').read_text()); assert p['decision'] == 'GO', p['decision']"
+      - name: Run offline Tau2 scenario suite without model or network calls
+        run: python scripts/run_tau2_offline_scenario_suite.py --output "artifacts/tau2-offline-scenarios-python-${{ matrix.python-version }}.json"
+      - name: Upload offline Tau2 scenario report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tau2-offline-scenarios-python-${{ matrix.python-version }}
+          path: artifacts/tau2-offline-scenarios-python-${{ matrix.python-version }}.json
+          if-no-files-found: ignore
       - name: Run source-code mutation smoke test
         run: python scripts/run_source_mutation_smoke.py --output "artifacts/mutation-report-python-${{ matrix.python-version }}.json"
       - name: Upload source mutation report
