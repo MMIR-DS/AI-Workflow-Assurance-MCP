@@ -30,6 +30,10 @@ def _prepare_fake_uv(tmp_path: Path) -> tuple[Path, Path, Path]:
         "#!/usr/bin/env bash\n"
         "printf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"
         "printf '%s\\n' \"$FAKE_UV_OUTPUT\"\n"
+        "mkdir -p data/simulations/tau2-standalone-retail-task0\n"
+        "cat > data/simulations/tau2-standalone-retail-task0/results.json <<'AWA_TEST_JSON'\n"
+        "{\"simulations\":[{\"termination_reason\":\"user_stop\"}]}\n"
+        "AWA_TEST_JSON\n"
         'exit "$FAKE_UV_EXIT"\n',
         encoding="utf-8",
     )
@@ -202,3 +206,26 @@ def test_tau2_smoke_surfaces_openrouter_in_flight_budget_error_without_masking_s
     assert result.returncode == 23
     assert "::warning::OpenRouter returned HTTP 402 (in_flight_budget_exhausted)" in result.stdout
     assert "::notice::LiteLLM did not find local pricing metadata" in result.stdout
+
+
+def test_tau2_smoke_marks_prompt_token_budget_error_as_failure(tmp_path: Path) -> None:
+    bash = _bash()
+    bin_dir, capture_path, work_dir = _prepare_fake_uv(tmp_path)
+    env = _env(bin_dir, capture_path)
+    env["FAKE_UV_OUTPUT"] = (
+        "OpenrouterException: Prompt tokens limit exceeded: 5167 > 3265 "
+        "metadata limit_source=openrouter_credits"
+    )
+
+    result = subprocess.run(
+        [bash, str(SCRIPT)],
+        cwd=work_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "Lowering MAX_TOKENS will not reduce input prompt tokens" in result.stdout
