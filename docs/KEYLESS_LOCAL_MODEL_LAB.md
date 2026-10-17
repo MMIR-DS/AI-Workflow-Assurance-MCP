@@ -1,15 +1,14 @@
 # Keyless Local Model Lab
 
-This is a phone-triggerable experiment for testing **real local inference without an API key, paid inference credits, or access to a personal computer**. GitHub Actions downloads public GGUF weights, runs a CPU-only OpenAI-compatible server on the runner, probes a basic completion, optionally probes structured tool-call output, and runs the deterministic offline AWA suite as a separate stage.
+This is a phone-friendly experiment for testing **real local inference without an API key, paid inference credits, or access to a personal computer**. GitHub Actions downloads public GGUF weights, runs a CPU-only OpenAI-compatible server on the runner, probes a basic completion, optionally probes structured tool-call output, and runs the deterministic offline AWA suite as a separate stage. Relevant pushes to the isolated `feat/keyless-local-model-lab` branch trigger it automatically; the path filter avoids paying the model-download and inference cost for documentation-only edits.
 
 ## Run it from a phone
 
-1. Open [Actions → Keyless Local Model Lab](../actions/workflows/keyless-model-smoke.yml).
-2. Tap **Run workflow**.
-3. Leave **Probe structured tool-call output** enabled for the first run.
-4. Open the completed run and download its `keyless-local-model-lab-<run-id>` artifact.
+- **Before this PR is merged:** the relevant push to the lab branch starts a run automatically. Open [Actions → Keyless Local Model Lab](../actions/workflows/keyless-model-smoke.yml) and select the newest run on `feat/keyless-local-model-lab`.
+- **After the workflow is present on the default branch:** open the same Actions page, tap **Run workflow**, and leave **Probe structured tool-call output** enabled for the first run.
+- Open the completed run and download its `keyless-local-model-lab-<run-id>` artifact.
 
-No secrets or API keys are required. The public model download and GitHub Actions runner still require internet access. The workflow is manual-only because model downloads and CPU inference consume runner time.
+No secrets or API keys are required. The public model download and GitHub Actions runner still require internet access. The automatic trigger is restricted to the lab branch and relevant code/workflow paths; it does not run for documentation-only changes.
 
 ## Interpreting the report
 
