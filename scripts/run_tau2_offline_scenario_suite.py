@@ -117,9 +117,21 @@ def _mutate_complete_disclosure_positive_control(results: dict[str, Any]) -> Non
     if len(matches) != 1:
         raise ValueError(f"Expected one pre-write disclosure message; found {len(matches)}.")
     matches[0]["content"] = (
-        "To confirm order #W2378156: old item 1151293680 for 7706410293 and old item "
-        "4983901480 for 7747408585. The total price difference is a $16.63 refund to "
-        "credit_card_9513926. Please confirm."
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
+    )
+    # Use a confirmation phrase and explicit payment reference covered by current policy tests.
+    confirmation_index = next(
+        (i for i, message in enumerate(messages)
+         if isinstance(message, dict) and message.get("role") == "user"
+         and "Yes, that's exactly right" in str(message.get("content") or "")),
+        None,
+    )
+    if confirmation_index is None:
+        raise ValueError("Expected an existing user confirmation to anchor the positive control.")
+    messages[confirmation_index]["content"] = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
     )
 
 
