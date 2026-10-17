@@ -49,7 +49,7 @@ def test_provider_error_overrides_inconsistent_success_outcome(tmp_path: Path) -
 def test_retry_after_integer_is_observed_and_capped(tmp_path: Path) -> None:
     status = build_status(
         "failure",
-        "reason=in_flight_budget_exhausted\\nRetry-After: 240\\n",
+        "reason=in_flight_budget_exhausted\nRetry-After: 240\n",
         tmp_path / "missing.json",
         tmp_path / "missing-release.json",
     )
@@ -62,7 +62,7 @@ def test_retry_after_integer_is_observed_and_capped(tmp_path: Path) -> None:
 def test_invalid_retry_after_is_not_guessed(tmp_path: Path) -> None:
     status = build_status(
         "failure",
-        "reason=in_flight_budget_exhausted\\nRetry-After: later\\n",
+        "reason=in_flight_budget_exhausted\nRetry-After: later\n",
         tmp_path / "missing.json",
         tmp_path / "missing-release.json",
     )
