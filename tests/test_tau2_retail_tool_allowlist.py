@@ -4,6 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from ai_workflow_assurance_mcp.tau2_constants import (
+    TAU2_PASSTHROUGH_TOOLS,
+    WRITE_TOOLS,
+)
+
 from scripts.patch_tau2_retail_tool_allowlist import (
     ORIGINAL_FACTORY,
     PATCH_MARKER,
@@ -73,3 +78,10 @@ def test_patch_is_idempotent_and_validates_marker_integrity() -> None:
 def test_patch_rejects_an_unreviewed_factory_shape() -> None:
     with pytest.raises(ValueError, match="create_llm_agent"):
         patch_agent_source(BASELINE.replace("tools=tools", "tools=[]"))
+
+
+def test_allowlist_remains_covered_by_awa_tool_policy_inventory() -> None:
+    write_tools = set(EXPECTED_TOOLS) & set(WRITE_TOOLS)
+    assert write_tools == {"exchange_delivered_order_items"}
+    non_write_tools = set(EXPECTED_TOOLS) - write_tools
+    assert non_write_tools <= set(TAU2_PASSTHROUGH_TOOLS)
