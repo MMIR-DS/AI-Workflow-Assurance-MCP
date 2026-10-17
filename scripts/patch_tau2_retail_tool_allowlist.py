@@ -17,10 +17,10 @@ ORIGINAL_FACTORY = '''def create_llm_agent(tools, domain_policy, **kwargs):
     """Factory function for LLMAgent.
 
     Args:
-        tools: Environment tools the agent can call.
+        tools: Environment tools for the agent.
         domain_policy: Policy text the agent must follow.
         **kwargs: Additional arguments. Supports:
-            - llm (str): Model name.
+            - llm (str): model name.
             - llm_args (dict): Additional arguments for the LLM.
     """
     return LLMAgent(
@@ -30,9 +30,14 @@ ORIGINAL_FACTORY = '''def create_llm_agent(tools, domain_policy, **kwargs):
         llm_args=kwargs.get("llm_args"),
     )'''
 
-REPLACEMENT_FACTORY = '''def create_llm_agent(tools, domain_policy, **kwargs):
-    """Factory function for LLMAgent."""
-    # AWA_RETAIL_TASK0_TOOL_ALLOWLIST_V1: trim unrelated schemas for fixed task 0.
+ORIGINAL_RETURN = '''    return LLMAgent(
+        tools=tools,
+        domain_policy=domain_policy,
+        llm=kwargs.get("llm"),
+        llm_args=kwargs.get("llm_args"),
+    )'''
+
+REPLACEMENT_RETURN = '''    # AWA_RETAIL_TASK0_TOOL_ALLOWLIST_V1: trim unrelated schemas for fixed task 0.
     required_tool_names = (
         "calculate",
         "find_user_id_by_name_zip",
@@ -58,23 +63,36 @@ REPLACEMENT_FACTORY = '''def create_llm_agent(tools, domain_policy, **kwargs):
 
 def patch_agent_source(source: str) -> str:
     """Patch only the pinned LLMAgent factory; reject unexpected source changes."""
-    if PATCH_MARKER in source:
+    marker_count = source.count(PATCH_MARKER)
+    if marker_count:
         if (
-            source.count(PATCH_MARKER) != 1
-            or source.count(REPLACEMENT_FACTORY) != 1
-            or ORIGINAL_FACTORY in source
+            marker_count != 1
+            or source.count(REPLACEMENT_RETURN) != 1
+            or source.count(ORIGINAL_RETURN) != 0
         ):
             raise ValueError(
                 "Found the task-0 tool allowlist marker, but its factory block is not intact."
             )
         return source
 
-    if source.count(ORIGINAL_FACTORY) != 1:
+    factory_start = source.find("def create_llm_agent(tools, domain_policy, **kwargs):")
+    if factory_start < 0:
+        raise ValueError("Could not find the reviewed create_llm_agent factory in pinned Tau2.")
+    next_factory = source.find("\ndef create_llm_gt_agent(", factory_start)
+    if next_factory < 0:
+        next_factory = len(source)
+    factory = source[factory_start:next_factory]
+
+    if factory.count(ORIGINAL_RETURN) != 1:
         raise ValueError(
-            "Expected exactly one reviewed create_llm_agent factory in pinned Tau2; "
-            f"found {source.count(ORIGINAL_FACTORY)}."
+            "Expected exactly one reviewed LLMAgent return block inside create_llm_agent; "
+            f"found {factory.count(ORIGINAL_RETURN)}."
         )
-    return source.replace(ORIGINAL_FACTORY, REPLACEMENT_FACTORY, 1)
+    if "domain_policy=domain_policy" not in factory or 'llm=kwargs.get("llm")' not in factory:
+        raise ValueError("The create_llm_agent factory differs from the reviewed baseline.")
+
+    patched_factory = factory.replace(ORIGINAL_RETURN, REPLACEMENT_RETURN, 1)
+    return source[:factory_start] + patched_factory + source[next_factory:]
 
 
 def main() -> int:
