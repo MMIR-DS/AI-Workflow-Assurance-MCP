@@ -121,6 +121,25 @@ def test_openrouter_insufficient_credit_error_is_not_treated_as_transient(
     assert status["retry_policy"]["automatic_retry_enabled"] is False
 
 
+def test_prompt_token_limit_error_is_not_fixed_by_lowering_output_cap(
+    tmp_path: Path,
+) -> None:
+    log = (
+        "OpenrouterException: Prompt tokens limit exceeded: 5167 > 3265; "
+        'metadata={"limit_source":"openrouter_credits"}'
+    )
+    status = build_status(
+        "success",
+        log,
+        tmp_path / "missing.json",
+        tmp_path / "missing-release.json",
+    )
+    assert status["execution_status"] == "infrastructure_error"
+    assert status["provider_error"] == "prompt_token_budget_exceeded"
+    assert status["retry_policy"]["manual_rerun_recommended"] is False
+    assert status["retry_policy"]["automatic_retry_enabled"] is False
+
+
 def test_recorded_infrastructure_termination_overrides_success_exit(
     tmp_path: Path,
 ) -> None:
