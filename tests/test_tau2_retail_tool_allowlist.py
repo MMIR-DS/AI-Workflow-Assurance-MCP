@@ -8,7 +8,6 @@ from ai_workflow_assurance_mcp.tau2_constants import (
     TAU2_PASSTHROUGH_TOOLS,
     WRITE_TOOLS,
 )
-
 from scripts.patch_tau2_retail_tool_allowlist import (
     ORIGINAL_FACTORY,
     PATCH_MARKER,
