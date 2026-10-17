@@ -43,6 +43,8 @@ def build_status(
     lower_log = log_text.lower()
     if "in_flight_budget_exhausted" in lower_log:
         provider_error = "in_flight_budget_exhausted"
+    elif "prompt tokens limit exceeded" in lower_log:
+        provider_error = "prompt_token_budget_exceeded"
     elif "weight_exceeds_budget" in lower_log:
         provider_error = "weight_exceeds_budget"
     elif any(
