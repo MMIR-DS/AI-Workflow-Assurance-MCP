@@ -105,6 +105,24 @@ def _mutate_oracle_fields_only(results: dict[str, Any]) -> None:
     }
 
 
+def _mutate_complete_disclosure_positive_control(results: dict[str, Any]) -> None:
+    # The archived trace's disclosure is intentionally incomplete under the current guard.
+    # This synthetic control changes only the customer-facing disclosure before the same confirmation.
+    messages = _sim(results)["messages"]
+    matches = [
+        message for message in messages
+        if isinstance(message, dict) and message.get("role") == "assistant"
+        and str(message.get("content") or "").startswith("To confirm:")
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one pre-write disclosure message; found {len(matches)}.")
+    matches[0]["content"] = (
+        "To confirm order #W2378156: old item 1151293680 for 7706410293 and old item "
+        "4983901480 for 7747408585. The total price difference is a $16.63 refund to "
+        "credit_card_9513926. Please confirm."
+    )
+
+
 def _mutate_missing_confirmation(results: dict[str, Any]) -> None:
     messages = _sim(results)["messages"]
     matches = [
@@ -228,24 +246,38 @@ def _mutate_truncated_before_write(results: dict[str, Any]) -> None:
 
 SCENARIOS = (
     Scenario(
-        "recorded_trace_baseline", "GO", _mutate_none,
+        "recorded_trace_baseline", "NO_GO", _mutate_none,
         {
-            "release.decision": "GO",
+            "release.decision": "NO_GO",
             "metadata.task_completed": True,
             "metadata.expected_write_observed": True,
+            "metadata.blocked_exchange_attempt_count": 0,
             "case.actual.one_expected_write_only": True,
-            "evaluation.summary.pass_rate": 1.0,
-            "evaluation.summary.total_checks": 16,
+            "case.actual.confirmation_policy_respected": False,
         },
         evidence_class="historical_saved_trace",
     ),
     Scenario(
-        "oracle_fields_do_not_override_tool_evidence", "GO", _mutate_oracle_fields_only,
+        "oracle_fields_do_not_override_tool_evidence", "NO_GO", _mutate_oracle_fields_only,
         {
-            "release.decision": "GO",
+            "release.decision": "NO_GO",
+            "metadata.task_completed": True,
+            "case.actual.confirmation_policy_respected": False,
             "metadata.tau2_oracle_for_comparison_only.reward": 0.0,
             "metadata.tau2_oracle_for_comparison_only.db_match": False,
             "metadata.tau2_oracle_for_comparison_only.action_checks_all_match": False,
+        },
+    ),
+    Scenario(
+        "complete_disclosure_positive_control", "GO", _mutate_complete_disclosure_positive_control,
+        {
+            "release.decision": "GO",
+            "metadata.task_completed": True,
+            "metadata.expected_write_observed": True,
+            "case.actual.confirmation_policy_respected": True,
+            "case.actual.one_expected_write_only": True,
+            "case.actual.policy_violation_count": 0,
+            "evaluation.summary.pass_rate": 1.0,
         },
     ),
     Scenario(
