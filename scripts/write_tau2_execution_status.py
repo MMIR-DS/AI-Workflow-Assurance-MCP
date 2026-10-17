@@ -40,16 +40,44 @@ def build_status(
 ) -> dict[str, Any]:
     """Separate runner health, provider diagnostics, and AWA's release decision."""
     normalized_outcome = outcome.strip().lower()
-    provider_error = (
-        "in_flight_budget_exhausted"
-        if "in_flight_budget_exhausted" in log_text
-        else "weight_exceeds_budget"
-        if "weight_exceeds_budget" in log_text
-        else None
+    lower_log = log_text.lower()
+    if "in_flight_budget_exhausted" in lower_log:
+        provider_error = "in_flight_budget_exhausted"
+    elif "weight_exceeds_budget" in lower_log:
+        provider_error = "weight_exceeds_budget"
+    elif any(
+        marker in lower_log
+        for marker in (
+            "limit_source=openrouter_credits",
+            '"limit_source": "openrouter_credits"',
+            "openrouter_credits",
+            "can only afford",
+            "requires more credits, or fewer max_tokens",
+        )
+    ):
+        provider_error = "insufficient_credits_or_token_budget"
+    else:
+        provider_error = None
+
+    results = _read_json(results_path)
+    simulations = results.get("simulations") if results else None
+    simulation_termination_reasons = (
+        [
+            str(simulation["termination_reason"]).strip().lower()
+            for simulation in simulations
+            if isinstance(simulation, dict)
+            and isinstance(simulation.get("termination_reason"), str)
+            and simulation["termination_reason"].strip()
+        ]
+        if isinstance(simulations, list)
+        else []
+    )
+    recorded_infrastructure_error = (
+        "infrastructure_error" in simulation_termination_reasons
     )
 
-    # A known provider rejection takes precedence even if a wrapper accidentally exits 0.
-    if provider_error:
+    # Tau2 may serialize infrastructure_error while its CLI exits 0.
+    if provider_error or recorded_infrastructure_error:
         execution_status = "infrastructure_error"
     elif normalized_outcome == "success":
         execution_status = "completed"
@@ -61,6 +89,8 @@ def build_status(
         execution_status = "unknown"
 
     retry_after = _retry_after_seconds(log_text)
+    # An in-flight condition may clear with time. A credit-budget rejection needs
+    # a lower cap or more available credits, not a blind rerun.
     manual_rerun_recommended = provider_error == "in_flight_budget_exhausted"
     release = _read_json(release_report_path)
     decision = release.get("decision") if release else None
@@ -68,7 +98,7 @@ def build_status(
         decision = "NOT_EVALUABLE"
 
     return {
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "execution_status": execution_status,
         "tau2_step_outcome": normalized_outcome or "unknown",
         "provider_error": provider_error,
@@ -79,12 +109,15 @@ def build_status(
             "automatic_retry_enabled": False,
             "note": (
                 "The bounded workflow sets TAU2_LITELLM_NUM_RETRIES=0 to disable "
-                "hidden per-call provider retries. This status report never retries or "
-                "waits; an operator may start a separate manual run after the provider "
-                "condition clears. Retry-After is recorded only when it survives in logs."
+                "hidden per-call provider retries. This status report never retries "
+                "or waits. An in-flight budget error may justify a separate manual "
+                "rerun after the provider condition clears; an insufficient-credit/"
+                "token-budget error requires a lower cap or credit/key-limit "
+                "adjustment first. Retry-After is recorded only when it survives in logs."
             ),
         },
         "results_file_present": results_path.is_file(),
+        "simulation_termination_reasons": simulation_termination_reasons,
         "assurance_decision": decision,
         "assurance_report_present": release is not None and decision != "NOT_EVALUABLE",
         "interpretation": (
