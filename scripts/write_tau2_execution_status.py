@@ -113,9 +113,10 @@ def build_status(
                 "The bounded workflow sets TAU2_LITELLM_NUM_RETRIES=0 to disable "
                 "hidden per-call provider retries. This status report never retries "
                 "or waits. An in-flight budget error may justify a separate manual "
-                "rerun after the provider condition clears; an insufficient-credit/"
-                "token-budget error requires a lower cap or credit/key-limit "
-                "adjustment first. Retry-After is recorded only when it survives in logs."
+                "rerun after the provider condition clears; a prompt-token limit error "
+                "requires a shorter prompt/tool context or a higher key/workspace limit. "
+                "A completion-budget error may need a lower output cap or more available "
+                "credit. Retry-After is recorded only when it survives in logs."
             ),
         },
         "results_file_present": results_path.is_file(),
