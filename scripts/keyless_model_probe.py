@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import os
 import sys
-from importlib import metadata
 import time
 import urllib.request
 from datetime import datetime, timezone
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
