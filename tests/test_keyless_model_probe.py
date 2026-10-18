@@ -49,9 +49,19 @@ from scripts import keyless_model_probe as probe
             ],
             "NOT_SUPPORTED_OR_INVALID",
         ),
+        (
+            [{"id": "call_bad_shape", "type": "function", "function": None}],
+            "NOT_SUPPORTED_OR_INVALID",
+        ),
         ([], "NOT_SUPPORTED_OR_INVALID"),
     ],
-    ids=["valid-call", "wrong-arguments", "malformed-json", "no-call"],
+    ids=[
+        "valid-call",
+        "wrong-arguments",
+        "malformed-json",
+        "malformed-function-shape",
+        "no-call",
+    ],
 )
 def test_probe_records_tool_capability_without_executing_tools(
     monkeypatch, tmp_path, capsys, tool_calls, expected_status
@@ -96,3 +106,28 @@ def test_probe_records_tool_capability_without_executing_tools(
     assert report["production_tools_invoked"] is False
     assert report["release_eligible"] is False
     assert report["release_decision"] == "HOLD"
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://example.com/v1",
+        "http://example.com/v1",
+        "http://127.0.0.1.attacker.example:8000/v1",
+        "http://127.0.0.1:8000/v1?redirect=https://example.com",
+        "http://user@127.0.0.1:8000/v1",
+        "http://127.0.0.1:99999/v1",
+    ],
+)
+def test_request_json_rejects_nonlocal_or_ambiguous_endpoints_before_network(
+    monkeypatch, base_url
+):
+    monkeypatch.setattr(probe, "BASE_URL", base_url)
+
+    def unexpected_network_call(*args, **kwargs):
+        pytest.fail("The probe must reject this endpoint before opening a connection.")
+
+    monkeypatch.setattr(probe.urllib.request, "urlopen", unexpected_network_call)
+
+    with pytest.raises(ValueError, match="LOCAL_MODEL_URL"):
+        probe.request_json("/models")

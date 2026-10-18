@@ -2,6 +2,7 @@
 """Probe local inference; tool calls are observed but never executed."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import sys
@@ -11,6 +12,7 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 BASE_URL = os.environ.get("LOCAL_MODEL_URL", "http://127.0.0.1:8000/v1").rstrip("/")
 MODEL = "keyless-qwen"
@@ -18,7 +20,39 @@ REPORT_PATH = Path(os.environ.get("REPORT_PATH", "keyless-model-report.json"))
 RUN_TOOL_PROBE = os.environ.get("RUN_TOOL_PROBE", "true").lower() == "true"
 
 
+def validate_local_endpoint() -> None:
+    """Fail closed unless requests can only target the local HTTP API."""
+    try:
+        parsed = urlsplit(BASE_URL)
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("LOCAL_MODEL_URL must be a valid loopback HTTP /v1 URL.") from exc
+
+    try:
+        is_loopback_ip = ipaddress.ip_address(parsed.hostname or "").is_loopback
+    except ValueError:
+        # Hostnames such as localhost are intentionally rejected: require an IP
+        # literal so the name cannot resolve to a non-loopback address.
+        is_loopback_ip = False
+
+    if (
+        parsed.scheme != "http"
+        or not is_loopback_ip
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path.rstrip("/") != "/v1"
+        or parsed.query
+        or parsed.fragment
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise ValueError(
+            "LOCAL_MODEL_URL must be an HTTP /v1 URL with a loopback IP literal "
+            "and no credentials, query, or fragment."
+        )
+
+
 def request_json(path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    validate_local_endpoint()
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         f"{BASE_URL}{path}", data=data,
@@ -133,8 +167,10 @@ def main() -> int:
             valid = False
             if isinstance(calls, list):
                 for call in calls:
-                    function = call.get("function", {}) if isinstance(call, dict) else {}
-                    if function.get("name") != "record_status":
+                    if not isinstance(call, dict):
+                        continue
+                    function = call.get("function")
+                    if not isinstance(function, dict) or function.get("name") != "record_status":
                         continue
                     try:
                         args = json.loads(function.get("arguments", "{}"))
