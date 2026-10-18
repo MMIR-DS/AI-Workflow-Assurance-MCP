@@ -53,6 +53,45 @@ from scripts import keyless_model_probe as probe
             [{"id": "call_bad_shape", "type": "function", "function": None}],
             "NOT_SUPPORTED_OR_INVALID",
         ),
+        (
+            [{
+                "type": "function",
+                "function": {"name": "record_status", "arguments": '{"status": "ready"}'},
+            }],
+            "NOT_SUPPORTED_OR_INVALID",
+        ),
+        (
+            [{
+                "id": "call_wrong_type",
+                "type": "other",
+                "function": {"name": "record_status", "arguments": '{"status": "ready"}'},
+            }],
+            "NOT_SUPPORTED_OR_INVALID",
+        ),
+        (
+            [
+                {
+                    "id": "call_valid",
+                    "type": "function",
+                    "function": {"name": "record_status", "arguments": '{"status": "ready"}'},
+                },
+                {
+                    "id": "call_extra",
+                    "type": "function",
+                    "function": {"name": "unexpected_tool", "arguments": '{}'},
+                },
+            ],
+            "NOT_SUPPORTED_OR_INVALID",
+        ),
+        (
+            [{
+                "id": "call_wrong_function",
+                "type": "function",
+                "function": {"name": "unexpected_tool", "arguments": '{}'},
+            }],
+            "NOT_SUPPORTED_OR_INVALID",
+        ),
+        ("not-a-tool-call", "NOT_SUPPORTED_OR_INVALID"),
         ([], "NOT_SUPPORTED_OR_INVALID"),
     ],
     ids=[
@@ -60,6 +99,11 @@ from scripts import keyless_model_probe as probe
         "wrong-arguments",
         "malformed-json",
         "malformed-function-shape",
+        "missing-call-id",
+        "wrong-call-type",
+        "multiple-calls",
+        "wrong-function",
+        "non-object-call",
         "no-call",
     ],
 )

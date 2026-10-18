@@ -165,20 +165,23 @@ def main() -> int:
             tool_message = tool_choices[0].get("message", {}) if tool_choices else {}
             calls = tool_message.get("tool_calls", [])
             valid = False
-            if isinstance(calls, list):
-                for call in calls:
-                    if not isinstance(call, dict):
-                        continue
+            # This probe asks for exactly one call. Reject batches or incomplete
+            # wrappers rather than finding one good call among unexpected calls.
+            if isinstance(calls, list) and len(calls) == 1:
+                call = calls[0]
+                if (
+                    isinstance(call, dict)
+                    and isinstance(call.get("id"), str)
+                    and bool(call["id"].strip())
+                    and call.get("type") == "function"
+                ):
                     function = call.get("function")
-                    if not isinstance(function, dict) or function.get("name") != "record_status":
-                        continue
-                    try:
-                        args = json.loads(function.get("arguments", "{}"))
-                    except (TypeError, json.JSONDecodeError):
-                        continue
-                    if args == {"status": "ready"}:
-                        valid = True
-                        break
+                    if isinstance(function, dict) and function.get("name") == "record_status":
+                        try:
+                            args = json.loads(function.get("arguments", "{}"))
+                        except (TypeError, json.JSONDecodeError):
+                            args = None
+                        valid = args == {"status": "ready"}
             report["stages"]["tool_call_probe"] = {
                 "status": "PASS" if valid else "NOT_SUPPORTED_OR_INVALID",
                 "expected_function": "record_status",
