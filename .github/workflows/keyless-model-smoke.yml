@@ -10,8 +10,6 @@ on:
       - '.github/workflows/keyless-model-smoke.yml'
       - 'scripts/keyless_model_probe.py'
       - 'tests/test_keyless_model_probe.py'
-      - 'tests/test_keyless_model_probe.py'
-      - 'tests/test_tau2_offline_scenario_suite.py'
       - 'pyproject.toml'
   workflow_dispatch:
     inputs:
@@ -35,7 +33,6 @@ jobs:
     env:
       MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/2ed9be962c95f7625f4963ff51ed472e4538187a/qwen2.5-0.5b-instruct-q4_k_m.gguf
       LOCAL_MODEL_URL: http://127.0.0.1:8000/v1
-      CHAT_FORMAT: chatml-function-calling
       CHAT_FORMAT: chatml-function-calling
     steps:
       - name: Checkout exact revision
@@ -85,8 +82,6 @@ jobs:
           REPORT_PATH: ${{ runner.temp }}/keyless-model-report.json
           MODEL_SHA_PATH: ${{ runner.temp }}/model-sha256.txt
         run: python scripts/keyless_model_probe.py
-      - name: Test probe report and no-tool-execution contract
-        run: python -m pytest tests/test_keyless_model_probe.py
       - name: Test probe report and no-tool-execution contract
         run: python -m pytest tests/test_keyless_model_probe.py
       - name: Run repository test suite separately from model inference
