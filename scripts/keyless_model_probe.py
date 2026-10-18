@@ -8,6 +8,7 @@ import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
@@ -31,12 +32,26 @@ def request_json(path: str, payload: dict[str, Any] | None = None) -> dict[str, 
     return result
 
 
+def installed_version(distribution: str) -> str:
+    """Return a package version without making report generation fragile."""
+    try:
+        return metadata.version(distribution)
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def main() -> int:
     report: dict[str, Any] = {
         "schema_version": "1.0",
         "lab": "keyless-local-model",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "model_alias": MODEL,
+        "runtime": {
+            "name": "llama-cpp-python",
+            "version": installed_version("llama-cpp-python"),
+            "python_version": ".".join(str(part) for part in sys.version_info[:3]),
+            "chat_format": os.environ.get("CHAT_FORMAT", "unspecified"),
+        },
         "endpoint": "localhost-only",
         "credentials_used": False,
         "hosted_inference_api_used": False,
@@ -130,6 +145,8 @@ def main() -> int:
                         break
             report["stages"]["tool_call_probe"] = {
                 "status": "PASS" if valid else "NOT_SUPPORTED_OR_INVALID",
+                "expected_function": "record_status",
+                "expected_arguments": {"status": "ready"},
                 "elapsed_seconds": round(time.monotonic() - started, 3),
                 "valid_structured_tool_call": valid,
                 "tool_calls_observed": len(calls) if isinstance(calls, list) else 0,
