@@ -515,15 +515,22 @@ def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
     normalized = re.sub(r"[^a-z0-9' ]+", " ", raw_text)
     normalized = " ".join(normalized.split())
 
-    # Reject question syntax anywhere, including an indirect question following a
-    # superficially positive opener ("Yes, can you confirm ...").
-    if re.search(r"\b(?:can|could|would|should|do|does|did|is|are|am|was|were|have|has|had|may|will)\s+(?:you|i|we|they|he|she|it|that|this|there|anything|something|the)\b", normalized):
-        return False
-    if re.match(
-        r"^(?:what|why|when|where|who|whom|which|how)\b",
-        normalized,
-    ):
-        return False
+    # Reject inverted questions only when they begin a clause. Searching for
+    # auxiliary + pronoun anywhere also rejects commands such as "Yes, do it"
+    # and statements such as "Yes, that is the one".
+    auxiliary_question = re.compile(
+        r"^(?:"
+        r"(?:can|could|would|should|do|does|did)\s+(?:you|i|we|they|he|she)\b"
+        r"|(?:is|are|am|was|were|have|has|had|may|will)\s+"
+        r"(?:you|i|we|they|he|she|it|that|this|there|anyone|anybody|anything|someone|something|the)\b"
+        r")"
+    )
+    wh_question = re.compile(r"^(?:what|why|when|where|who|whom|which|how)\b")
+    for clause in re.split(r"[.,;:!?，。；：！？]+", raw_text):
+        clause_normalized = re.sub(r"[^a-z0-9' ]+", " ", clause)
+        clause_normalized = " ".join(clause_normalized.split())
+        if auxiliary_question.match(clause_normalized) or wh_question.match(clause_normalized):
+            return False
 
     if action == "cancel":
         # "No longer needed" is a cancellation reason, not a negation of consent.
@@ -551,7 +558,7 @@ def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
     # Consent must lead the reply, not appear as a substring later in a question or hedge.
     return bool(
         re.match(
-            r"^(?:yes|yeah|yep|sure|absolutely|confirmed|i confirm|i agree|i accept|"
+            r"^(?:yes|yeah|yep|okay|ok|sure|absolutely|confirmed|i confirm|i agree|i accept|"
             r"that's right|that is right|sounds good|exactly right|correct|please do|"
             r"do it|go ahead|proceed)\b",
             normalized,

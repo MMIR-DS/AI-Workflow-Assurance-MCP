@@ -12,6 +12,10 @@ from ai_workflow_assurance_mcp.tau2_prewrite_common import _contains_all, _is_af
         "Can you confirm the price difference first",
         "Right, can you confirm the price difference first",
         "Yes, can you confirm the price difference first",
+        "Yes, do you want me to proceed",
+        "Yes, is that the one",
+        "Can we proceed with this?",
+
         "Is that correct? I'm not sure about the second item.",
         "Do I need to confirm anything?",
         "Do I need to confirm anything",
@@ -33,6 +37,12 @@ def test_questions_and_hedged_replies_are_not_affirmative(text: str) -> None:
             "exchange",
         ),
         ("Confirmed, please proceed.", "exchange"),
+        ("Yes, do it", "exchange"),
+        ("Yes, that is the one", "exchange"),
+        ("ok go ahead", "exchange"),
+        ("Okay, proceed", "exchange"),
+        ("okay", "exchange"),
+        ("Sure, do it.", "exchange"),
         ("Yes, cancel this order because it is no longer needed.", "cancel"),
     ],
 )

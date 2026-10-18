@@ -6,6 +6,7 @@ It does not alter AWA's policy checks or weaken the pre-write guard.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -63,6 +64,15 @@ def patch_agent_source(source: str) -> str:
     return source[: matches[0].start()] + REPLACEMENT + source[matches[0].end() :]
 
 
+def _write_github_outputs(output_path: str | None) -> None:
+    """Expose prompt provenance to subsequent workflow steps without requiring CI."""
+    if not output_path:
+        return
+    with Path(output_path).open("a", encoding="utf-8") as stream:
+        stream.write("prompt_mode=patched\\n")
+        stream.write(f"prompt_marker={PROMPT_MARKER}\\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tau2-root", type=Path, required=True)
@@ -91,6 +101,7 @@ def main() -> int:
         print(f"Applied {PROMPT_MARKER} to {path}")
     else:
         print(f"{PROMPT_MARKER} already present in {path}")
+    _write_github_outputs(os.environ.get("GITHUB_OUTPUT"))
     return 0
 
 

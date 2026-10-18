@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.adapt_tau2_results import evaluate_trace, normalize_simulation
+from scripts.adapt_tau2_results import (
+    PROMPT_PATCH_MARKER,
+    evaluate_trace,
+    normalize_simulation,
+ )
 from scripts.verify_tau2_mutations import MUTATION_EXPECTATIONS, run_mutation_checks
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -543,3 +547,96 @@ def test_infrastructure_error_does_not_count_as_zero_task_latency() -> None:
     assert metadata["termination_reason"] == "infrastructure_error"
     assert metadata["task_completed"] is False
     assert "latency_ms" not in case
+
+
+def test_costs_are_decimal_summed_before_threshold_evaluation(monkeypatch) -> None:
+    results, spec = _load_inputs()
+    _set_complete_confirmation(results)
+    sim = results["simulations"][0]
+
+    # Leave exactly two observed costs. A float sum would be 0.30000000000000004.
+    for message in sim["messages"]:
+        raw = message.get("raw_data")
+        usage = raw.get("usage") if isinstance(raw, dict) else None
+        if isinstance(usage, dict):
+            usage.pop("cost", None)
+    sim["messages"].extend(
+        [
+            {"role": "assistant", "content": "", "raw_data": {"usage": {"cost": 0.1}}},
+            {"role": "assistant", "content": "", "raw_data": {"usage": {"cost": 0.2}}},
+        ]
+    )
+    spec["thresholds"]["max_avg_cost_usd"] = 0.3
+    monkeypatch.delenv("AWA_TAU2_PROMPT_MODE", raising=False)
+    monkeypatch.delenv("AWA_TAU2_PROMPT_MARKER", raising=False)
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["cost_usd"] == 0.3
+    assert report["summary"]["avg_cost_usd_per_observed_case"] == 0.3
+    cost_check = next(check for check in release["checks"] if check["metric"] == "avg_cost_usd_per_case")
+    assert cost_check["passed"] is True
+    assert release["decision"] == "GO"
+
+
+def test_duration_conversion_rejects_nonfinite_and_overflowing_values() -> None:
+    invalid_durations = (
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        1e306,  # finite seconds, but seconds * 1000 overflows to infinity
+        10**400,  # conversion to float itself overflows
+        0.0,
+        -1.0,
+        True,
+        "17.79",
+    )
+    for duration in invalid_durations:
+        results, _ = _load_inputs()
+        sim = results["simulations"][0]
+        sim["messages"] = []
+        sim["termination_reason"] = "user_stop"
+        sim["duration"] = duration
+
+        case, _ = normalize_simulation(results, sim)
+
+        assert "latency_ms" not in case, f"duration unexpectedly accepted: {duration!r}"
+
+
+def test_finite_positive_duration_is_reported_in_milliseconds() -> None:
+    results, _ = _load_inputs()
+    sim = results["simulations"][0]
+    sim["messages"] = []
+    sim["termination_reason"] = "user_stop"
+    sim["duration"] = 1.25
+
+    case, _ = normalize_simulation(results, sim)
+
+    assert case["latency_ms"] == 1250
+
+
+def test_adapter_metadata_records_verified_patched_prompt(monkeypatch) -> None:
+    results, _ = _load_inputs()
+    monkeypatch.setenv("AWA_TAU2_PROMPT_MODE", "patched")
+    monkeypatch.setenv("AWA_TAU2_PROMPT_MARKER", PROMPT_PATCH_MARKER)
+
+    _, metadata = normalize_simulation(results, results["simulations"][0])
+
+    assert metadata["prompt_provenance"] == {
+        "mode": "patched",
+        "marker": PROMPT_PATCH_MARKER,
+        "expected_marker": PROMPT_PATCH_MARKER,
+        "status": "verified_patched",
+    }
+
+
+def test_adapter_metadata_marks_legacy_prompt_provenance_unknown(monkeypatch) -> None:
+    results, _ = _load_inputs()
+    monkeypatch.delenv("AWA_TAU2_PROMPT_MODE", raising=False)
+    monkeypatch.delenv("AWA_TAU2_PROMPT_MARKER", raising=False)
+
+    _, metadata = normalize_simulation(results, results["simulations"][0])
+
+    assert metadata["prompt_provenance"]["mode"] == "unknown"
+    assert metadata["prompt_provenance"]["marker"] is None
+    assert metadata["prompt_provenance"]["status"] == "not_recorded"

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from scripts.patch_tau2_retail_agent_prompt import PROMPT_MARKER, patch_agent_source
+from scripts.patch_tau2_retail_agent_prompt import (
+    PROMPT_MARKER,
+    _write_github_outputs,
+    patch_agent_source,
+ )
 
 BASELINE = '''from typing import Optional
 
@@ -45,3 +49,19 @@ def test_patch_rejects_unknown_agent_prompt_shape() -> None:
         assert "AGENT_INSTRUCTION" in str(exc)
     else:
         raise AssertionError("Unexpected prompt shape must be rejected.")
+
+
+def test_patch_writes_prompt_provenance_to_github_step_outputs(tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+
+    _write_github_outputs(str(output_path))
+
+    assert output_path.read_text(encoding="utf-8").splitlines() == [
+        "prompt_mode=patched",
+        f"prompt_marker={PROMPT_MARKER}",
+    ]
+
+
+def test_prompt_output_helper_is_optional_outside_github_actions(tmp_path) -> None:
+    _write_github_outputs(None)
+    assert list(tmp_path.iterdir()) == []
