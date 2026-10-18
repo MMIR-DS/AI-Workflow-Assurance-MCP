@@ -62,7 +62,8 @@ jobs:
           MODEL_PATH: ${{ runner.temp }}/qwen2.5-0.5b-instruct-q4_k_m.gguf
         run: |
           set -euo pipefail
-          nohup python -m llama_cpp.server --model "$MODEL_PATH" --model_alias keyless-qwen --host 127.0.0.1 --port 8000 --n_ctx 4096 --n_threads 2 --n_gpu_layers 0 --chat_format chatml > "${{ runner.temp }}/llama-server.log" 2>&1 &
+          # Use llama-cpp-python's generic function-calling formatter so the probe tests tool-call serialization, not plain chat formatting.
+          nohup python -m llama_cpp.server --model "$MODEL_PATH" --model_alias keyless-qwen --host 127.0.0.1 --port 8000 --n_ctx 4096 --n_threads 2 --n_gpu_layers 0 --chat_format chatml-function-calling > "${{ runner.temp }}/llama-server.log" 2>&1 &
           echo $! > "${{ runner.temp }}/llama-server.pid"
           for attempt in $(seq 1 90); do
             if curl --silent --fail "$LOCAL_MODEL_URL/models" >/dev/null; then exit 0; fi
