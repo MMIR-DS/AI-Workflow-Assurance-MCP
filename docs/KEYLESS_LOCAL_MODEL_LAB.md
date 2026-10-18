@@ -12,8 +12,8 @@ No secrets or API keys are required. The public model download and GitHub Action
 
 ## Interpreting the report
 
-- `server_health` and `basic_inference` test the local runtime/model path.
-- `tool_call_probe` tests whether this exact model/runtime emits a correctly shaped function call. It never executes the proposed function. A small model may return `NOT_SUPPORTED_OR_INVALID`; that is a measured capability limit, not a hidden pass.
+- `runtime` records the Python version, installed `llama-cpp-python` version, and selected `chat_format`; `server_health` and `basic_inference` test the local runtime/model path.
+- `tool_call_probe` tests whether this exact model/runtime emits a correctly shaped function call. The report records the expected function and arguments and never executes the proposed function. A small model or mismatched formatter may return `NOT_SUPPORTED_OR_INVALID`; that is a measured capability limit, not a hidden pass. The validated `chatml-function-calling` setup produced one valid synthetic call in [run #15](../actions/runs/39096537092), but that result does not generalize to other models or tasks.
 - The deterministic offline AWA suite runs separately. Model output does not influence the assurance test oracle.
 - The report states `credentials_used=false`, `hosted_inference_api_used=false`, `production_tools_invoked=false`, `release_eligible=false`, and `release_decision=HOLD`.
 - This is **not** a Tau2 end-to-end retail task and cannot be treated as fresh model-backed workflow evidence.
