@@ -9,6 +9,7 @@ on:
     paths:
       - '.github/workflows/keyless-model-smoke.yml'
       - 'scripts/keyless_model_probe.py'
+      - 'tests/test_keyless_model_probe.py'
       - 'tests/test_tau2_offline_scenario_suite.py'
       - 'pyproject.toml'
   workflow_dispatch:
@@ -33,6 +34,7 @@ jobs:
     env:
       MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/2ed9be962c95f7625f4963ff51ed472e4538187a/qwen2.5-0.5b-instruct-q4_k_m.gguf
       LOCAL_MODEL_URL: http://127.0.0.1:8000/v1
+      CHAT_FORMAT: chatml-function-calling
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           # Use llama-cpp-python's generic function-calling formatter so the probe tests tool-call serialization, not plain chat formatting.
-          nohup python -m llama_cpp.server --model "$MODEL_PATH" --model_alias keyless-qwen --host 127.0.0.1 --port 8000 --n_ctx 4096 --n_threads 2 --n_gpu_layers 0 --chat_format chatml-function-calling > "${{ runner.temp }}/llama-server.log" 2>&1 &
+          nohup python -m llama_cpp.server --model "$MODEL_PATH" --model_alias keyless-qwen --host 127.0.0.1 --port 8000 --n_ctx 4096 --n_threads 2 --n_gpu_layers 0 --chat_format "$CHAT_FORMAT" > "${{ runner.temp }}/llama-server.log" 2>&1 &
           echo $! > "${{ runner.temp }}/llama-server.pid"
           for attempt in $(seq 1 90); do
             if curl --silent --fail "$LOCAL_MODEL_URL/models" >/dev/null; then exit 0; fi
@@ -81,6 +83,8 @@ jobs:
           REPORT_PATH: ${{ runner.temp }}/keyless-model-report.json
           MODEL_SHA_PATH: ${{ runner.temp }}/model-sha256.txt
         run: python scripts/keyless_model_probe.py
+      - name: Test probe report and no-tool-execution contract
+        run: python -m pytest tests/test_keyless_model_probe.py
       - name: Run offline assurance suite separately
         run: python -m pytest tests/test_tau2_offline_scenario_suite.py
       - name: Stop local server
