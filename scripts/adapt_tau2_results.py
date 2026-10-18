@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_workflow_assurance_mcp.core import create_release_report, evaluate_suite
-from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS
+from ai_workflow_assurance_mcp.tau2_constants import TAU2_PASSTHROUGH_TOOLS, WRITE_TOOLS
 from ai_workflow_assurance_mcp.tau2_prewrite import _evaluate_exchange_confirmation_context
 
 EXPECTED_ORDER_KEYS = {
@@ -318,7 +318,13 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         and _money(after.get("exchange_price_difference")) == computed_delta
     )
     names = [c["name"] for c in calls]
-    writes = [c for c in calls if c["name"] in WRITE_TOOLS]
+    # Unknown/unreviewed tool names are write candidates by default. In particular,
+    # create_order is intentionally denied by dispatch policy, but an observed attempt
+    # must still count against the single-write release gate.
+    writes = [
+        c for c in calls
+        if c["name"] in WRITE_TOOLS or c["name"] not in TAU2_PASSTHROUGH_TOOLS
+    ]
     assistant_text = "\n".join(str(m.get("content") or "") for m in messages if m.get("role") == "assistant" and m.get("content")).lower()
     completion_claim = bool(
         "email" in assistant_text
