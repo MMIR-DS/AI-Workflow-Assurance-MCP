@@ -1,6 +1,7 @@
 """Unit tests for the keyless local-model probe's report and safety contract."""
 
 import json
+import urllib.request
 
 import pytest
 
@@ -171,7 +172,48 @@ def test_request_json_rejects_nonlocal_or_ambiguous_endpoints_before_network(
     def unexpected_network_call(*args, **kwargs):
         pytest.fail("The probe must reject this endpoint before opening a connection.")
 
-    monkeypatch.setattr(probe.urllib.request, "urlopen", unexpected_network_call)
+    monkeypatch.setattr(probe.urllib.request, "build_opener", unexpected_network_call)
 
     with pytest.raises(ValueError, match="LOCAL_MODEL_URL"):
         probe.request_json("/models")
+
+
+
+def test_local_request_disables_proxies_and_redirects(monkeypatch):
+    monkeypatch.setattr(probe, "BASE_URL", "http://127.0.0.1:8000/v1")
+    observed = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return b'{"data":[{"id":"keyless-qwen"}]}'
+
+    class FakeOpener:
+        def open(self, request, timeout):
+            observed["url"] = request.full_url
+            observed["timeout"] = timeout
+            return FakeResponse()
+
+    def fake_build_opener(*handlers):
+        observed["proxy_handler"] = any(
+            isinstance(handler, urllib.request.ProxyHandler)
+            and handler.proxies == {}
+            for handler in handlers
+        )
+        observed["no_redirect_handler"] = any(
+            isinstance(handler, probe._NoRedirectHandler) for handler in handlers
+        )
+        return FakeOpener()
+
+    monkeypatch.setattr(probe.urllib.request, "build_opener", fake_build_opener)
+
+    assert probe.request_json("/models") == {"data": [{"id": "keyless-qwen"}]}
+    assert observed["url"] == "http://127.0.0.1:8000/v1/models"
+    assert observed["timeout"] == 120
+    assert observed["proxy_handler"] is True
+    assert observed["no_redirect_handler"] is True

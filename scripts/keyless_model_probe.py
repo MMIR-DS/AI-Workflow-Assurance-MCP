@@ -20,8 +20,16 @@ REPORT_PATH = Path(os.environ.get("REPORT_PATH", "keyless-model-report.json"))
 RUN_TOOL_PROBE = os.environ.get("RUN_TOOL_PROBE", "true").lower() == "true"
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse HTTP redirects so a loopback response cannot forward prompts externally."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def validate_local_endpoint() -> None:
     """Fail closed unless requests can only target the local HTTP API."""
+
     try:
         parsed = urlsplit(BASE_URL)
         port = parsed.port
@@ -59,7 +67,13 @@ def request_json(path: str, payload: dict[str, Any] | None = None) -> dict[str, 
         headers={"Content-Type": "application/json"},
         method="GET" if data is None else "POST",
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
+    # Do not honor proxy environment variables and never follow a response
+    # redirect; both could otherwise bypass the loopback destination check.
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _NoRedirectHandler(),
+    )
+    with opener.open(request, timeout=120) as response:
         result = json.loads(response.read().decode("utf-8"))
     if not isinstance(result, dict):
         raise ValueError(f"Expected JSON object from {path}")
