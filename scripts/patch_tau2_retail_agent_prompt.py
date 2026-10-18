@@ -69,8 +69,8 @@ def _write_github_outputs(output_path: str | None) -> None:
     if not output_path:
         return
     with Path(output_path).open("a", encoding="utf-8") as stream:
-        stream.write("prompt_mode=patched\\n")
-        stream.write(f"prompt_marker={PROMPT_MARKER}\\n")
+        stream.write("prompt_mode=patched\n")
+        stream.write(f"prompt_marker={PROMPT_MARKER}\n")
 
 
 def main() -> int:

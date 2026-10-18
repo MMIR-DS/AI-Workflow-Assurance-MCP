@@ -7,7 +7,7 @@ from scripts.adapt_tau2_results import (
     PROMPT_PATCH_MARKER,
     evaluate_trace,
     normalize_simulation,
- )
+)
 from scripts.verify_tau2_mutations import MUTATION_EXPECTATIONS, run_mutation_checks
 
 ROOT = Path(__file__).resolve().parents[1]

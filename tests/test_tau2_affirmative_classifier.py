@@ -15,7 +15,6 @@ from ai_workflow_assurance_mcp.tau2_prewrite_common import _contains_all, _is_af
         "Yes, do you want me to proceed",
         "Yes, is that the one",
         "Can we proceed with this?",
-
         "Is that correct? I'm not sure about the second item.",
         "Do I need to confirm anything?",
         "Do I need to confirm anything",

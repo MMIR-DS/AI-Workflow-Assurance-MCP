@@ -49,7 +49,7 @@ def _duration_to_latency_ms(duration: Any) -> int | None:
 
 def _prompt_provenance() -> dict[str, Any]:
     """Capture whether the benchmark run used the reviewed prompt patch."""
-    supplied_mode = os.environ.get("AWA_TAU2_PROMPT_MODE", "").strip().lower()
+    supplied_mode = os.environ.get("AWA_TAU2_PROMPT_MODE", "").strip().lower() or "unknown"
     raw_marker = os.environ.get("AWA_TAU2_PROMPT_MARKER", "").strip()
     mode_is_valid = supplied_mode in PROMPT_MODE_VALUES
     mode = supplied_mode if mode_is_valid else "unknown"

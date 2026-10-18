@@ -4,7 +4,7 @@ from scripts.patch_tau2_retail_agent_prompt import (
     PROMPT_MARKER,
     _write_github_outputs,
     patch_agent_source,
- )
+)
 
 BASELINE = '''from typing import Optional
 
