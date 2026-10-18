@@ -520,7 +520,11 @@ def _is_affirmative(text: str, *, action: str = "exchange") -> bool:
     # and statements such as "Yes, that is the one".
     auxiliary_question = re.compile(
         r"^(?:"
-        r"(?:can|could|would|should|do|does|did)\s+(?:you|i|we|they|he|she)\b"
+        r"(?:can|could|would|should|might|must)\s+"
+        r"(?:you|i|we|they|he|she|it|that|this|there|anyone|anybody|anything|someone|something|the)\b"
+        r"|(?:do|does|did)\s+(?:you|i|we|they|he|she)\b"
+        # Keep imperative confirmation such as "do it" distinct from a question.
+        r"|(?:does|did)\s+(?:it|that|this|there|anyone|anybody|anything|someone|something|the)\b"
         r"|(?:is|are|am|was|were|have|has|had|may|will)\s+"
         r"(?:you|i|we|they|he|she|it|that|this|there|anyone|anybody|anything|someone|something|the)\b"
         r")"
