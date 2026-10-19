@@ -43,9 +43,8 @@ def _env(bin_dir: Path, capture_path: Path, *, uv_exit: int = 0) -> dict[str, st
             "PATH": str(bin_dir) + os.pathsep + env.get("PATH", ""),
             "CAPTURE_ARGS": str(capture_path),
             "FAKE_UV_EXIT": str(uv_exit),
-            "OPENROUTER_API_KEY": "test-key-not-used-for-network",
-            "OPENROUTER_API_BASE": "https://openrouter.ai/api/v1",
-            "MODEL": "openrouter/test/model",
+            "GEMINI_API_KEY": "test-key-not-used-for-network",
+            "MODEL": "gemini/gemini-3.8-flash",
             "MAX_STEPS": "40",
         }
     )
