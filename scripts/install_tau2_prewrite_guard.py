@@ -8,6 +8,45 @@ from pathlib import Path
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
 PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V6"
 REPLAY_PATCH_MARKER = "AWA_PREWRITE_REPLAY_NOOP_V1"
+USER_EMPTY_RESPONSE_PATCH_MARKER = "AWA_USER_EMPTY_RESPONSE_RETRY_V1"
+
+USER_GENERATE_ORIGINAL = """        assistant_message = generate(
+            model=self.llm,
+            messages=messages,
+            tools=self.tools,
+            call_name="user_simulator_response",
+            **self.llm_args,
+        )"""
+
+USER_GENERATE_REPLACEMENT = """        # AWA_USER_EMPTY_RESPONSE_RETRY_V1: do not turn an empty provider reply
+        # into an invalid UserMessage. Retry once; never synthesize user content.
+        assistant_message = None
+        for attempt in range(2):
+            assistant_message = generate(
+                model=self.llm,
+                messages=messages,
+                tools=self.tools,
+                call_name="user_simulator_response",
+                **self.llm_args,
+            )
+            response_content = assistant_message.content
+            has_text = isinstance(response_content, str) and bool(response_content.strip())
+            has_tool_calls = bool(assistant_message.tool_calls)
+            if has_text or has_tool_calls:
+                break
+            if attempt == 0:
+                logger.warning(
+                    "User simulator returned an empty response with no tool calls; "
+                    "retrying once without inventing user content."
+                )
+        if assistant_message is None or not (
+            (isinstance(assistant_message.content, str) and assistant_message.content.strip())
+            or bool(assistant_message.tool_calls)
+        ):
+            raise ValueError(
+                "User simulator returned an empty response with no tool calls "
+                "after one retry; refusing to synthesize a user message."
+            )"""
 
 REPLAY_ORIGINAL = """            if not self._is_mutating_tool(tool_call.name):
                 continue
@@ -328,6 +367,27 @@ def patch_environment_replay_source(source: str) -> str:
         )
     return source.replace(REPLAY_ORIGINAL, REPLAY_REPLACEMENT, 1)
 
+def patch_user_empty_response_source(source: str) -> str:
+    """Retry one empty simulated-user response without inventing conversation content."""
+    if USER_EMPTY_RESPONSE_PATCH_MARKER in source:
+        if (
+            source.count(USER_EMPTY_RESPONSE_PATCH_MARKER) != 1
+            or source.count(USER_GENERATE_REPLACEMENT) != 1
+            or USER_GENERATE_ORIGINAL in source
+        ):
+            raise ValueError(
+                "Found the empty-response patch marker, but the complete reviewed "
+                "replacement is not intact. Refusing to trust a partial patch."
+            )
+        return source
+    if source.count(USER_GENERATE_ORIGINAL) != 1:
+        raise ValueError(
+            "Expected exactly one unmodified Tau2 user-simulator generation block; "
+            "the upstream source may have changed. Refusing to patch."
+        )
+    return source.replace(USER_GENERATE_ORIGINAL, USER_GENERATE_REPLACEMENT, 1)
+
+
 def install(tau2_root: Path) -> Path:
     """Verify the pinned checkout and install the guard into its orchestrator."""
     revision = subprocess.run(
@@ -344,19 +404,25 @@ def install(tau2_root: Path) -> Path:
 
     target = tau2_root / "src" / "tau2" / "orchestrator" / "orchestrator.py"
     replay_target = tau2_root / "src" / "tau2" / "environment" / "environment.py"
+    user_target = tau2_root / "src" / "tau2" / "user" / "user_simulator.py"
     original_source = target.read_text(encoding="utf-8")
     replay_source = replay_target.read_text(encoding="utf-8")
+    user_source = user_target.read_text(encoding="utf-8")
 
-    # Validate both upstream source blocks before writing either file.
+    # Validate all upstream source blocks before writing any file.
     patched_source = patch_orchestrator_source(original_source)
     patched_replay_source = patch_environment_replay_source(replay_source)
+    patched_user_source = patch_user_empty_response_source(user_source)
 
     if patched_source != original_source:
         target.write_text(patched_source, encoding="utf-8")
     if patched_replay_source != replay_source:
         replay_target.write_text(patched_replay_source, encoding="utf-8")
+    if patched_user_source != user_source:
+        user_target.write_text(patched_user_source, encoding="utf-8")
     print(f"Installed {PATCH_MARKER} in {target}")
     print(f"Installed {REPLAY_PATCH_MARKER} in {replay_target}")
+    print(f"Installed {USER_EMPTY_RESPONSE_PATCH_MARKER} in {user_target}")
     return target
 
 
