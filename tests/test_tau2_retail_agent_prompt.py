@@ -34,7 +34,7 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "exact payment_method_id string" in patched
     assert "Price difference:" in patched
     assert "Do not include product IDs or other 8+-digit identifiers" in patched
-    assert "Do not repeat the write attempt" in patched
+    assert "do not repeat the write attempt" in patched.lower()
     assert "Try to be helpful and always follow the policy." in patched
     assert 'SYSTEM_PROMPT = "unchanged"' in patched
 
