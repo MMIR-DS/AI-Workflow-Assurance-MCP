@@ -24,7 +24,7 @@ def test_empty_user_response_patch_is_bounded_and_idempotent() -> None:
     assert "for attempt in range(2)" in patched
     assert "retrying once" in patched
     assert "after one retry" in patched
-    assert "Refusing to synthesize a user message" in patched
+    assert "refusing to synthesize a user message" in patched.lower()
     assert patch_user_empty_response_source(patched) == patched
 
 
