@@ -3,11 +3,6 @@ name: tau2 retail + AWA assurance prototype (bounded)
 on:
   workflow_dispatch:
     inputs:
-      model:
-        description: "LiteLLM model identifier for OpenRouter"
-        required: true
-        default: "openrouter/google/gemini-2.5-flash"
-        type: string
       max_steps:
         description: "Maximum agent turns; keeps the trial bounded"
         required: true
@@ -27,8 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      OPENROUTER_API_BASE: https://openrouter.ai/api/v1
-      MODEL: ${{ inputs.model || 'openrouter/google/gemini-2.5-flash' }}
+      # Google AI Studio Gemini 3.8 Flash is available on the Free Tier.
+      # Keep the model fixed here so this manual smoke cannot accidentally select a paid provider/model.
+      MODEL: gemini/gemini-3.8-flash
       MAX_STEPS: ${{ inputs.max_steps || '20' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,11 +64,11 @@ jobs:
         run: PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_test_tau2_prewrite_guard.py
       - name: Check required secret
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         shell: bash
         run: |
-          if [ -z "$OPENROUTER_API_KEY" ]; then
-            echo "::error::Missing repository secret OPENROUTER_API_KEY"
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::Missing repository secret GEMINI_API_KEY"
             exit 1
           fi
       - name: Validate benchmark data
@@ -81,7 +77,7 @@ jobs:
       - name: Run one retail task and one trial (bounded; tau2 only)
         working-directory: tau2-bench
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         shell: bash
         run: bash ../scripts/run_tau2_retail_smoke.sh
       - name: Generate AWA case, evaluation, and release reports

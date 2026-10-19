@@ -15,6 +15,14 @@ def test_manual_tau2_smoke_uses_cost_conservative_defaults() -> None:
     assert "id: patch_tau2_prompt" in workflow
     assert "steps.patch_tau2_prompt.outputs.prompt_mode" in workflow
     assert "steps.patch_tau2_prompt.outputs.prompt_marker" in workflow
+    assert 'MODEL: gemini/gemini-3.8-flash' in workflow
+    assert "secrets.GEMINI_API_KEY" in workflow
+    assert "OPENROUTER_API_KEY" not in workflow
+    assert "OPENROUTER_API_BASE" not in workflow
+
+    runner = (ROOT / "scripts" / "run_tau2_retail_smoke.sh").read_text(encoding="utf-8")
+    assert "GEMINI_API_KEY is required" in runner
+    assert "OPENROUTER_API_KEY" not in runner
 
 
 def test_tau2_smoke_remains_one_trial_and_bounded() -> None:
