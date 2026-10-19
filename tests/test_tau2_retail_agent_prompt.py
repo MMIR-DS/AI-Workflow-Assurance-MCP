@@ -30,6 +30,11 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "get_product_details" in patched
     assert "Never request card numbers" in patched
     assert "single permitted exchange write" in patched
+    assert "exact old item ID and replacement item ID" in patched
+    assert "exact payment_method_id string" in patched
+    assert "Price difference:" in patched
+    assert "Do not include product IDs or other 8+-digit identifiers" in patched
+    assert "Do not repeat the write attempt" in patched
     assert "Try to be helpful and always follow the policy." in patched
     assert 'SYSTEM_PROMPT = "unchanged"' in patched
 
