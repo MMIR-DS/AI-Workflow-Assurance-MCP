@@ -76,6 +76,33 @@ def _set_complete_confirmation(results: dict) -> None:
     )
 
 
+def test_cloudflare_neuron_usage_is_recorded_without_inventing_usd_cost() -> None:
+    results, spec = _load_inputs()
+    results["info"]["agent_info"]["llm"] = "openai/@cf/zai-org/glm-4.7-flash"
+    messages = results["simulations"][0]["messages"]
+    for index, neurons in ((0, 1.25), (1, 2.75)):
+        message = messages[index]
+        raw = message.get("raw_data")
+        if not isinstance(raw, dict):
+            raw = {}
+        usage = raw.get("usage")
+        if not isinstance(usage, dict):
+            usage = {}
+        usage["neurons"] = neurons
+        raw["usage"] = usage
+        message["raw_data"] = raw
+
+    _, metadata, _, _ = evaluate_trace(results, spec)
+
+    usage = metadata["provider_usage"]
+    assert usage["provider"] == "cloudflare_workers_ai"
+    assert usage["metric"] == "neurons"
+    assert usage["observed_response_count"] == 2
+    assert usage["total_neurons_observed"] == "4"
+    assert usage["usd_cost_observed"] is None
+    assert "must not be read as evidence of zero spend" in usage["usd_cost_note"]
+
+
 def test_task0_trace_blocks_when_prewrite_disclosure_is_incomplete() -> None:
     results, spec = _load_inputs()
     case, metadata, report, release = evaluate_trace(results, spec)
