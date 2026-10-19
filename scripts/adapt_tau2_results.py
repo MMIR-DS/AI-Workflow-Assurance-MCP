@@ -47,6 +47,41 @@ def _duration_to_latency_ms(duration: Any) -> int | None:
         return None
 
 
+def _provider_neuron_usage(messages: list[dict[str, Any]], model: Any) -> dict[str, Any]:
+    """Preserve provider-reported Neuron usage without inventing a USD price."""
+    observed: list[Decimal] = []
+    for message in messages:
+        raw = message.get("raw_data")
+        usage = raw.get("usage") if isinstance(raw, dict) else None
+        neurons = usage.get("neurons") if isinstance(usage, dict) else None
+        if isinstance(neurons, bool) or not isinstance(neurons, (int, float, str)):
+            continue
+        try:
+            amount = Decimal(str(neurons))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        if amount.is_finite() and amount >= 0:
+            observed.append(amount)
+
+    total = sum(observed, Decimal("0"))
+    total_text = format(total.normalize(), "f") if observed else None
+    cloudflare_model = isinstance(model, str) and "@cf/" in model
+    return {
+        "provider": "cloudflare_workers_ai" if cloudflare_model else None,
+        "metric": "neurons" if observed else None,
+        "observed_response_count": len(observed),
+        "total_neurons_observed": total_text,
+        "usd_cost_observed": None,
+        "usd_cost_note": (
+            "No USD cost was inferred from Neuron usage. This model is not mapped in "
+            "LiteLLM's price registry; a $0.0000 Tau2 console value must not be read as "
+            "evidence of zero spend. Check the account plan and Cloudflare pricing."
+            if cloudflare_model else
+            "No authoritative USD cost was extracted from the recorded provider usage."
+        ),
+    }
+
+
 def _prompt_provenance() -> dict[str, Any]:
     """Capture whether the benchmark run used the reviewed prompt patch."""
     supplied_mode = os.environ.get("AWA_TAU2_PROMPT_MODE", "").strip().lower() or "unknown"
@@ -571,6 +606,9 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             if unobserved_checks else None
         ),
         "model": ((results.get("info") or {}).get("agent_info") or {}).get("llm"),
+        "provider_usage": _provider_neuron_usage(
+            messages, ((results.get("info") or {}).get("agent_info") or {}).get("llm")
+        ),
         "prompt_provenance": _prompt_provenance(),
         "evidence_sources": {
             "identity": "authentication tool result and user_id from initial order response",
