@@ -3,7 +3,6 @@ name: tau2 retail + AWA assurance prototype (bounded)
 on:
   workflow_dispatch:
     inputs:
-      model:
       max_steps:
         description: "Maximum agent turns; keeps the trial bounded"
         required: true
