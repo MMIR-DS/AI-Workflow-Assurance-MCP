@@ -30,4 +30,9 @@ def test_empty_user_response_patch_is_bounded_and_idempotent() -> None:
 
 def test_empty_user_response_patch_refuses_unreviewed_upstream_source() -> None:
     with pytest.raises(ValueError, match="Expected exactly one unmodified"):
-        patch_user_empty_response_source(UPSTREAM_BLOCK + "\n# upstream changed")
+        patch_user_empty_response_source(
+            UPSTREAM_BLOCK.replace(
+                'call_name="user_simulator_response"',
+                'call_name="renamed_upstream_call"',
+            )
+        )
