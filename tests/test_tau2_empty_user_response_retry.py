@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from scripts.install_tau2_prewrite_guard import (
     USER_EMPTY_RESPONSE_PATCH_MARKER,
     patch_user_empty_response_source,
 )
-
-import pytest
 
 
 UPSTREAM_BLOCK = """        assistant_message = generate(
