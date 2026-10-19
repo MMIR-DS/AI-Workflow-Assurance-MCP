@@ -22,11 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      # Fixed model avoids accidentally routing this smoke to a different provider.
-      MODEL: cloudflare/@cf/zai-org/glm-4.7-flash
+      # Route via Cloudflare's OpenAI-compatible endpoint. LiteLLM's native
+      # Cloudflare adapter currently assumes a legacy result.response payload.
+      MODEL: openai/@cf/zai-org/glm-4.7-flash
       MAX_STEPS: ${{ inputs.max_steps || '20' }}
       CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Reuse the same Cloudflare credentials; no additional secret is needed.
+      OPENAI_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      OPENAI_BASE_URL: https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/ai/v1
+      OPENAI_API_BASE: https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/ai/v1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python 3.12
