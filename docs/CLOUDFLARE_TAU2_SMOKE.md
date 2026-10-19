@@ -39,3 +39,10 @@ The first execution (run 39242156595) reached the model stage but failed inside 
 Cloudflare returned `usage.neurons` in 15 recorded responses in that run, totaling approximately 548.0296 Neurons. LiteLLM did not map the model for USD pricing, so Tau2's displayed `$0.0000` is not evidence of zero spend. The adapter now preserves observed Neuron totals separately and intentionally leaves USD cost unknown unless a reliable cost is available.
 
 A successful workflow is not automatically a GO decision or a production reliability claim. Inspect the uploaded `tau2-awa-retail-assurance-cloudflare` artifact and review the pre-write behavior, tool trace, task completion, and AWA decision. Use only the synthetic public benchmark data; never send real customer or confidential data.
+
+
+## Empty simulated-user responses
+
+The pinned Tau2 user simulator can receive an empty model response with no tool calls. Tau2 then rejects the resulting `UserMessage` before a task trace is evaluable. The smoke workflow installs `AWA_USER_EMPTY_RESPONSE_RETRY_V1`, which retries this specific empty response once. It never invents user text or treats an empty response as a stop/confirmation. If the retry is also empty, the run remains an infrastructure error and the AWA release decision stays closed (`HOLD`).
+
+This is a bounded resilience measure, not evidence that the provider/model is reliable. A run only counts as a task evaluation when Tau2 records a complete trace and the AWA checks are evaluable.
