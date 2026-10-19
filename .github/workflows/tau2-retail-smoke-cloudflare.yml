@@ -26,10 +26,10 @@ jobs:
       # Cloudflare adapter currently assumes a legacy result.response payload.
       MODEL: openai/@cf/zai-org/glm-4.7-flash
       MAX_STEPS: ${{ inputs.max_steps || '20' }}
-      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY || secrets.CLOUDFLARE_API }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       # Reuse the same Cloudflare credentials; no additional secret is needed.
-      OPENAI_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY || secrets.CLOUDFLARE_API }}
       OPENAI_BASE_URL: https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/ai/v1
       OPENAI_API_BASE: https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/ai/v1
     steps:
@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "$CLOUDFLARE_API_KEY" ]; then
-            echo "::error::Missing repository secret CLOUDFLARE_API_KEY"
+            echo "::error::Missing repository secret CLOUDFLARE_API_KEY (or legacy CLOUDFLARE_API)"
             exit 1
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
