@@ -1,0 +1,104 @@
+name: tau2 retail + AWA assurance prototype (Cloudflare Workers AI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_steps:
+        description: "Maximum agent turns; keeps the trial bounded"
+        required: true
+        default: "20"
+        type: choice
+        options: ["20", "40", "60"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tau2-retail-smoke-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Fixed model avoids accidentally routing this smoke to a different provider.
+      MODEL: cloudflare/@cf/zai-org/glm-4.7-flash
+      MAX_STEPS: ${{ inputs.max_steps || '20' }}
+      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Check out public tau2-bench
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: sierra-research/tau2-bench
+          ref: 4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699
+          path: tau2-bench
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          working-directory: tau2-bench
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Install tau2-bench
+        working-directory: tau2-bench
+        run: uv sync --extra dev
+      - name: Install missing runtime dependency used by tau2 data checks
+        working-directory: tau2-bench
+        run: uv pip install --python .venv/bin/python 'websockets==15.0.1'
+      - name: Apply reviewed retail lookup guidance to pinned Tau2 agent
+        id: patch_tau2_prompt
+        working-directory: tau2-bench
+        run: python ../scripts/patch_tau2_retail_agent_prompt.py --tau2-root .
+      - name: Install AWA pre-write guard into pinned Tau2 dispatch path
+        working-directory: tau2-bench
+        run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
+      - name: Verify NO_GO blocks the actual Tau2 dispatch callback (no model calls)
+        working-directory: tau2-bench
+        run: PYTHONPATH="../src${PYTHONPATH:+:$PYTHONPATH}" uv run python ../scripts/smoke_test_tau2_prewrite_guard.py
+      - name: Check required Cloudflare credentials
+        shell: bash
+        run: |
+          if [ -z "$CLOUDFLARE_API_KEY" ]; then
+            echo "::error::Missing repository secret CLOUDFLARE_API_KEY"
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Missing repository secret CLOUDFLARE_ACCOUNT_ID"
+            exit 1
+          fi
+      - name: Validate benchmark data
+        working-directory: tau2-bench
+        run: uv run tau2 check-data
+      - name: Run one retail task and one trial (bounded; Cloudflare Workers AI)
+        working-directory: tau2-bench
+        shell: bash
+        run: bash ../scripts/run_tau2_retail_smoke_cloudflare.sh
+      - name: Generate AWA case, evaluation, and release reports
+        if: success()
+        env:
+          AWA_TAU2_PROMPT_MODE: ${{ steps.patch_tau2_prompt.outputs.prompt_mode }}
+          AWA_TAU2_PROMPT_MARKER: ${{ steps.patch_tau2_prompt.outputs.prompt_marker }}
+        run: |
+          PYTHONPATH=src python scripts/adapt_tau2_results.py \
+            --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
+            --spec examples/tau2_retail_workflow.json \
+            --output-dir awa-adapter-output
+      - name: Preserve trace, result, and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tau2-awa-retail-assurance-cloudflare
+          path: |
+            tau2-bench/data/simulations/**
+            awa-adapter-output/**
+            tau2-benchmark.log
+          if-no-files-found: warn
+          retention-days: 14
