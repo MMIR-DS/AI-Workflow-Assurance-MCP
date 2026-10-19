@@ -57,6 +57,7 @@ jobs:
         working-directory: tau2-bench
         run: uv pip install --python .venv/bin/python 'websockets==15.0.1'
       - name: Apply reviewed retail lookup guidance to pinned Tau2 agent
+        id: patch_tau2_prompt
         working-directory: tau2-bench
         run: python ../scripts/patch_tau2_retail_agent_prompt.py --tau2-root .
       - name: Install AWA pre-write guard into pinned Tau2 dispatch path
@@ -85,6 +86,9 @@ jobs:
         run: bash ../scripts/run_tau2_retail_smoke.sh
       - name: Generate AWA case, evaluation, and release reports
         if: success()
+        env:
+          AWA_TAU2_PROMPT_MODE: ${{ steps.patch_tau2_prompt.outputs.prompt_mode }}
+          AWA_TAU2_PROMPT_MARKER: ${{ steps.patch_tau2_prompt.outputs.prompt_marker }}
         run: |
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
             --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \

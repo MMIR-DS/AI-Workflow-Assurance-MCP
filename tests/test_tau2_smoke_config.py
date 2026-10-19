@@ -12,6 +12,9 @@ def test_manual_tau2_smoke_uses_cost_conservative_defaults() -> None:
     assert 'default: "20"' in workflow
     assert "MAX_STEPS: ${{ inputs.max_steps || '20' }}" in workflow
     assert 'options: ["20", "40", "60"]' in workflow
+    assert "id: patch_tau2_prompt" in workflow
+    assert "steps.patch_tau2_prompt.outputs.prompt_mode" in workflow
+    assert "steps.patch_tau2_prompt.outputs.prompt_marker" in workflow
 
 
 def test_tau2_smoke_remains_one_trial_and_bounded() -> None:

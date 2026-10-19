@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 from collections import Counter
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
@@ -23,6 +25,54 @@ EXPECTED_ORDER_KEYS = {
     "return_payment_method_id",
 }
 ORDER_KEYS = EXPECTED_ORDER_KEYS
+
+PROMPT_PATCH_MARKER = "AWA_RETAIL_LOOKUP_GUIDANCE_V1"
+PROMPT_MODE_VALUES = {"patched", "unpatched", "unknown"}
+
+
+def _duration_to_latency_ms(duration: Any) -> int | None:
+    """Return rounded milliseconds only for finite, positive, representable durations."""
+    if not isinstance(duration, (int, float)) or isinstance(duration, bool):
+        return None
+    try:
+        seconds = float(duration)
+        if not math.isfinite(seconds) or seconds <= 0:
+            return None
+        milliseconds = seconds * 1000.0
+        if not math.isfinite(milliseconds):
+            return None
+        return round(milliseconds)
+    except (OverflowError, TypeError, ValueError):
+        # Very large Python integers can overflow while converting to float.
+        return None
+
+
+def _prompt_provenance() -> dict[str, Any]:
+    """Capture whether the benchmark run used the reviewed prompt patch."""
+    supplied_mode = os.environ.get("AWA_TAU2_PROMPT_MODE", "").strip().lower() or "unknown"
+    raw_marker = os.environ.get("AWA_TAU2_PROMPT_MARKER", "").strip()
+    mode_is_valid = supplied_mode in PROMPT_MODE_VALUES
+    mode = supplied_mode if mode_is_valid else "unknown"
+    marker = raw_marker or None
+
+    if not mode_is_valid:
+        status = "invalid_mode"
+    elif mode == "patched" and marker == PROMPT_PATCH_MARKER:
+        status = "verified_patched"
+    elif mode == "unpatched" and marker is None:
+        status = "declared_unpatched"
+    elif mode == "unknown" and marker is None:
+        status = "not_recorded"
+    else:
+        status = "inconsistent"
+
+    return {
+        "mode": mode,
+        "marker": marker,
+        "expected_marker": PROMPT_PATCH_MARKER,
+        "status": status,
+    }
+
 MUTABLE_FIELDS = {
     "status", "exchange_items", "exchange_new_items",
     "exchange_payment_method_id", "exchange_price_difference",
@@ -448,13 +498,19 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     }
     reward_info = sim.get("reward_info") or {}
     action_checks = reward_info.get("action_checks") or []
-    costs = []
+    costs: list[Decimal] = []
     for message in messages:
         raw = message.get("raw_data")
         usage = raw.get("usage") if isinstance(raw, dict) else None
         cost = usage.get("cost") if isinstance(usage, dict) else None
-        if isinstance(cost, (int, float)) and not isinstance(cost, bool) and cost >= 0:
-            costs.append(float(cost))
+        if not isinstance(cost, (int, float)) or isinstance(cost, bool):
+            continue
+        try:
+            cost_decimal = Decimal(str(cost))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        if cost_decimal.is_finite() and cost_decimal >= 0:
+            costs.append(cost_decimal)
     unobserved_criterion_ids = [
         "final_order_status_matches_contract" if key == "final_order_status" else key
         for key in unobserved_checks
@@ -466,18 +522,23 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "unobserved_checks": unobserved_criterion_ids,
     }
     if costs:
-        case["cost_usd"] = sum(costs)
+        # Sum decimal representations exactly, then convert once to the float
+        # expected by the evaluation schema (so 0.1 + 0.2 becomes float(Decimal("0.3"))).
+        total_cost = sum(costs, Decimal("0"))
+        try:
+            total_cost_float = float(total_cost)
+        except OverflowError:
+            total_cost_float = math.inf
+        if total_cost.is_finite() and math.isfinite(total_cost_float):
+            case["cost_usd"] = total_cost_float
     duration = sim.get("duration")
     # Tau2 can emit duration=0 for a request that failed before any task
     # interaction (for example, an upstream model-provider infrastructure error).
     # Do not report that as a zero-latency task observation.
-    if (
-        str(sim.get("termination_reason") or "").lower() != "infrastructure_error"
-        and isinstance(duration, (int, float))
-        and not isinstance(duration, bool)
-        and duration > 0
-    ):
-        case["latency_ms"] = round(duration * 1000)
+    if str(sim.get("termination_reason") or "").lower() != "infrastructure_error":
+        latency_ms = _duration_to_latency_ms(duration)
+        if latency_ms is not None:
+            case["latency_ms"] = latency_ms
     metadata = {
         "task_id": str(sim.get("task_id")), "trial": sim.get("trial"),
         "termination_reason": sim.get("termination_reason"),
@@ -510,6 +571,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             if unobserved_checks else None
         ),
         "model": ((results.get("info") or {}).get("agent_info") or {}).get("llm"),
+        "prompt_provenance": _prompt_provenance(),
         "evidence_sources": {
             "identity": "authentication tool result and user_id from initial order response",
             "initial_state": "pre-mutation get_order_details response",
