@@ -80,6 +80,11 @@ def test_cloudflare_neuron_usage_is_recorded_without_inventing_usd_cost() -> Non
     results, spec = _load_inputs()
     results["info"]["agent_info"]["llm"] = "openai/@cf/zai-org/glm-4.7-flash"
     messages = results["simulations"][0]["messages"]
+    for message in messages:
+        raw = message.get("raw_data")
+        usage = raw.get("usage") if isinstance(raw, dict) else None
+        if isinstance(usage, dict):
+            usage.pop("neurons", None)
     for index, neurons in ((0, 1.25), (1, 2.75)):
         message = messages[index]
         raw = message.get("raw_data")
