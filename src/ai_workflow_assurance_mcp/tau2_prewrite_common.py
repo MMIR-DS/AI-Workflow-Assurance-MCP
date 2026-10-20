@@ -331,11 +331,21 @@ def _assistant_variant_claims_match_catalog(
             if not isinstance(content, str) or item_id not in content:
                 continue
 
-            normalized_content = _normalize_disclosure_text(content)
+            # Preserve line boundaries before whitespace normalization. Flattening
+            # the whole message first can attach a following bullet/note (for example,
+            # "the RGB version is unavailable") to a selected item ID and falsely treat
+            # that note as a claim about the selected variant.
+            raw_lines = content.splitlines() or [content]
+            sentences = [
+                sentence
+                for line in raw_lines
+                for sentence in re.split(
+                    r"(?<=[.!?])\s+", _normalize_disclosure_text(line)
+                )
+            ]
             # Work sentence-by-sentence, and focus on the text after the chosen ID.
             # This avoids attributing the old item's options to the new item in a
             # disclosure such as "old RGB item A for white-backlight item B".
-            sentences = re.split(r"(?<=[.!?])\s+|\n+", normalized_content)
             for sentence in sentences:
                 id_position = sentence.find(item_id)
                 if id_position < 0:
