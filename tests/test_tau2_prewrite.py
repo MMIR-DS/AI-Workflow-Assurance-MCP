@@ -203,6 +203,25 @@ def test_tau2_adapter_allows_only_after_complete_disclosure_and_affirmative_repl
     assert result["checked"]["assistant_variant_claims_match_catalog"] is True
 
 
+def test_tau2_adapter_ignores_following_bullet_note_when_checking_variant_claims() -> None:
+    trajectory, call = _fully_disclosed_exchange_trajectory_and_call()
+    # A common retail response lists the selected variant, then explains on the
+    # next bullet that a different variant is unavailable. That note must not be
+    # attributed to the selected item merely because whitespace was normalized.
+    trajectory[14]["content"] = (
+        "Available options:\\n"
+        "- Clicky switches, no backlight, full size (item #7706410293) - $269.16\\n"
+        "  - Note: The RGB clicky full size version is not available, so this is the closest match.\\n"
+        "- Google Assistant (Google Home), black (item #7747408585) - $249.01"
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["checked"]["assistant_variant_claims_match_catalog"] is True
+
+
 def test_tau2_adapter_blocks_catalog_option_claim_that_misstates_selected_variant() -> None:
     trajectory, call = _trajectory_and_call()
     call["arguments"]["new_item_ids"] = ["6342039236", "7747408585"]
