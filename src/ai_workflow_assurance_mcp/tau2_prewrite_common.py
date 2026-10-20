@@ -331,16 +331,19 @@ def _assistant_variant_claims_match_catalog(
             if not isinstance(content, str) or item_id not in content:
                 continue
 
-            # Preserve line boundaries before whitespace normalization. Flattening
-            # the whole message first can attach a following bullet/note (for example,
-            # "the RGB version is unavailable") to a selected item ID and falsely treat
-            # that note as a claim about the selected variant.
-            raw_lines = content.splitlines() or [content]
+            # Split at explicit block/list boundaries before whitespace
+            # normalization. Flattening the whole message first can attach a following
+            # bullet/note (for example, "the RGB version is unavailable") to a selected
+            # item ID. Keep ordinary wrapped lines together so they remain one claim.
+            blocks = re.split(
+                r"\n\s*\n|\n(?=\s*(?:[-*+]\s+|\d+[.)]\s+))",
+                content,
+            )
             sentences = [
                 sentence
-                for line in raw_lines
+                for block in blocks
                 for sentence in re.split(
-                    r"(?<=[.!?])\s+", _normalize_disclosure_text(line)
+                    r"(?<=[.!?])\s+", _normalize_disclosure_text(block)
                 )
             ]
             # Work sentence-by-sentence, and focus on the text after the chosen ID.
