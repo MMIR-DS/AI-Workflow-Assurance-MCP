@@ -181,9 +181,14 @@ def test_tau2_adapter_allows_only_after_complete_disclosure_and_affirmative_repl
         "Item ID 7747408585 is a black Google Assistant-compatible thermostat."
     )
     trajectory[16]["content"] = (
-        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-        "and old item 4983901480 for 7747408585. The total price difference is "
-        "a $16.63 refund to credit_card_9513926. Please confirm."
+        "To confirm order #W2378156 and exchange these exact items: "
+        "1. Old Item: 1151293680 (Mechanical Keyboard; linear switches, RGB backlight, "
+        "full size; $272.33). New Item: 7706410293 (Mechanical Keyboard; clicky switches, "
+        "no backlight, full size; $269.16). "
+        "2. Old Item: 4983901480 (Smart Thermostat; Apple HomeKit compatibility, black; "
+        "$262.47). New Item: 7747408585 (Smart Thermostat; Google Assistant compatibility, "
+        "black; $249.01). Price difference: $16.63 refund to credit_card_9513926. "
+        "Please confirm both old-to-new item pairs for this exchange."
     )
     trajectory[17]["content"] = (
         "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
