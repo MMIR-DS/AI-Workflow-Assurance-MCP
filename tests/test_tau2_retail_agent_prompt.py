@@ -34,6 +34,9 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "exact payment_method_id string" in patched
     assert "Price difference:" in patched
     assert "Use this exact disclosure structure" in patched
+    assert "CRITICAL EXCHANGE GATE" in patched
+    assert "BEFORE calling exchange_delivered_order_items" in patched
+    assert "contains all four exact item IDs in the required order" in patched
     assert "Old Item: <OLD_ITEM_1>" in patched
     assert "Please confirm both old-to-new item pairs" in patched
     assert "Do not include product IDs or other 8+-digit identifiers" in patched
