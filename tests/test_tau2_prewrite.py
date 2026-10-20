@@ -209,9 +209,9 @@ def test_tau2_adapter_ignores_following_bullet_note_when_checking_variant_claims
     # next bullet that a different variant is unavailable. That note must not be
     # attributed to the selected item merely because whitespace was normalized.
     trajectory[14]["content"] = (
-        "Available options:\\n"
-        "- Clicky switches, no backlight, full size (item #7706410293) - $269.16\\n"
-        "  - Note: The RGB clicky full size version is not available, so this is the closest match.\\n"
+        "Available options:\n"
+        "- Clicky switches, no backlight, full size (item #7706410293) - $269.16\n"
+        "  - Note: The RGB clicky full size version is not available, so this is the closest match.\n"
         "- Google Assistant (Google Home), black (item #7747408585) - $249.01"
     )
 
