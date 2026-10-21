@@ -27,6 +27,7 @@ EXPECTED_ORDER_KEYS = {
 ORDER_KEYS = EXPECTED_ORDER_KEYS
 
 PROMPT_PATCH_MARKER = "AWA_RETAIL_LOOKUP_GUIDANCE_V1"
+USER_SIM_PROMPT_PATCH_MARKER = "AWA_RETAIL_USER_COMPLETION_GATE_V1"
 PROMPT_MODE_VALUES = {"patched", "unpatched", "unknown"}
 
 
@@ -107,6 +108,36 @@ def _prompt_provenance() -> dict[str, Any]:
         "expected_marker": PROMPT_PATCH_MARKER,
         "status": status,
     }
+
+
+def _user_simulator_prompt_provenance() -> dict[str, Any]:
+    """Capture whether the benchmark used the reviewed customer completion gate."""
+    supplied_mode = os.environ.get(
+        "AWA_TAU2_USER_PROMPT_MODE", ""
+    ).strip().lower() or "unknown"
+    raw_marker = os.environ.get("AWA_TAU2_USER_PROMPT_MARKER", "").strip()
+    mode_is_valid = supplied_mode in PROMPT_MODE_VALUES
+    mode = supplied_mode if mode_is_valid else "unknown"
+    marker = raw_marker or None
+
+    if not mode_is_valid:
+        status = "invalid_mode"
+    elif mode == "patched" and marker == USER_SIM_PROMPT_PATCH_MARKER:
+        status = "verified_patched"
+    elif mode == "unpatched" and marker is None:
+        status = "declared_unpatched"
+    elif mode == "unknown" and marker is None:
+        status = "not_recorded"
+    else:
+        status = "inconsistent"
+
+    return {
+        "mode": mode,
+        "marker": marker,
+        "expected_marker": USER_SIM_PROMPT_PATCH_MARKER,
+        "status": status,
+    }
+
 
 MUTABLE_FIELDS = {
     "status", "exchange_items", "exchange_new_items",
@@ -610,6 +641,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             messages, ((results.get("info") or {}).get("agent_info") or {}).get("llm")
         ),
         "prompt_provenance": _prompt_provenance(),
+        "user_simulator_prompt_provenance": _user_simulator_prompt_provenance(),
         "evidence_sources": {
             "identity": "authentication tool result and user_id from initial order response",
             "initial_state": "pre-mutation get_order_details response",
