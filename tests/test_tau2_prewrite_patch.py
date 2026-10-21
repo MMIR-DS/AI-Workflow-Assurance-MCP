@@ -41,6 +41,9 @@ def test_patcher_replaces_exactly_one_expected_dispatch_loop() -> None:
     assert "second write for the same order" in patched
     assert "Do not make any further write attempt" in patched
     assert "The operation remains blocked" in patched
+    assert 'getattr(self, "_awa_prewrite_no_go_latched", False)' in patched
+    assert "self._awa_prewrite_no_go_latched = True" in patched
+    assert "prior write was blocked earlier in this benchmark run" in patched
     assert "cancel_pending_order" in patched
     assert patched != source
 
