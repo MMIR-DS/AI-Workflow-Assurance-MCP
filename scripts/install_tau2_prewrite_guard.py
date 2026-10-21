@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
-PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V6"
+PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V7"
 REPLAY_PATCH_MARKER = "AWA_PREWRITE_REPLAY_NOOP_V1"
 USER_EMPTY_RESPONSE_PATCH_MARKER = "AWA_USER_EMPTY_RESPONSE_RETRY_V1"
 
@@ -98,6 +98,10 @@ REPLACEMENT = """        tool_results = []
         )
 
         def awa_blocked_result(tool_call, message):
+            # Persist NO_GO for this benchmark episode. Prompt instructions alone
+            # are not a reliable control against a second write attempt.
+            if message.startswith("AWA_PREWRITE_NO_GO:"):
+                self._awa_prewrite_no_go_latched = True
             return ToolMessage(
                 id=tool_call.id,
                 role="tool",
@@ -228,8 +232,21 @@ REPLACEMENT = """        tool_results = []
         awa_passthrough_tools = set(awa_shared_passthrough_tools)
 
         for tool_call in tool_calls:
-            # AWA_PREWRITE_GUARD_PATCH_V6: new/renamed tools are denied by default.
-            if tool_call.name in awa_write_tools:
+            # Enforce the run-level fail-closed latch in code, not only in the prompt.
+            # A prior AWA_PREWRITE_NO_GO blocks later writes even in a separate dispatch batch.
+            if (
+                tool_call.name in awa_write_tools
+                and getattr(self, "_awa_prewrite_no_go_latched", False)
+            ):
+                tool_result = awa_blocked_result(
+                    tool_call,
+                    "AWA_PREWRITE_NO_GO: a prior write was blocked earlier in this benchmark run. "
+                    "No further write attempt is permitted during this run. The operation remains "
+                    "blocked; do not describe it as completed. Tell the customer the change was "
+                    "not made and hand off or escalate.",
+                )
+            # AWA_PREWRITE_GUARD_PATCH_V7: new/renamed tools are denied by default.
+            elif tool_call.name in awa_write_tools:
                 policy = awa_write_policies.get(tool_call.name)
                 if policy is None:
                     tool_result = awa_blocked_result(
