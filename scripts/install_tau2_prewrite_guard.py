@@ -148,13 +148,12 @@ REPLACEMENT = """        tool_results = []
                 "entity_kind": "order",
                 "blocked_message": (
                     "AWA_PREWRITE_NO_GO: exchange blocked before execution. "
-                    "Blocking checks: {blocking}. Do not repeat the write attempt. "
-                    "Check every named replacement item against the latest catalog response; "
-                    "if any option was described incorrectly, correct it and select a variant "
-                    "whose actual options match the customer's request. The disclosure must "
-                    "include the exact order ID, every old-to-new item pair, payment method ID, "
-                    "and a labeled price difference with refund/charge direction. Ask for fresh "
-                    "confirmation only after correcting all issues."
+                    "Blocking checks: {blocking}. Do not make any further write attempt "
+                    "during this benchmark run, even after refreshing evidence or receiving "
+                    "new confirmation. The operation remains blocked; do not describe it as "
+                    "completed. Tell the customer the change was not made and hand off or "
+                    "escalate rather than retrying. A later independent run may be considered "
+                    "only after the root cause has been fixed."
                 ),
             },
             "modify_pending_order_address": {

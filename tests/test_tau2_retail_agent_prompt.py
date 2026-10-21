@@ -37,10 +37,15 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "CRITICAL EXCHANGE GATE" in patched
     assert "BEFORE calling exchange_delivered_order_items" in patched
     assert "contains all four exact item IDs in the required order" in patched
+    assert "is NOT valid confirmation for the write" in patched
+    assert "wait for a new user message before any write call" in patched
+    assert "There are no exceptions to this ordering" in patched
+    assert "do not make any further write attempt during this benchmark run" in patched
+    assert "tell the customer the change was not completed" in patched
     assert "Old Item: <OLD_ITEM_1>" in patched
     assert "Please confirm both old-to-new item pairs" in patched
     assert "Do not include product IDs or other 8+-digit identifiers" in patched
-    assert "do not repeat the write attempt" in patched.lower()
+    assert "do not make any further write attempt during this benchmark run" in patched.lower()
     assert "Try to be helpful and always follow the policy." in patched
     assert 'SYSTEM_PROMPT = "unchanged"' in patched
 
