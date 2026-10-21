@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from scripts.adapt_tau2_results import _user_simulator_prompt_provenance
 from scripts.patch_tau2_retail_user_simulator import (
     BASELINE_ANCHOR,
     COMPLETION_GATE,
@@ -36,7 +37,22 @@ def test_patch_adds_completion_gate_and_preserves_general_guidance() -> None:
     assert "Do not output the `###STOP###` token in the same message" in patched
     assert "An offer, plan, item" in patched
     assert "Never encourage the agent to bypass a guard" in patched
+    assert patched.endswith(COMPLETION_GATE.strip() + "\n")
     assert patched.startswith(BASELINE.rstrip())
+
+
+def test_adapter_records_verified_customer_prompt_provenance(monkeypatch) -> None:
+    monkeypatch.setenv("AWA_TAU2_USER_PROMPT_MODE", "patched")
+    monkeypatch.setenv("AWA_TAU2_USER_PROMPT_MARKER", PROMPT_MARKER)
+
+    provenance = _user_simulator_prompt_provenance()
+
+    assert provenance == {
+        "mode": "patched",
+        "marker": PROMPT_MARKER,
+        "expected_marker": PROMPT_MARKER,
+        "status": "verified_patched",
+    }
 
 
 def test_patch_is_idempotent() -> None:
