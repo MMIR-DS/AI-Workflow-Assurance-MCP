@@ -706,7 +706,7 @@ def main() -> None:
     assert "AWA_PREWRITE_NO_GO" not in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    # A blocked multi-item update reserves the order within this batch.
+    # A blocked multi-item update latches NO_GO for all later writes in this run.
     trajectory, pending_items_call = _setup_pending_items()
     _, exchange_call = _setup()
     results, environment, orchestrator = _dispatch_many(
