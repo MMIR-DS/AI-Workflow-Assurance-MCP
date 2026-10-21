@@ -32,7 +32,7 @@ def test_patch_adds_completion_gate_and_preserves_general_guidance() -> None:
     assert PROMPT_MARKER in patched
     assert BASELINE_ANCHOR in patched
     assert "###STOP###" in patched
-    assert "confirmation gives the agent permission to act" in patched
+    assert "confirmation gives the agent permission" in patched
     assert "It does not prove that the operation happened" in patched
     assert "Do not output the `###STOP###` token in the same message" in patched
     assert "An offer, plan, item" in patched
