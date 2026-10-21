@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
@@ -17,10 +19,195 @@ from ai_workflow_assurance_mcp.tau2_prewrite_common import (
     _is_affirmative,
     _latest_blocked_write_result_index,
     _messages,
+    _normalize_disclosure_text,
     _order_snapshot_is_fresh,
+    _price_difference_disclosed,
     _tool_calls,
     _variant_details,
 )
+
+
+def _phrase_present(text: str, phrase: str) -> bool:
+    """Match a complete, normalized phrase in customer-facing disclosure text."""
+    normalized_text = _normalize_disclosure_text(text).casefold().replace("-", " ")
+    normalized_phrase = _normalize_disclosure_text(phrase).casefold().replace("-", " ")
+    if not normalized_phrase:
+        return False
+    pattern = (
+        r"(?<![a-z0-9])"
+        + re.escape(normalized_phrase).replace(r"\ ", r"\s+")
+        + r"(?![a-z0-9])"
+    )
+    return bool(re.search(pattern, normalized_text))
+
+
+_OPTION_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
+    "switch type": {
+        "linear": ("linear",),
+        "tactile": ("tactile",),
+        "clicky": ("clicky",),
+    },
+    "backlight": {
+        "rgb": ("rgb",),
+        "white": ("white backlight", "white"),
+        "none": ("no backlight", "without backlight", "backlight none", "none"),
+    },
+    "size": {
+        "full size": ("full size", "full-size"),
+        "80%": ("80%",),
+        "60%": ("60%",),
+    },
+    "compatibility": {
+        "google assistant": ("google assistant", "google home"),
+        "apple homekit": ("apple homekit", "homekit"),
+        "amazon alexa": ("amazon alexa", "alexa"),
+    },
+    "color": {
+        "black": ("black",),
+        "white": ("white",),
+        "blue": ("blue",),
+        "gold": ("gold",),
+        "stainless steel": ("stainless steel",),
+    },
+}
+
+
+def _semantic_options_match(segment: str, options: Any) -> bool:
+    """Require all catalog options and reject conflicting values for known options."""
+    if not isinstance(options, dict) or not options:
+        return False
+    for raw_key, raw_value in options.items():
+        if not isinstance(raw_key, str) or not isinstance(raw_value, str) or not raw_value:
+            return False
+        key = raw_key.casefold()
+        value = raw_value.casefold()
+        known_values = _OPTION_PHRASES.get(key)
+        selected_aliases = (
+            known_values.get(value, (raw_value,))
+            if known_values is not None
+            else (raw_value,)
+        )
+        if not any(_phrase_present(segment, alias) for alias in selected_aliases):
+            return False
+        if known_values is not None:
+            # A disclosure cannot describe a different value for the same option.
+            for other_value, aliases in known_values.items():
+                if other_value == value:
+                    continue
+                if any(_phrase_present(segment, alias) for alias in aliases):
+                    return False
+    return True
+
+
+def _segment_has_exact_price(segment: str, expected_price: Any) -> bool:
+    """Require exactly one disclosed amount and match it to the observed catalog value."""
+    if expected_price is None:
+        return False
+    amounts = re.findall(
+        r"\$\s*((?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})(?!\d)",
+        segment,
+    )
+    if len(amounts) != 1:
+        return False
+    try:
+        observed = Decimal(amounts[0].replace(",", "")).quantize(Decimal("0.01"))
+        expected = Decimal(str(expected_price)).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return False
+    return observed == expected
+
+
+def _semantic_exchange_disclosure_matches(
+    disclosure_text: str,
+    order_id: Any,
+    old_items: Any,
+    new_items: Any,
+    payment_id: Any,
+    price_difference: float | None,
+    order_items: Any,
+    variants: dict[str, dict[str, Any]],
+) -> bool:
+    """Verify natural-language old/new descriptions against the order and catalog.
+
+    Internal item IDs are not required in text shown to the customer. In their place,
+    every old/new pair must be explicitly labeled and match the observed product name,
+    every option, and exact price. The order ID, payment-method ID, and labeled price
+    difference/direction remain mandatory. Any long numeric ID in this fallback forces
+    the strict identifier-pairing path, so malformed or reordered IDs cannot be ignored.
+    """
+    if (
+        not isinstance(disclosure_text, str)
+        or not disclosure_text.strip()
+        or not isinstance(order_id, str)
+        or not isinstance(payment_id, str)
+        or not isinstance(old_items, list)
+        or not isinstance(new_items, list)
+        or not old_items
+        or len(old_items) != len(new_items)
+        or not isinstance(order_items, list)
+    ):
+        return False
+    if not _contains_all(disclosure_text, [order_id, payment_id]):
+        return False
+    if not any(term in disclosure_text.casefold() for term in ("exchange", "replace", "swap")):
+        return False
+    if not _price_difference_disclosed(disclosure_text, price_difference):
+        return False
+
+    # This fallback applies only to human-readable descriptions. If long numeric
+    # item IDs appear, require the existing strict ordered-ID check instead.
+    if re.search(r"(?<![a-z0-9_])\d{8,}(?![a-z0-9_])", disclosure_text.casefold()):
+        return False
+
+    markers = list(
+        re.finditer(r"\b(old item|new item|price difference)\s*:", disclosure_text, re.IGNORECASE)
+    )
+    expected_labels = [
+        label
+        for _ in old_items
+        for label in ("old item", "new item")
+    ] + ["price difference"]
+    if [marker.group(1).casefold() for marker in markers] != expected_labels:
+        return False
+
+    for pair_index, (old_item_id, new_item_id) in enumerate(
+        zip(old_items, new_items, strict=True)
+    ):
+        if not isinstance(old_item_id, str) or not isinstance(new_item_id, str):
+            return False
+        old_item = next(
+            (
+                item for item in order_items
+                if isinstance(item, dict) and item.get("item_id") == old_item_id
+            ),
+            None,
+        )
+        variant = variants.get(new_item_id)
+        if not isinstance(old_item, dict) or not isinstance(variant, dict):
+            return False
+        if variant.get("available") is not True:
+            return False
+        if old_item.get("product_id") != variant.get("product_id"):
+            return False
+
+        old_segment = disclosure_text[markers[pair_index * 2].end():markers[pair_index * 2 + 1].start()]
+        next_marker_index = pair_index * 2 + 2
+        new_segment = disclosure_text[markers[pair_index * 2 + 1].end():markers[next_marker_index].start()]
+        product_name = old_item.get("name")
+        if not isinstance(product_name, str) or not product_name.strip():
+            return False
+        if not _phrase_present(old_segment, product_name) or not _phrase_present(new_segment, product_name):
+            return False
+        if not _semantic_options_match(old_segment, old_item.get("options")):
+            return False
+        if not _semantic_options_match(new_segment, variant.get("options")):
+            return False
+        if not _segment_has_exact_price(old_segment, old_item.get("price")):
+            return False
+        if not _segment_has_exact_price(new_segment, variant.get("price")):
+            return False
+
+    return True
 
 
 def evaluate_tau2_prewrite(
@@ -165,11 +352,30 @@ def evaluate_tau2_prewrite(
         last_assistant_text, last_user_text, order_id, old_items, new_items,
         payment_id, price_difference,
     )
+    # Prefer strict item-ID disclosure when the agent provides it. If it uses
+    # customer-friendly descriptions instead, verify each ordered pair against
+    # the trusted order snapshot and catalog response; do not weaken the boundary
+    # by accepting descriptions that omit or misstate an option or price.
+    semantic_disclosure_valid = _semantic_exchange_disclosure_matches(
+        last_assistant_text,
+        order_id,
+        old_items,
+        new_items,
+        payment_id,
+        price_difference,
+        order_items,
+        variants,
+    )
     price_difference_disclosed = confirmation_context["price_difference_disclosed"]
-    pairing_disclosed = confirmation_context["pairing_disclosed"]
-    disclosure_valid = confirmation_context["disclosure_valid"]
+    pairing_disclosed = confirmation_context["pairing_disclosed"] or semantic_disclosure_valid
+    disclosure_valid = confirmation_context["disclosure_valid"] or semantic_disclosure_valid
     confirmation_valid = (
-        confirmation_context["confirmation_valid"]
+        disclosure_valid
+        and price_difference_disclosed
+        and _is_affirmative(last_user_text)
+        and _confirmation_references_consistent(
+            last_user_text, order_id, old_items, new_items, payment_id
+        )
         and last_user_index > last_assistant_text_index
         and reconfirmed_after_block
         and last_user_index < current_message_index
@@ -187,11 +393,17 @@ def evaluate_tau2_prewrite(
     )
     assistant_disclosed_old_items = (
         isinstance(old_items, list) and bool(old_items)
-        and _contains_all(last_assistant_text, old_items)
+        and (
+            _contains_all(last_assistant_text, old_items)
+            or semantic_disclosure_valid
+        )
     )
     assistant_disclosed_new_items = (
         isinstance(new_items, list) and bool(new_items)
-        and _contains_all(last_assistant_text, new_items)
+        and (
+            _contains_all(last_assistant_text, new_items)
+            or semantic_disclosure_valid
+        )
     )
     assistant_disclosed_payment = (
         isinstance(payment_id, str) and bool(payment_id)
