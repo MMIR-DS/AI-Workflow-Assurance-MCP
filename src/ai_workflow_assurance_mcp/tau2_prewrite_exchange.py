@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from decimal import Decimal, InvalidOperation
-import re
 from typing import Any
 
 from ai_workflow_assurance_mcp.prewrite_guard import evaluate_prewrite
