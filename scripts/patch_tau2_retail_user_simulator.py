@@ -31,6 +31,13 @@ to act. It does not prove that the operation happened.
 - After confirmation, continue the conversation until the agent has attempted
   the requested operation and communicated its result. An offer, plan, item
   disclosure, or customer confirmation alone does not complete the task.
+- When the agent presents a clear, complete confirmation request for the requested
+  change, and the proposed items and terms match the scenario's preferences, reply
+  with an unambiguous affirmative confirmation in your next message, such as
+  "Yes, I confirm both exchanges as described." Do not replace confirmation with
+  a statement that you will proceed, that the system is updating the order, or that
+  the operation has already happened. Do not confirm if the proposed change conflicts
+  with the scenario or important terms remain unclear; ask a concise question instead.
 - If the agent reports that the operation succeeded, the customer may end the
   conversation after that result is communicated.
 - If the agent reports that the operation was blocked or failed, do not claim
