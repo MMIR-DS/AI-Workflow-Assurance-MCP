@@ -26,6 +26,10 @@ def test_cloudflare_tau2_smoke_is_manual_and_uses_openai_compatible_route() -> N
     assert "GEMINI_API_KEY" not in workflow
     assert 'options: ["20", "40", "60"]' in workflow
     assert "id: patch_tau2_prompt" in workflow
+    assert "id: patch_tau2_user_completion" in workflow
+    assert "patch_tau2_retail_user_simulator.py" in workflow
+    assert "steps.patch_tau2_user_completion.outputs.prompt_mode" in workflow
+    assert "steps.patch_tau2_user_completion.outputs.prompt_marker" in workflow
     assert "install_tau2_prewrite_guard.py" in workflow
     assert "max-concurrency" not in workflow  # concurrency is enforced by the runner
 

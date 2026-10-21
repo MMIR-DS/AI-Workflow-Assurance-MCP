@@ -62,6 +62,10 @@ jobs:
         id: patch_tau2_prompt
         working-directory: tau2-bench
         run: python ../scripts/patch_tau2_retail_agent_prompt.py --tau2-root .
+      - name: Keep simulated customer active until a requested change has an outcome
+        id: patch_tau2_user_completion
+        working-directory: tau2-bench
+        run: python ../scripts/patch_tau2_retail_user_simulator.py --tau2-root .
       - name: Install AWA pre-write guard into pinned Tau2 dispatch path
         working-directory: tau2-bench
         run: python ../scripts/install_tau2_prewrite_guard.py --tau2-root .
@@ -91,6 +95,8 @@ jobs:
         env:
           AWA_TAU2_PROMPT_MODE: ${{ steps.patch_tau2_prompt.outputs.prompt_mode }}
           AWA_TAU2_PROMPT_MARKER: ${{ steps.patch_tau2_prompt.outputs.prompt_marker }}
+          AWA_TAU2_USER_PROMPT_MODE: ${{ steps.patch_tau2_user_completion.outputs.prompt_mode }}
+          AWA_TAU2_USER_PROMPT_MARKER: ${{ steps.patch_tau2_user_completion.outputs.prompt_marker }}
         run: |
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
             --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
