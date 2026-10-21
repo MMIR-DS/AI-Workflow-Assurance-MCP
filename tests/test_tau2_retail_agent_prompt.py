@@ -45,7 +45,7 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "Old Item: <OLD_ITEM_1>" in patched
     assert "Please confirm both old-to-new item pairs" in patched
     assert "Do not include product IDs or other 8+-digit identifiers" in patched
-    assert "do not repeat the write attempt" in patched.lower()
+    assert "do not make any further write attempt during this benchmark run" in patched.lower()
     assert "Try to be helpful and always follow the policy." in patched
     assert 'SYSTEM_PROMPT = "unchanged"' in patched
 
