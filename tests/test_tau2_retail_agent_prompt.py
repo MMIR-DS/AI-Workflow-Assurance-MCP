@@ -42,7 +42,7 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "There are no exceptions to this ordering" in patched
     assert "do not make any further write attempt during this benchmark run" in patched
     assert "tell the customer the change was not completed" in patched
-    assert "Old Item: <OLD_ITEM_1>" in patched
+    assert "Old Item ID: <OLD_ITEM_1>" in patched
     assert "Please confirm both old-to-new item pairs" in patched
     assert "Do not include product IDs or other 8+-digit identifiers" in patched
     assert "do not make any further write attempt during this benchmark run" in patched.lower()
