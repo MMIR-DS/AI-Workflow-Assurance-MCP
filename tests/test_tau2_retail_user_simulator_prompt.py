@@ -36,6 +36,10 @@ def test_patch_adds_completion_gate_and_preserves_general_guidance() -> None:
     assert "It does not prove that the operation happened" in patched
     assert "Do not output the `###STOP###` token in the same message" in patched
     assert "An offer, plan, item" in patched
+    assert "unambiguous affirmative confirmation in your next message" in patched
+    assert "Yes, I confirm both exchanges as described." in patched
+    assert "Do not replace confirmation with" in patched
+    assert "Do not confirm if the proposed change conflicts" in patched
     assert "Never encourage the agent to bypass a guard" in patched
     assert patched.endswith(COMPLETION_GATE.strip() + "\n")
     assert patched.startswith(BASELINE.rstrip())
