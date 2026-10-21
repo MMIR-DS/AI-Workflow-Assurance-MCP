@@ -39,6 +39,8 @@ def test_patcher_replaces_exactly_one_expected_dispatch_loop() -> None:
     assert "unrecognized or unreviewed tool name" in patched
     assert "awa_write_orders_seen = set()" in patched
     assert "second write for the same order" in patched
+    assert "Do not make any further write attempt" in patched
+    assert "the operation remains blocked" in patched
     assert "cancel_pending_order" in patched
     assert patched != source
 
