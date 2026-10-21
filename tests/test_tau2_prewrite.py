@@ -1430,3 +1430,51 @@ def test_every_write_policy_rejects_hedged_confirmation(builder, evaluator) -> N
     summary = result.get("evidence_summary", {})
     if "user_affirmed_after_disclosure" in summary:
         assert summary["user_affirmed_after_disclosure"] is False
+
+def test_tau2_adapter_accepts_catalog_verified_customer_facing_pairs_without_internal_ids() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156 and exchange these exact items: "
+        "1. Old Item: Mechanical Keyboard (linear switches, RGB backlight, full size; $272.33). "
+        "New Item: Mechanical Keyboard (clicky switches, no backlight, full size; $269.16). "
+        "2. Old Item: Smart Thermostat (Apple HomeKit, black; $262.47). "
+        "New Item: Smart Thermostat (Google Assistant, black; $249.01). "
+        "Price difference: $16.63 refund to credit_card_9513926. "
+        "Please confirm both old-to-new item pairs for this exchange."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that is correct. Please process the exchange for both items as described."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["checked"]["complete_customer_facing_exchange_disclosure"] is True
+    assert result["checked"]["customer_disclosed_item_pairs_match_requested_exchange"] is True
+    assert result["evidence_summary"]["assistant_disclosed_exact_order_items_and_payment"] is True
+    assert result["evidence_summary"]["user_affirmed_after_disclosure"] is True
+
+
+def test_tau2_adapter_still_blocks_semantic_disclosure_with_wrong_catalog_option() -> None:
+    trajectory, call = _trajectory_and_call()
+    trajectory[16]["content"] = (
+        "To confirm order #W2378156 and exchange these exact items: "
+        "1. Old Item: Mechanical Keyboard (linear switches, RGB backlight, full size; $272.33). "
+        "New Item: Mechanical Keyboard (linear switches, no backlight, full size; $269.16). "
+        "2. Old Item: Smart Thermostat (Apple HomeKit, black; $262.47). "
+        "New Item: Smart Thermostat (Google Assistant, black; $249.01). "
+        "Price difference: $16.63 refund to credit_card_9513926. "
+        "Please confirm both old-to-new item pairs for this exchange."
+    )
+    trajectory[17]["content"] = (
+        "Yes, that is correct. Please process the exchange for both items as described."
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["checked"]["customer_disclosed_item_pairs_match_requested_exchange"] is False
+    assert "complete_customer_facing_exchange_disclosure" in result["blocking_checks"]
+
