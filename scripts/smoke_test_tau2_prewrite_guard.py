@@ -517,22 +517,50 @@ def main() -> None:
     assert "complete_customer_facing_exchange_disclosure" in (results[0].content or "")
     assert orchestrator.num_errors == 1
 
-    # Reconfirming an eligible exchange after complete re-disclosure may execute once.
-    trajectory, retry_call = _setup_retry_after_no_go(
-        disclosure=(
-            "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
-            "and old item 4983901480 for 7747408585. The total price difference is "
-            "a $16.63 refund to credit_card_9513926. Please confirm."
-        ),
-        confirmation=(
-            "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
-        ),
+    # Even a complete new disclosure and affirmative reply cannot clear a prior NO_GO
+    # within the same benchmark episode. Reuse the same orchestrator across dispatch batches.
+    trajectory, first_call = _setup()
+    first_results, environment, orchestrator = _dispatch(trajectory, first_call)
+    assert len(first_results) == 1 and first_results[0].error
+    assert environment.calls == []
+    assert getattr(orchestrator, "_awa_prewrite_no_go_latched", False)
+
+    trajectory.append({
+        "role": "tool",
+        "id": first_call.id,
+        "requestor": "assistant",
+        "error": True,
+        "content": first_results[0].content,
+    })
+    disclosure = (
+        "To confirm order #W2378156: exchange old item 1151293680 for 7706410293 "
+        "and old item 4983901480 for 7747408585. The total price difference is "
+        "a $16.63 refund to credit_card_9513926. Please confirm."
     )
-    results, environment, orchestrator = _dispatch(trajectory, retry_call)
-    assert len(results) == 1 and not results[0].error
-    assert environment.calls == ["exchange_delivered_order_items"]
-    assert results[0].content == "SIMULATED_WRITE_EXECUTED"
-    assert orchestrator.num_errors == 0
+    confirmation = (
+        "Yes, that's correct. Go ahead and use credit_card_9513926 for this exchange."
+    )
+    trajectory.append({"role": "assistant", "content": disclosure})
+    trajectory.append({"role": "user", "content": confirmation})
+    retry_call = ToolCall(
+        id="sticky-no-go-retry",
+        name=first_call.name,
+        arguments=dict(first_call.arguments),
+        requestor="assistant",
+    )
+    trajectory.append({
+        "role": "assistant",
+        "tool_calls": [{
+            "id": retry_call.id,
+            "name": retry_call.name,
+            "arguments": retry_call.arguments,
+        }],
+    })
+    results = BaseOrchestrator._execute_tool_calls(orchestrator, [retry_call])
+    assert len(results) == 1 and results[0].error
+    assert environment.calls == [], "a fresh confirmation must not clear the run-level NO_GO latch"
+    assert "prior write was blocked earlier in this benchmark run" in (results[0].content or "")
+    assert orchestrator.num_errors == 2
 
     # Two exchanges for the same order in one batch must not reuse the same
     # preflight snapshot. The first reaches the fake callback; the second is blocked.
@@ -687,7 +715,7 @@ def main() -> None:
     assert len(results) == 2 and all(result.error for result in results)
     assert environment.calls == []
     assert "exactly one distinct old/new item pair" in (results[0].content or "")
-    assert "second write for the same order" in (results[1].content or "")
+    assert "prior write was blocked earlier in this benchmark run" in (results[1].content or "")
     assert orchestrator.num_errors == 2
 
     # A verified user default-address change must pass through the actual dispatcher.
