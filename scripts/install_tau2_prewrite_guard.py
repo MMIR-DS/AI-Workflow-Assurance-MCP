@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
-PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V6"
+PATCH_MARKER = "AWA_PREWRITE_GUARD_PATCH_V7"
 REPLAY_PATCH_MARKER = "AWA_PREWRITE_REPLAY_NOOP_V1"
 USER_EMPTY_RESPONSE_PATCH_MARKER = "AWA_USER_EMPTY_RESPONSE_RETRY_V1"
 
@@ -98,6 +98,10 @@ REPLACEMENT = """        tool_results = []
         )
 
         def awa_blocked_result(tool_call, message):
+            # Persist NO_GO for this benchmark episode. Prompt instructions alone
+            # are not a reliable control against a second write attempt.
+            if message.startswith("AWA_PREWRITE_NO_GO:"):
+                self._awa_prewrite_no_go_latched = True
             return ToolMessage(
                 id=tool_call.id,
                 role="tool",
@@ -110,12 +114,15 @@ REPLACEMENT = """        tool_results = []
             if entity_kind == "user":
                 return (
                     "AWA_PREWRITE_NO_GO: a second write for the same user in one "
-                    "dispatch batch is blocked. Re-read the user profile and retry "
-                    "in a new turn."
+                    "dispatch batch is blocked. This additional operation was not "
+                    "executed. No further write attempt is permitted during this "
+                    "benchmark run; hand off or escalate rather than retrying."
                 )
             return (
                 "AWA_PREWRITE_NO_GO: a second write for the same order in one "
-                "dispatch batch is blocked. Re-read the order and retry in a new turn."
+                "dispatch batch is blocked. This additional operation was not "
+                "executed. No further write attempt is permitted during this "
+                "benchmark run; hand off or escalate rather than retrying."
             )
 
         def awa_audit_single_item_response(tool_call, tool_result):
@@ -162,8 +169,10 @@ REPLACEMENT = """        tool_results = []
                 "entity_kind": "order",
                 "blocked_message": (
                     "AWA_PREWRITE_NO_GO: address change blocked before execution. "
-                    "Blocking checks: {blocking}. Disclose the exact new address "
-                    "and obtain fresh confirmation before retrying."
+                    "Blocking checks: {blocking}. Do not make any further write "
+                    "attempt during this benchmark run, even after refreshing evidence "
+                    "or receiving new confirmation. Tell the customer no change was "
+                    "made and hand off or escalate."
                 ),
             },
             "modify_user_address": {
@@ -173,8 +182,10 @@ REPLACEMENT = """        tool_results = []
                 "entity_kind": "user",
                 "blocked_message": (
                     "AWA_PREWRITE_NO_GO: user default-address change blocked before "
-                    "execution. Disclose the exact new address and obtain fresh "
-                    "confirmation. Blocking checks: {blocking}."
+                    "execution. Blocking checks: {blocking}. Do not make any further "
+                    "write attempt during this benchmark run, even after refreshing "
+                    "evidence or receiving new confirmation. Tell the customer no "
+                    "change was made and hand off or escalate."
                 ),
             },
             "modify_pending_order_items": {
@@ -185,8 +196,9 @@ REPLACEMENT = """        tool_results = []
                 "blocked_message": (
                     "AWA_PREWRITE_NO_GO: pending-item modification was blocked before "
                     "execution. Exactly one old item and one replacement are supported; "
-                    "multi-item mutations remain disabled. Refresh order/catalog evidence "
-                    "and obtain complete fresh confirmation. Blocking checks: {blocking}."
+                    "multi-item mutations remain disabled. Blocking checks: {blocking}. "
+                    "Do not make any further write attempt during this benchmark run. "
+                    "Tell the customer no change was made and hand off or escalate."
                 ),
             },
             "modify_pending_order_payment": {
@@ -195,8 +207,10 @@ REPLACEMENT = """        tool_results = []
                 "entity_kind": "order",
                 "blocked_message": (
                     "AWA_PREWRITE_NO_GO: payment-method change blocked before "
-                    "execution. Disclose the exact current and new payment methods "
-                    "and obtain fresh confirmation. Blocking checks: {blocking}."
+                    "execution. Blocking checks: {blocking}. Do not make any further "
+                    "write attempt during this benchmark run, even after refreshing "
+                    "evidence or receiving new confirmation. Tell the customer no "
+                    "change was made and hand off or escalate."
                 ),
             },
             "cancel_pending_order": {
@@ -205,9 +219,10 @@ REPLACEMENT = """        tool_results = []
                 "entity_kind": "order",
                 "blocked_message": (
                     "AWA_PREWRITE_NO_GO: cancellation blocked before execution. "
-                    "Blocking checks: {blocking}. Disclose the exact cancellation "
-                    "reason, refund amount, payment method, and refund timing, then "
-                    "obtain fresh confirmation."
+                    "Blocking checks: {blocking}. Do not make any further write "
+                    "attempt during this benchmark run, even after refreshing evidence "
+                    "or receiving new confirmation. Tell the customer the cancellation "
+                    "was not made and hand off or escalate."
                 ),
             },
             "return_delivered_order_items": {
@@ -216,8 +231,10 @@ REPLACEMENT = """        tool_results = []
                 "entity_kind": "order",
                 "blocked_message": (
                     "AWA_PREWRITE_NO_GO: return request blocked before execution. "
-                    "Disclose the exact return items, payment method, and follow-up "
-                    "process, then obtain fresh confirmation. Blocking checks: {blocking}."
+                    "Blocking checks: {blocking}. Do not make any further write "
+                    "attempt during this benchmark run, even after refreshing evidence "
+                    "or receiving new confirmation. Tell the customer the request was "
+                    "not made and hand off or escalate."
                 ),
             },
         }
@@ -228,8 +245,21 @@ REPLACEMENT = """        tool_results = []
         awa_passthrough_tools = set(awa_shared_passthrough_tools)
 
         for tool_call in tool_calls:
-            # AWA_PREWRITE_GUARD_PATCH_V6: new/renamed tools are denied by default.
-            if tool_call.name in awa_write_tools:
+            # Enforce the run-level fail-closed latch in code, not only in the prompt.
+            # A prior AWA_PREWRITE_NO_GO blocks later writes even in a separate dispatch batch.
+            if (
+                tool_call.name in awa_write_tools
+                and getattr(self, "_awa_prewrite_no_go_latched", False)
+            ):
+                tool_result = awa_blocked_result(
+                    tool_call,
+                    "AWA_PREWRITE_NO_GO: a prior write was blocked earlier in this benchmark run. "
+                    "No further write attempt is permitted during this run. The operation remains "
+                    "blocked; do not describe it as completed. Tell the customer the change was "
+                    "not made and hand off or escalate.",
+                )
+            # AWA_PREWRITE_GUARD_PATCH_V7: new/renamed tools are denied by default.
+            elif tool_call.name in awa_write_tools:
                 policy = awa_write_policies.get(tool_call.name)
                 if policy is None:
                     tool_result = awa_blocked_result(
