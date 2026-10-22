@@ -108,6 +108,19 @@ def test_cloudflare_neuron_usage_is_recorded_without_inventing_usd_cost() -> Non
     assert "must not be read as evidence of zero spend" in usage["usd_cost_note"]
 
 
+def test_payment_profile_provenance_note_matches_observed_trace() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+
+    _, metadata, _, _ = evaluate_trace(results, spec)
+
+    assert metadata["independence_scope"]["live_payment_profile_was_queried"] is True
+    assert (
+        "A live get_user_details profile response for the order owner was observed."
+        in metadata["scope_notes"]
+    )
+
+
 def test_task0_trace_blocks_when_prewrite_disclosure_is_incomplete() -> None:
     results, spec = _load_inputs()
     case, metadata, report, release = evaluate_trace(results, spec)
