@@ -27,7 +27,8 @@ The command returns exit code 0 for a consistent `GO` report and 2 for a consist
 - Validates the target order ID against both pre- and post-state snapshots.
 - Validates the shape of full-database SHA-256 fingerprints.
 - Requires explicit confirmation that the write method's return value was not used for the decision.
-- Reconciles tamper-probe metadata with the corresponding check.
+- Runs negative-control probes against pre-state status, post-state status, selected exchange items, and computed exchange price difference; each must trigger the relevant consistency gate and produce `NO_GO`.
+- Records each tamper-probe result in the report, then reconciles aggregate probe metadata with the corresponding check.
 - Preserves checks, snapshots, hashes, and source metadata without treating them as authenticated claims.
 
 ## Trust boundary
