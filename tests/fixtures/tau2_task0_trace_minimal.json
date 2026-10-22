@@ -185,7 +185,7 @@
         },
         {
           "role": "assistant",
-          "content": "Your exchange request has been submitted. You will receive an email shortly with instructions. The price difference of -$16.63 will be refunded to credit_card_9513926 within 5-7 business days."
+          "content": "Your exchange request has been submitted. The order status is now exchange requested. You will receive an email with instructions on how to return the original items. The recorded price difference is a $16.63 refund; the exchange policy does not specify a processing time."
         },
         {
           "role": "user",
