@@ -319,21 +319,21 @@ def _claims_unverified_exchange_commitments(text: str) -> bool:
         return False
     patterns = (
         re.compile(
-            r"\\b(?:refund|refunded|credited|credit(?:ed)?|money\\s+back|refund amount)\\b"
-            r".{0,180}\\b(?:within|in|after)\\s+\\d+\\s*"
-            r"(?:(?:-|–|to)\\s*\\d+\\s*)?(?:business\\s+)?days?\\b"
+            r"\b(?:refund|refunded|credited|credit(?:ed)?|money\s+back|refund amount)\b"
+            r".{0,180}\b(?:within|in|after)\s+\d+\s*"
+            r"(?:(?:-|–|to)\s*\d+\s*)?(?:business\s+)?days?\b"
         ),
         re.compile(
-            r"\\b(?:replacement|new)\\s+(?:items?|products?)\\s+"
-            r"(?:will|shall|should|are\\s+going\\s+to)\\s+be\\s+"
-            r"(?:shipped|sent|dispatched|delivered)\\b"
+            r"\b(?:replacement|new)\s+(?:items?|products?)\s+"
+            r"(?:will|shall|should|are\s+going\s+to)\s+be\s+"
+            r"(?:shipped|sent|dispatched|delivered)\b"
         ),
         re.compile(
-            r"\\b(?:email|message|notification)\\b.{0,50}"
-            r"\\b(?:shortly|soon|within\\s+\\d+\\s*(?:business\\s+)?days?)\\b"
+            r"\b(?:email|message|notification)\b.{0,50}"
+            r"\b(?:shortly|soon|within\s+\d+\s*(?:business\s+)?days?)\b"
         ),
     )
-    for sentence in re.split(r"(?<=[.!?])\\s+|\\n+", text.casefold()):
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text.casefold()):
         if any(pattern.search(sentence) for pattern in patterns):
             return True
     return False
