@@ -23,6 +23,8 @@ def test_cloudflare_usage_records_neurons_without_inventing_usd_cost() -> None:
     assert usage["observed_response_count"] == 3
     assert usage["total_neurons_observed"] == "3.75"
     assert usage["usd_cost_observed"] is None
+    assert usage["estimated_gross_cost_usd"] == "0.000041"
+    assert "daily free allocation" in usage["usd_cost_note"]
     assert "must not be read as evidence of zero spend" in usage["usd_cost_note"]
 
 
