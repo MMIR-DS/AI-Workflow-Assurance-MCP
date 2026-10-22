@@ -83,6 +83,34 @@ def _provider_neuron_usage(messages: list[dict[str, Any]], model: Any) -> dict[s
     }
 
 
+def _add_provider_usage_warnings(
+    release: dict[str, Any], metadata_items: list[dict[str, Any]],
+) -> None:
+    """Keep provider-cost blind spots visible without inventing USD prices."""
+    cloudflare_cost_missing = any(
+        isinstance(item.get("provider_usage"), dict)
+        and item["provider_usage"].get("provider") == "cloudflare_workers_ai"
+        and item["provider_usage"].get("usd_cost_observed") is None
+        for item in metadata_items
+    )
+    if not cloudflare_cost_missing:
+        return
+    warnings = release.setdefault("warnings", [])
+    if any(
+        isinstance(warning, dict) and warning.get("code") == "PROVIDER_COST_NOT_OBSERVED"
+        for warning in warnings
+    ):
+        return
+    warnings.append({
+        "code": "PROVIDER_COST_NOT_OBSERVED",
+        "message": (
+            "Cloudflare Workers AI USD cost was not observed. Neuron usage is recorded, "
+            "but no authoritative price was applied; do not interpret Tau2's $0.0000 "
+            "display as zero spend. GO does not certify budget compliance while cost is unknown."
+        ),
+    })
+
+
 def _prompt_provenance() -> dict[str, Any]:
     """Capture whether the benchmark run used the reviewed prompt patch."""
     supplied_mode = os.environ.get("AWA_TAU2_PROMPT_MODE", "").strip().lower() or "unknown"
@@ -684,6 +712,7 @@ def evaluate_trace(results: dict[str, Any], spec: dict[str, Any]) -> tuple[dict[
     case, metadata = normalize_simulation(results, sims[0])
     report = evaluate_suite(spec, [case])
     release = create_release_report(spec, report)
+    _add_provider_usage_warnings(release, [metadata])
     return case, metadata, report, release
 
 
@@ -702,6 +731,7 @@ def main() -> int:
     cases = [item[0] for item in normalized]
     report = evaluate_suite(spec, cases)
     release = create_release_report(spec, report)
+    _add_provider_usage_warnings(release, [item[1] for item in normalized])
     args.output_dir.mkdir(parents=True, exist_ok=True)
     outputs = {
         "awa_cases.json": cases, "awa_eval_report.json": report,
