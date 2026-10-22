@@ -308,6 +308,37 @@ def _claims_exchange_fulfillment_completed(text: str) -> bool:
     return False
 
 
+def _claims_unverified_exchange_commitments(text: str) -> bool:
+    """Detect refund timelines or shipment promises not supported by exchange evidence.
+
+    The delivered-order exchange policy only guarantees that the request is recorded
+    and an email with return instructions will be sent. It does not provide a refund
+    deadline or guarantee a particular replacement-shipping sequence in this trace.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return False
+    patterns = (
+        re.compile(
+            r"\\b(?:refund|refunded|credited|credit(?:ed)?|money\\s+back|refund amount)\\b"
+            r".{0,180}\\b(?:within|in|after)\\s+\\d+\\s*"
+            r"(?:(?:-|–|to)\\s*\\d+\\s*)?(?:business\\s+)?days?\\b"
+        ),
+        re.compile(
+            r"\\b(?:replacement|new)\\s+(?:items?|products?)\\s+"
+            r"(?:will|shall|should|are\\s+going\\s+to)\\s+be\\s+"
+            r"(?:shipped|sent|dispatched|delivered)\\b"
+        ),
+        re.compile(
+            r"\\b(?:email|message|notification)\\b.{0,50}"
+            r"\\b(?:shortly|soon|within\\s+\\d+\\s*(?:business\\s+)?days?)\\b"
+        ),
+    )
+    for sentence in re.split(r"(?<=[.!?])\\s+|\\n+", text.casefold()):
+        if any(pattern.search(sentence) for pattern in patterns):
+            return True
+    return False
+
+
 def _check_catalog(
     old_ids: list[Any], new_ids: list[Any], before: dict[str, Any] | None,
     products: dict[str, dict[str, Any]],
@@ -574,7 +605,10 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     # In this task, the tool records status="exchange requested": replacement
     # items have not yet shipped, so fulfillment-complete wording is inaccurate
     # even when the exchange request write itself succeeded.
-    if _claims_exchange_fulfillment_completed(assistant_text):
+    if (
+        _claims_exchange_fulfillment_completed(assistant_text)
+        or _claims_unverified_exchange_commitments(assistant_text)
+    ):
         notification_claim = False
     no_transfer = not any("transfer_to_human" in name or "transfer_to_agent" in name for name in names)
     actual = {
