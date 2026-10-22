@@ -514,6 +514,14 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         float(computed_delta) if computed_delta is not None else None,
     )
     owner_id = before.get("user_id") if isinstance(before, dict) else None
+    live_payment_profile_was_queried = any(
+        call["name"] == "get_user_details"
+        and isinstance(call.get("arguments"), dict)
+        and call["arguments"].get("user_id") == owner_id
+        and isinstance(result(call), dict)
+        and result(call).get("user_id") == owner_id
+        for call in calls
+    )
     price_difference_disclosed = confirmation_context["price_difference_disclosed"]
     semantic_disclosure_valid = _semantic_exchange_disclosure_matches(
         last_assistant_text,
@@ -822,14 +830,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             "release_decision_uses_tau2_db_match": False,
             "release_decision_uses_tau2_action_checks": False,
             "post_state_is_an_independent_database_reread": False,
-            "live_payment_profile_was_queried": any(
-                call["name"] == "get_user_details"
-                and isinstance(call.get("arguments"), dict)
-                and call["arguments"].get("user_id") == owner_id
-                and isinstance(result(call), dict)
-                and result(call).get("user_id") == owner_id
-                for call in calls
-            ),
+            "live_payment_profile_was_queried": live_payment_profile_was_queried,
         },
         "tau2_oracle_for_comparison_only": {
             "reward": reward_info.get("reward"),
@@ -842,7 +843,11 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "scope_notes": [
             "The release decision uses normalized trace/tool evidence, not tau2 reward/db/action oracle fields.",
             "The final order object is the exchange tool's returned state, not a second database query.",
-            "Payment evidence matches the original transaction and exchange response; the live payment profile was not queried.",
+            (
+                "A live get_user_details profile response for the order owner was observed."
+                if live_payment_profile_was_queried
+                else "No live get_user_details profile response for the order owner was observed; payment evidence is limited to the recorded order and exchange trace."
+            ),
             "Notification checks assistant wording, not actual email delivery.",
             "Variant option checks are specific to public retail task 0.",
         ],
