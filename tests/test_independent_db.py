@@ -161,7 +161,21 @@ class SnapshotEvidenceDecisionTests(unittest.TestCase):
         changed["address"]["city"] = "Elsewhere"
         self.assertEqual(self.evaluate(db_after=changed)["decision"], "NO_GO")
 
-    def test_tamper_probe_uses_the_same_evidence_evaluator(self) -> None:
-        from scripts.verify_tau2_independent_db import tamper_probe_is_detected
+    def test_tamper_probe_uses_same_evaluator_across_multiple_fields(self) -> None:
+        from scripts.verify_tau2_independent_db import (
+            run_tamper_probes,
+            tamper_probe_is_detected,
+        )
 
+        results = run_tamper_probes(**copy.deepcopy(self.kwargs))
+        self.assertEqual(
+            set(results),
+            {
+                "recorded_before.status",
+                "recorded_after.status",
+                "recorded_after.exchange_items",
+                "recorded_after.exchange_price_difference",
+            },
+        )
+        self.assertTrue(all(results.values()), results)
         self.assertTrue(tamper_probe_is_detected(**copy.deepcopy(self.kwargs)))
