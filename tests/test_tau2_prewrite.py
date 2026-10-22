@@ -203,6 +203,78 @@ def test_tau2_adapter_allows_only_after_complete_disclosure_and_affirmative_repl
     assert result["checked"]["assistant_variant_claims_match_catalog"] is True
 
 
+def _customer_safe_card_disclosure_trajectory(*, disclosed_last_four: str = "2478"):
+    trajectory, call = _trajectory_and_call()
+    order = _tool_result_json(trajectory, "order-read-1")
+    owner_id = order["user_id"]
+    profile = {
+        "user_id": owner_id,
+        "payment_methods": {
+            "credit_card_9513926": {
+                "id": "credit_card_9513926",
+                "source": "credit_card",
+                "brand": "mastercard",
+                "last_four": "2478",
+            }
+        },
+    }
+    # Add an owner-bound profile read immediately before the assistant's final
+    # disclosure. The customer-facing text must not reveal the internal payment ID.
+    trajectory[16:16] = [
+        {
+            "role": "assistant",
+            "tool_calls": [{
+                "id": "user-details-card-alias",
+                "name": "get_user_details",
+                "arguments": {"user_id": owner_id},
+            }],
+        },
+        {
+            "role": "tool",
+            "id": "user-details-card-alias",
+            "content": json.dumps(profile),
+        },
+    ]
+    trajectory[18]["content"] = (
+        "To confirm order #W2378156 and exchange these exact items: "
+        "1. Old Item ID: 1151293680 (Mechanical Keyboard; linear switches, RGB backlight, "
+        "full size; $272.33) exchanged for New Item ID: 7706410293 "
+        "(Mechanical Keyboard; clicky switches, no backlight, full size; $269.16). "
+        "2. Old Item ID: 4983901480 (Smart Thermostat; Apple HomeKit compatibility, "
+        "black; $262.47) exchanged for New Item ID: 7747408585 "
+        "(Smart Thermostat; Google Assistant compatibility, black; $249.01). "
+        f"Price difference: $16.63 refund to your Mastercard ending in {disclosed_last_four}. "
+        "Please confirm both old-to-new item pairs for this exchange."
+    )
+    trajectory[19]["content"] = (
+        "Yes, I confirm both exchanges and the $16.63 refund to my Mastercard ending in 2478."
+    )
+    return trajectory, call
+
+
+def test_tau2_prewrite_accepts_verified_card_brand_and_last_four_without_internal_id() -> None:
+    trajectory, call = _customer_safe_card_disclosure_trajectory()
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "GO"
+    assert result["allowed"] is True
+    assert result["checked"]["complete_customer_facing_exchange_disclosure"] is True
+    assert result["evidence_summary"]["assistant_disclosed_exact_order_items_and_payment"] is True
+    assert result["evidence_summary"]["user_affirmed_after_disclosure"] is True
+
+
+def test_tau2_prewrite_rejects_card_alias_with_wrong_last_four() -> None:
+    trajectory, call = _customer_safe_card_disclosure_trajectory(disclosed_last_four="1111")
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert "exact_action_or_payment_method_not_disclosed_to_customer" in result["blocking_checks"]
+    assert "complete_customer_facing_exchange_disclosure" in result["blocking_checks"]
+
+
 def test_tau2_adapter_ignores_following_bullet_note_when_checking_variant_claims() -> None:
     trajectory, call = _fully_disclosed_exchange_trajectory_and_call()
     # A common retail response lists the selected variant, then explains on the
