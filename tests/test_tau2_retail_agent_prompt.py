@@ -39,7 +39,7 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "MUST contain no tool calls" in patched
     assert "wait for a separate user message" in patched
     assert "Never combine the confirmation question and exchange_delivered_order_items" in patched
-    assert "never expose internal IDs" in patched
+    assert "never expose internal payment identifiers" in patched
     assert "returned status is \"exchange requested\"" in patched
     assert "Do not say \"exchange completed\"" in patched
     assert "Do not promise a refund deadline" in patched
