@@ -260,6 +260,68 @@ def test_exchange_requested_state_rejects_fulfillment_complete_language() -> Non
     assert release["decision"] == "NO_GO"
 
 
+def test_exchange_request_rejects_unverified_refund_timeline() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    final_message = next(
+        message
+        for message in reversed(messages[exchange_index + 1 :])
+        if message.get("role") == "assistant" and message.get("content")
+    )
+    final_message["content"] = (
+        "Your exchange request has been submitted and its status is exchange requested. "
+        "The $16.63 refund will be credited to Mastercard ending in 2478 within 5-7 business days. "
+        "You will receive an email with instructions on returning your original items."
+    )
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["notification_claim_matches_contract"] is False
+    assert case["actual"]["policy_violation_count"] == 1
+    assert report["summary"]["failed_checks"] >= 1
+    assert release["decision"] == "NO_GO"
+
+
+def test_exchange_request_rejects_unverified_replacement_shipping_promise() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    final_message = next(
+        message
+        for message in reversed(messages[exchange_index + 1 :])
+        if message.get("role") == "assistant" and message.get("content")
+    )
+    final_message["content"] = (
+        "Your exchange request has been submitted and its status is exchange requested. "
+        "You will receive an email with instructions on returning your original items. "
+        "Your replacement items will be shipped after we receive the original items."
+    )
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["notification_claim_matches_contract"] is False
+    assert case["actual"]["policy_violation_count"] == 1
+    assert report["summary"]["failed_checks"] >= 1
+    assert release["decision"] == "NO_GO"
+
+
 def test_confirmation_fails_closed_when_assistant_did_not_disclose_all_new_items() -> None:
     results, spec = _load_inputs()
     _set_complete_confirmation(results)

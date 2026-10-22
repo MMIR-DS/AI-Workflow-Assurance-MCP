@@ -35,6 +35,9 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "never expose internal IDs" in patched
     assert "returned status is \"exchange requested\"" in patched
     assert "Do not say \"exchange completed\"" in patched
+    assert "Do not promise a refund deadline" in patched
+    assert "Do not promise a refund deadline, a specific shipment sequence or date" in patched
+    assert "Do not infer the \"5 to 7 business days\" timing" in patched
     assert "Price difference:" in patched
     assert "Use this exact disclosure structure" in patched
     assert "CRITICAL EXCHANGE GATE" in patched
