@@ -191,25 +191,76 @@ def evaluate_snapshot_evidence(
 
 
 
-def tamper_probe_is_detected(**evidence_kwargs: Any) -> bool:
-    """Confirm the normal evidence evaluator rejects a tampered recorded post-state."""
-    recorded_after = evidence_kwargs.get("recorded_after")
-    if not isinstance(recorded_after, dict):
-        return False
-    tampered = copy.deepcopy(recorded_after)
-    original_status = tampered.get("status")
-    tampered["status"] = (
-        "__AWA_TAMPER_PROBE__"
-        if original_status != "__AWA_TAMPER_PROBE__"
-        else "__AWA_TAMPER_PROBE_2__"
-    )
-    probe_kwargs = {**evidence_kwargs, "recorded_after": tampered}
-    probe = evaluate_snapshot_evidence(**probe_kwargs)
-    return bool(
-        probe["decision"] == "NO_GO"
-        and probe["checks"]["independent_db_state_matches_recorded_exchange_response"] is False
-    )
+def run_tamper_probes(**evidence_kwargs: Any) -> dict[str, bool]:
+    """Run negative controls across pre-state and multiple post-state fields.
 
+    Each probe changes only a copied evidence snapshot, then calls the same evaluator
+    used for the real decision. A probe passes only when the expected consistency gate
+    fails and the resulting decision is NO_GO.
+    """
+    probes = (
+        (
+            "recorded_before.status",
+            "recorded_before",
+            "status",
+            "sentinel",
+            "pre_state_matches_recorded_order_read",
+        ),
+        (
+            "recorded_after.status",
+            "recorded_after",
+            "status",
+            "sentinel",
+            "independent_db_state_matches_recorded_exchange_response",
+        ),
+        (
+            "recorded_after.exchange_items",
+            "recorded_after",
+            "exchange_items",
+            "append",
+            "independent_db_state_matches_recorded_exchange_response",
+        ),
+        (
+            "recorded_after.exchange_price_difference",
+            "recorded_after",
+            "exchange_price_difference",
+            "sentinel",
+            "independent_db_state_matches_recorded_exchange_response",
+        ),
+    )
+    results: dict[str, bool] = {}
+    for label, snapshot_key, field, mutation, expected_check in probes:
+        original = evidence_kwargs.get(snapshot_key)
+        if not isinstance(original, dict) or field not in original:
+            results[label] = False
+            continue
+        tampered = copy.deepcopy(original)
+        if mutation == "append":
+            value = tampered.get(field)
+            value = list(value) if isinstance(value, list) else []
+            value.append("__AWA_TAMPER_PROBE_ITEM__")
+            tampered[field] = value
+        else:
+            sentinel = "__AWA_TAMPER_PROBE__"
+            if tampered.get(field) == sentinel:
+                sentinel = "__AWA_TAMPER_PROBE_2__"
+            tampered[field] = sentinel
+        probe_kwargs = {**evidence_kwargs, snapshot_key: tampered}
+        try:
+            probe = evaluate_snapshot_evidence(**probe_kwargs)
+            results[label] = bool(
+                probe["decision"] == "NO_GO"
+                and probe["checks"].get(expected_check) is False
+            )
+        except (KeyError, TypeError, ValueError):
+            results[label] = False
+    return results
+
+
+def tamper_probe_is_detected(**evidence_kwargs: Any) -> bool:
+    """Return True only when every pre-state and post-state tamper probe is caught."""
+    results = run_tamper_probes(**evidence_kwargs)
+    return bool(results) and all(results.values())
 
 def _find_trace_evidence(
     results: dict[str, Any],
@@ -321,9 +372,9 @@ def main() -> int:
         write_execution_succeeded=write_execution_succeeded,
         other_database_entities_unchanged=no_collateral_mutations,
     )
-    # Built-in negative control: corrupt a copy of the recorded response and run the
-    # same evaluator used for the real decision. This does not mutate the trace on disk.
-    tamper_probe_detected = tamper_probe_is_detected(
+    # Built-in negative controls: mutate copies of the pre- and post-write
+    # snapshots, then run the same evaluator used for the real decision.
+    tamper_probe_results = run_tamper_probes(
         recorded_before=recorded_before,
         recorded_after=recorded_after,
         db_before=db_before,
@@ -335,6 +386,7 @@ def main() -> int:
         write_execution_succeeded=write_execution_succeeded,
         other_database_entities_unchanged=no_collateral_mutations,
     )
+    tamper_probe_detected = bool(tamper_probe_results) and all(tamper_probe_results.values())
     evaluated["checks"]["tamper_probe_is_detected"] = tamper_probe_detected
     evaluated["summary"]["passed_checks"] = sum(evaluated["checks"].values())
     evaluated["summary"]["total_checks"] = len(evaluated["checks"])
@@ -363,7 +415,8 @@ def main() -> int:
             "write_execution_error": execution_error,
             "tool_return_value_used_for_decision": False,
             "tamper_probe": {
-                "mutated_field": "status",
+                "mutated_fields": list(tamper_probe_results),
+                "probe_results": tamper_probe_results,
                 "detected": tamper_probe_detected,
             },
         },
