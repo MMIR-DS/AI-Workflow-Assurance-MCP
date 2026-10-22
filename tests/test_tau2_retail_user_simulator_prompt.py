@@ -39,7 +39,10 @@ def test_patch_adds_completion_gate_and_preserves_general_guidance() -> None:
     assert "unambiguous affirmative confirmation in your next message" in patched
     assert "Yes, I confirm both exchanges as described." in patched
     assert "Do not replace confirmation with" in patched
-    assert "Do not confirm if the proposed change conflicts" in patched
+    assert "Before confirming a multi-item exchange, inspect the agent's immediately" in patched
+    assert "A generic summary such as \"both exchanges as described\" is NOT a complete disclosure." in patched
+    assert "If any required detail is missing, unclear, inconsistent with the scenario" in patched
+    assert "Only after all required details are disclosed accurately" in patched
     assert "Never encourage the agent to bypass a guard" in patched
     assert patched.endswith(COMPLETION_GATE.strip() + "\n")
     assert patched.startswith(BASELINE.rstrip())
