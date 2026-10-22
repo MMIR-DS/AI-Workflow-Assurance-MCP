@@ -119,6 +119,30 @@ def build_evidence_manifest(report: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(tamper_probe, dict) or tamper_probe.get("detected") is not checks["tamper_probe_is_detected"]:
         raise ValueError("tamper probe metadata does not reconcile with its check.")
 
+    probe_results = tamper_probe.get("probe_results")
+    mutated_fields = tamper_probe.get("mutated_fields")
+    if probe_results is not None or mutated_fields is not None:
+        if (
+            not isinstance(probe_results, dict)
+            or not probe_results
+            or any(not isinstance(value, bool) for value in probe_results.values())
+        ):
+            raise ValueError("tamper-probe per-field results must be a non-empty boolean mapping.")
+        if (
+            not isinstance(mutated_fields, list)
+            or any(not isinstance(field, str) or not field for field in mutated_fields)
+            or len(mutated_fields) != len(set(mutated_fields))
+            or set(mutated_fields) != set(probe_results)
+        ):
+            raise ValueError("tamper-probe mutated fields do not match per-field results.")
+        if tamper_probe["detected"] is not all(probe_results.values()):
+            raise ValueError("tamper-probe aggregate does not reconcile with per-field results.")
+    else:
+        # Accept reports written before the per-field matrix was introduced.
+        legacy_field = tamper_probe.get("mutated_field")
+        if not isinstance(legacy_field, str) or not legacy_field:
+            raise ValueError("legacy tamper-probe metadata must include a mutated field.")
+
     return {
         "schema_version": "1.0.0",
         "manifest_type": "awa-tau2-source-evidence-v1",
