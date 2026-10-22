@@ -14,6 +14,7 @@ from ai_workflow_assurance_mcp.tau2_prewrite_common import (
     _contains_all,
     _evaluate_exchange_confirmation_context,
     _exchange_price_difference,
+    _exchange_pairing_disclosed,
     _find_call_result,
     _get,
     _is_affirmative,
@@ -210,6 +211,83 @@ def _semantic_exchange_disclosure_matches(
     return True
 
 
+def _payment_method_display_disclosed(
+    messages: list[Any], owner_id: Any, payment_id: Any, disclosure_text: str,
+) -> bool:
+    """Match a customer-safe card brand and last four to the selected payment ID.
+
+    The payment ID is an internal database reference. Do not require the agent to
+    expose it to the customer when a verified card descriptor (brand + last four)
+    identifies the exact same payment method in the owner's profile.
+    """
+    if (
+        not isinstance(owner_id, str) or not owner_id
+        or not isinstance(payment_id, str) or not payment_id
+        or not isinstance(disclosure_text, str) or not disclosure_text.strip()
+    ):
+        return False
+    _, profile = _find_call_result(
+        messages,
+        {"get_user_details"},
+        lambda call_args: call_args.get("user_id") == owner_id,
+    )
+    if not isinstance(profile, dict) or profile.get("user_id") != owner_id:
+        return False
+    payment_methods = profile.get("payment_methods")
+    if not isinstance(payment_methods, dict):
+        return False
+    method = payment_methods.get(payment_id)
+    if (
+        not isinstance(method, dict)
+        or method.get("id") != payment_id
+        or method.get("source") != "credit_card"
+    ):
+        return False
+    brand = method.get("brand")
+    last_four = method.get("last_four")
+    if (
+        not isinstance(brand, str) or not brand.strip()
+        or not isinstance(last_four, str) or not re.fullmatch(r"\d{4}", last_four)
+    ):
+        return False
+    normalized = _normalize_disclosure_text(disclosure_text)
+    # Require brand and last four in one short card descriptor, with an explicit
+    # "ending in"/"last four" link. A generic mention of a brand is insufficient.
+    pattern = (
+        r"(?<![a-z0-9])" + re.escape(brand.casefold()) + r"(?![a-z0-9])"
+        + r"[^.!?;\\n]{0,48}"
+        + r"\\b(?:ending(?:\\s+in)?|last\\s+(?:four|4)(?:\\s+digits?)?)\\s+"
+        + re.escape(last_four) + r"(?!\\d)"
+    )
+    return re.search(pattern, normalized, re.IGNORECASE) is not None
+
+
+def _customer_safe_exchange_disclosure_matches(
+    disclosure_text: str,
+    order_id: Any,
+    old_items: Any,
+    new_items: Any,
+    payment_method_disclosed: bool,
+    price_difference_disclosed: bool,
+) -> bool:
+    """Require exact order/item references plus verified customer-safe payment wording."""
+    if (
+        not isinstance(order_id, str) or not order_id
+        or not isinstance(old_items, list) or not old_items
+        or not isinstance(new_items, list) or len(old_items) != len(new_items)
+        or not all(isinstance(item, str) and item for item in [*old_items, *new_items])
+        or not isinstance(disclosure_text, str)
+    ):
+        return False
+    return bool(
+        _contains_all(disclosure_text, [order_id, *old_items, *new_items])
+        and _exchange_pairing_disclosed(disclosure_text, old_items, new_items)
+        and any(term in disclosure_text.casefold() for term in ("exchange", "replace", "swap"))
+        and payment_method_disclosed
+        and price_difference_disclosed
+    )
+
+
 def evaluate_tau2_prewrite(
     trajectory: Any,
     tool_call: Any,
@@ -367,8 +445,23 @@ def evaluate_tau2_prewrite(
         variants,
     )
     price_difference_disclosed = confirmation_context["price_difference_disclosed"]
-    pairing_disclosed = confirmation_context["pairing_disclosed"] or semantic_disclosure_valid
-    disclosure_valid = confirmation_context["disclosure_valid"] or semantic_disclosure_valid
+    payment_display_disclosed = _payment_method_display_disclosed(
+        messages, owner_id, payment_id, last_assistant_text,
+    )
+    customer_safe_disclosure_valid = _customer_safe_exchange_disclosure_matches(
+        last_assistant_text, order_id, old_items, new_items,
+        payment_display_disclosed, price_difference_disclosed,
+    )
+    pairing_disclosed = (
+        confirmation_context["pairing_disclosed"]
+        or semantic_disclosure_valid
+        or customer_safe_disclosure_valid
+    )
+    disclosure_valid = (
+        confirmation_context["disclosure_valid"]
+        or semantic_disclosure_valid
+        or customer_safe_disclosure_valid
+    )
     confirmation_valid = (
         disclosure_valid
         and price_difference_disclosed
@@ -407,7 +500,10 @@ def evaluate_tau2_prewrite(
     )
     assistant_disclosed_payment = (
         isinstance(payment_id, str) and bool(payment_id)
-        and _contains_all(last_assistant_text, [payment_id])
+        and (
+            _contains_all(last_assistant_text, [payment_id])
+            or payment_display_disclosed
+        )
     )
     evidence = {
         "identity_verified": identity_valid,
