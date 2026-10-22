@@ -49,7 +49,7 @@ def _duration_to_latency_ms(duration: Any) -> int | None:
 
 
 def _provider_neuron_usage(messages: list[dict[str, Any]], model: Any) -> dict[str, Any]:
-    """Preserve provider-reported Neuron usage without inventing a USD price."""
+    """Preserve Neurons and estimate gross list cost without claiming billed cost."""
     observed: list[Decimal] = []
     for message in messages:
         raw = message.get("raw_data")
@@ -67,20 +67,60 @@ def _provider_neuron_usage(messages: list[dict[str, Any]], model: Any) -> dict[s
     total = sum(observed, Decimal("0"))
     total_text = format(total.normalize(), "f") if observed else None
     cloudflare_model = isinstance(model, str) and "@cf/" in model
+    # Cloudflare documents Workers AI usage at $0.011 per 1,000 Neurons on the
+    # Paid plan. This is a gross list-price estimate, not observed billed cost:
+    # the daily free allocation and account-wide usage affect actual charges.
+    estimated_gross_cost = (
+        (total * Decimal("0.011") / Decimal("1000")).quantize(Decimal("0.000001"))
+        if cloudflare_model and observed else None
+    )
     return {
         "provider": "cloudflare_workers_ai" if cloudflare_model else None,
         "metric": "neurons" if observed else None,
         "observed_response_count": len(observed),
         "total_neurons_observed": total_text,
         "usd_cost_observed": None,
+        "estimated_gross_cost_usd": (
+            format(estimated_gross_cost, "f") if estimated_gross_cost is not None else None
+        ),
         "usd_cost_note": (
-            "No USD cost was inferred from Neuron usage. This model is not mapped in "
-            "LiteLLM's price registry; a $0.0000 Tau2 console value must not be read as "
-            "evidence of zero spend. Check the account plan and Cloudflare pricing."
+            "Actual billed USD cost was not observed. The gross list-price estimate uses "
+            "$0.011 per 1,000 Neurons and excludes the daily free allocation and account-wide "
+            "usage. LiteLLM has no price mapping for this model; a $0.0000 Tau2 console value "
+            "must not be read as evidence of zero spend. Verify actual charges in Cloudflare."
             if cloudflare_model else
             "No authoritative USD cost was extracted from the recorded provider usage."
         ),
     }
+
+
+def _add_provider_usage_warnings(
+    release: dict[str, Any], metadata_items: list[dict[str, Any]],
+) -> None:
+    """Keep provider-cost blind spots visible without inventing USD prices."""
+    cloudflare_cost_missing = any(
+        isinstance(item.get("provider_usage"), dict)
+        and item["provider_usage"].get("provider") == "cloudflare_workers_ai"
+        and item["provider_usage"].get("usd_cost_observed") is None
+        for item in metadata_items
+    )
+    if not cloudflare_cost_missing:
+        return
+    warnings = release.setdefault("warnings", [])
+    if any(
+        isinstance(warning, dict) and warning.get("code") == "PROVIDER_COST_NOT_OBSERVED"
+        for warning in warnings
+    ):
+        return
+    warnings.append({
+        "code": "PROVIDER_COST_NOT_OBSERVED",
+        "message": (
+            "Cloudflare Workers AI actual billed USD cost was not observed. The adapter records "
+            "a gross list-price estimate from the published Neuron rate, but excludes the daily "
+            "free allocation and account-wide usage. Do not interpret Tau2's $0.0000 display as "
+            "zero spend. GO does not certify budget compliance while actual cost is unknown."
+        ),
+    })
 
 
 def _prompt_provenance() -> dict[str, Any]:
@@ -684,6 +724,7 @@ def evaluate_trace(results: dict[str, Any], spec: dict[str, Any]) -> tuple[dict[
     case, metadata = normalize_simulation(results, sims[0])
     report = evaluate_suite(spec, [case])
     release = create_release_report(spec, report)
+    _add_provider_usage_warnings(release, [metadata])
     return case, metadata, report, release
 
 
@@ -702,6 +743,7 @@ def main() -> int:
     cases = [item[0] for item in normalized]
     report = evaluate_suite(spec, cases)
     release = create_release_report(spec, report)
+    _add_provider_usage_warnings(release, [item[1] for item in normalized])
     args.output_dir.mkdir(parents=True, exist_ok=True)
     outputs = {
         "awa_cases.json": cases, "awa_eval_report.json": report,
