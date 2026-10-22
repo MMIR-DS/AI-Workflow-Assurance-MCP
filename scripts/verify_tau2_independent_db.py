@@ -190,6 +190,27 @@ def evaluate_snapshot_evidence(
     }
 
 
+
+def tamper_probe_is_detected(**evidence_kwargs: Any) -> bool:
+    """Confirm the normal evidence evaluator rejects a tampered recorded post-state."""
+    recorded_after = evidence_kwargs.get("recorded_after")
+    if not isinstance(recorded_after, dict):
+        return False
+    tampered = copy.deepcopy(recorded_after)
+    original_status = tampered.get("status")
+    tampered["status"] = (
+        "__AWA_TAMPER_PROBE__"
+        if original_status != "__AWA_TAMPER_PROBE__"
+        else "__AWA_TAMPER_PROBE_2__"
+    )
+    probe_kwargs = {**evidence_kwargs, "recorded_after": tampered}
+    probe = evaluate_snapshot_evidence(**probe_kwargs)
+    return bool(
+        probe["decision"] == "NO_GO"
+        and probe["checks"]["independent_db_state_matches_recorded_exchange_response"] is False
+    )
+
+
 def _find_trace_evidence(
     results: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], int]:
@@ -300,12 +321,20 @@ def main() -> int:
         write_execution_succeeded=write_execution_succeeded,
         other_database_entities_unchanged=no_collateral_mutations,
     )
-    # Built-in negative control: corrupt a copy of the recorded response and ensure the
-    # database comparison would reject it. This does not mutate the trace on disk.
-    tampered = copy.deepcopy(recorded_after)
-    before_status = tampered.get("status")
-    tampered["status"] = "__AWA_TAMPER_PROBE__" if before_status != "__AWA_TAMPER_PROBE__" else "__AWA_TAMPER_PROBE_2__"
-    tamper_probe_detected = db_after != tampered
+    # Built-in negative control: corrupt a copy of the recorded response and run the
+    # same evaluator used for the real decision. This does not mutate the trace on disk.
+    tamper_probe_detected = tamper_probe_is_detected(
+        recorded_before=recorded_before,
+        recorded_after=recorded_after,
+        db_before=db_before,
+        db_after=db_after,
+        args=exchange_args,
+        products=product_payloads,
+        valid_payment_method_ids=payment_ids,
+        source_commit_matches_trace=source_commit_matches,
+        write_execution_succeeded=write_execution_succeeded,
+        other_database_entities_unchanged=no_collateral_mutations,
+    )
     evaluated["checks"]["tamper_probe_is_detected"] = tamper_probe_detected
     evaluated["summary"]["passed_checks"] = sum(evaluated["checks"].values())
     evaluated["summary"]["total_checks"] = len(evaluated["checks"])

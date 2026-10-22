@@ -160,3 +160,8 @@ class SnapshotEvidenceDecisionTests(unittest.TestCase):
         changed = copy.deepcopy(self.after)
         changed["address"]["city"] = "Elsewhere"
         self.assertEqual(self.evaluate(db_after=changed)["decision"], "NO_GO")
+
+    def test_tamper_probe_uses_the_same_evidence_evaluator(self) -> None:
+        from scripts.verify_tau2_independent_db import tamper_probe_is_detected
+
+        self.assertTrue(tamper_probe_is_detected(**copy.deepcopy(self.kwargs)))
