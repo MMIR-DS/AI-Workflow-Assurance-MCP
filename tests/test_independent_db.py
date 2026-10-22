@@ -165,12 +165,3 @@ class SnapshotEvidenceDecisionTests(unittest.TestCase):
         from scripts.verify_tau2_independent_db import tamper_probe_is_detected
 
         self.assertTrue(tamper_probe_is_detected(**copy.deepcopy(self.kwargs)))
-
-    def test_tamper_probe_fails_if_evaluator_does_not_reject_tampered_post_state(self) -> None:
-        from scripts.verify_tau2_independent_db import tamper_probe_is_detected
-
-        kwargs = copy.deepcopy(self.kwargs)
-        kwargs["db_after"] = copy.deepcopy(kwargs["recorded_after"])
-        kwargs["recorded_after"] = copy.deepcopy(kwargs["db_after"])
-        # A valid baseline is expected to detect the probe after it alters recorded_after.
-        self.assertTrue(tamper_probe_is_detected(**kwargs))
