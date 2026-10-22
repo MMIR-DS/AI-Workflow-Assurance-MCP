@@ -255,9 +255,9 @@ def _payment_method_display_disclosed(
     # "ending in"/"last four" link. A generic mention of a brand is insufficient.
     pattern = (
         r"(?<![a-z0-9])" + re.escape(brand.casefold()) + r"(?![a-z0-9])"
-        + r"[^.!?;\\n]{0,48}"
-        + r"\\b(?:ending(?:\\s+in)?|last\\s+(?:four|4)(?:\\s+digits?)?)\\s+"
-        + re.escape(last_four) + r"(?!\\d)"
+        + r".{0,48}"
+        + r"\b(?:ending(?:\s+in)?|last\s+(?:four|4)(?:\s+digits?)?)\s+"
+        + re.escape(last_four) + r"(?!\d)"
     )
     return re.search(pattern, normalized, re.IGNORECASE) is not None
 
