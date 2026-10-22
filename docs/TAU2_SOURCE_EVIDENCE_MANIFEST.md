@@ -29,6 +29,7 @@ The command returns exit code 0 for a consistent `GO` report and 2 for a consist
 - Requires explicit confirmation that the write method's return value was not used for the decision.
 - Runs negative-control probes against pre-state status, post-state status, selected exchange items, and computed exchange price difference; each must trigger the relevant consistency gate and produce `NO_GO`.
 - Records each tamper-probe result in the report, then reconciles aggregate probe metadata with the corresponding check.
+- For current reports, validates that every per-field result is boolean, the declared field list matches those results, and a true aggregate means all probes passed. Legacy single-probe reports remain readable.
 - Preserves checks, snapshots, hashes, and source metadata without treating them as authenticated claims.
 
 ## Trust boundary
