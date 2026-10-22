@@ -28,10 +28,13 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert PROMPT_MARKER in patched
     assert "get_order_details" in patched
     assert "get_product_details" in patched
-    assert "Never request card numbers" in patched
+    assert "never request card numbers" in patched
     assert "single permitted exchange write" in patched
     assert "exact old item ID and replacement item ID" in patched
-    assert "exact payment_method_id string" in patched
+    assert "verified customer-safe payment descriptor" in patched
+    assert "never expose internal IDs" in patched
+    assert "returned status is \"exchange requested\"" in patched
+    assert "Do not say \"exchange completed\"" in patched
     assert "Price difference:" in patched
     assert "Use this exact disclosure structure" in patched
     assert "CRITICAL EXCHANGE GATE" in patched

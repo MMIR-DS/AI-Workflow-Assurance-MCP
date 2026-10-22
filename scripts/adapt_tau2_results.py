@@ -9,6 +9,7 @@ import argparse
 import json
 import math
 import os
+import re
 from collections import Counter
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
@@ -264,6 +265,39 @@ def _variant(product: dict[str, Any] | None, item_id: Any) -> dict[str, Any] | N
     return value if isinstance(value, dict) else None
 
 
+def _claims_exchange_fulfillment_completed(text: str) -> bool:
+    """Detect claims that physical fulfillment or the exchange itself is complete.
+
+    The observed Tau2 tool state is status="exchange requested". A request can be
+    successfully submitted while the item exchange remains pending fulfillment.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return False
+    patterns = (
+        re.compile(
+            r"\bexchange\b(?!\s+request\b)\s+(?:is\s+)?"
+            r"(?:complete|completed|fulfilled|finished)\b"
+        ),
+        re.compile(
+            r"\bexchange\b(?!\s+request\b)\s+"
+            r"(?:has\s+been|was|is)\s+"
+            r"(?:successfully\s+)?"
+            r"(?:processed|completed|fulfilled|finished)"
+            r"(?:\s+successfully)?\b"
+        ),
+        re.compile(r"\b(?:completed|fulfilled|finished)\s+exchange\b"),
+        re.compile(
+            r"\b(?:replacement|new)\s+(?:items?|products?)\s+"
+            r"(?:have\s+been|were|are)\s+"
+            r"(?:shipped|sent|dispatched|delivered)\b"
+        ),
+    )
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text.casefold()):
+        if any(pattern.search(sentence) for pattern in patterns):
+            return True
+    return False
+
+
 def _check_catalog(
     old_ids: list[Any], new_ids: list[Any], before: dict[str, Any] | None,
     products: dict[str, dict[str, Any]],
@@ -482,8 +516,13 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             "exchange request has been submitted", "exchange is complete", "exchange has been processed"
         ))
     )
-    # No claim is acceptable; a definitive completion claim without a write is not.
+    # A claim that a request was submitted requires an observed write result.
     notification_claim = not completion_claim or bool(exchange_calls)
+    # In this task, the tool records status="exchange requested": replacement
+    # items have not yet shipped, so fulfillment-complete wording is inaccurate
+    # even when the exchange request write itself succeeded.
+    if _claims_exchange_fulfillment_completed(assistant_text):
+        notification_claim = False
     no_transfer = not any("transfer_to_human" in name or "transfer_to_agent" in name for name in names)
     actual = {
         "identity_policy_respected": bool(auth and order_call and auth["index"] < order_call["index"] < exchange_index and authenticated_user and isinstance(before, dict) and str(before.get("user_id")) == authenticated_user),

@@ -145,6 +145,45 @@ def test_confirmation_accepts_affirmative_reply_to_details_disclosed_by_assistan
     assert case["actual"]["policy_violation_count"] == 0
     assert report["summary"]["pass_rate"] == 1.0
     assert release["decision"] == "GO"
+    assert case["actual"]["notification_claim_matches_contract"] is True
+
+
+
+
+def test_exchange_requested_state_rejects_fulfillment_complete_language() -> None:
+    results, spec = _load_inputs()
+    _set_complete_confirmation(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index
+        for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    final_message = next(
+        message
+        for message in reversed(messages[exchange_index + 1 :])
+        if message.get("role") == "assistant" and message.get("content")
+    )
+    final_message["content"] = (
+        "Your exchange has been successfully processed! "
+        "**Exchange Completed for Order #W2378156.** "
+        "You will receive a follow-up email shortly with instructions. "
+        "Your order status has been updated to exchange requested; "
+        "once the original items are received, the new items will be shipped."
+    )
+
+    case, metadata, report, release = evaluate_trace(results, spec)
+
+    assert metadata["task_completed"] is True
+    assert case["actual"]["final_order_status"] == "exchange requested"
+    assert case["actual"]["final_state_matches_expected"] is True
+    assert case["actual"]["notification_claim_matches_contract"] is False
+    assert report["summary"]["failed_checks"] >= 1
+    assert release["decision"] == "NO_GO"
 
 
 def test_confirmation_fails_closed_when_assistant_did_not_disclose_all_new_items() -> None:
