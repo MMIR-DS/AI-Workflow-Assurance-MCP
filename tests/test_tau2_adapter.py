@@ -124,6 +124,80 @@ def test_task0_trace_blocks_when_prewrite_disclosure_is_incomplete() -> None:
     assert metadata["independence_scope"]["release_decision_uses_tau2_action_checks"] is False
 
 
+def _set_customer_safe_payment_disclosure(results: dict) -> None:
+    """Use a verified brand + last-four descriptor instead of exposing an internal payment ID."""
+    _set_complete_confirmation(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    exchange_call = next(
+        call for call in messages[exchange_index].get("tool_calls", [])
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+    payment_id = exchange_call["arguments"]["payment_method_id"]
+    order_call = next(
+        call for message in messages for call in (message.get("tool_calls") or [])
+        if call.get("name") == "get_order_details"
+    )
+    order_result = next(
+        message for message in messages
+        if message.get("role") == "tool"
+        and str(message.get("id")) == str(order_call.get("id"))
+    )
+    owner_id = json.loads(order_result["content"])["user_id"]
+
+    assistant_confirmation = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "To confirm:" in str(message.get("content") or "")
+    )
+    assert payment_id in assistant_confirmation["content"]
+    assistant_confirmation["content"] = assistant_confirmation["content"].replace(
+        payment_id, "Mastercard ending in 2478"
+    )
+    user_confirmation = next(
+        message for message in messages
+        if message.get("role") == "user"
+        and "Yes, that's exactly right" in str(message.get("content") or "")
+    )
+    user_confirmation["content"] = "Yes, that's exactly right for both exchanges."
+
+    profile_call_id = "safe-payment-profile-lookup"
+    assistant_confirmation_index = messages.index(assistant_confirmation)
+    messages[assistant_confirmation_index:assistant_confirmation_index] = [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": profile_call_id,
+                "name": "get_user_details",
+                "arguments": {"user_id": owner_id},
+            }],
+        },
+        {
+            "role": "tool",
+            "id": profile_call_id,
+            "content": json.dumps({
+                "user_id": owner_id,
+                "payment_methods": {
+                    payment_id: {
+                        "id": payment_id,
+                        "source": "credit_card",
+                        "brand": "mastercard",
+                        "last_four": "2478",
+                    },
+                },
+            }),
+        },
+    ]
+
+
 def test_confirmation_accepts_affirmative_reply_to_details_disclosed_by_assistant() -> None:
     results, spec = _load_inputs()
     _set_complete_confirmation(results)
@@ -485,6 +559,39 @@ def test_full_database_invariant_rejects_mutated_product_or_other_order() -> Non
     assert other_database_entities_unchanged(before, mutated_order, "#W1") is False
 
 
+
+
+def test_confirmation_accepts_verified_customer_safe_payment_descriptor() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+
+    case, metadata, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["confirmation_policy_respected"] is True
+    assert case["actual"]["policy_violation_count"] == 0
+    assert report["summary"]["pass_rate"] == 1.0
+    assert release["decision"] == "GO"
+    assert metadata["independence_scope"]["live_payment_profile_was_queried"] is True
+
+
+def test_confirmation_rejects_unverified_customer_safe_payment_descriptor() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+    messages = results["simulations"][0]["messages"]
+    profile_message = next(
+        message for message in messages
+        if message.get("role") == "tool"
+        and "payment_methods" in str(message.get("content") or "")
+    )
+    profile = json.loads(profile_message["content"])
+    payment_id = next(iter(profile["payment_methods"]))
+    profile["payment_methods"][payment_id]["last_four"] = "9999"
+    profile_message["content"] = json.dumps(profile)
+
+    case, _, _, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["confirmation_policy_respected"] is False
+    assert release["decision"] == "NO_GO"
 
 
 def test_confirmation_fails_closed_when_assistant_does_not_disclose_exact_payment_method():
