@@ -28,7 +28,7 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert PROMPT_MARKER in patched
     assert "get_order_details" in patched
     assert "get_product_details" in patched
-    assert "Never request card numbers" in patched
+    assert "never request card numbers" in patched
     assert "single permitted exchange write" in patched
     assert "exact old item ID and replacement item ID" in patched
     assert "verified customer-safe payment descriptor" in patched
