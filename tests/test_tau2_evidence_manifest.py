@@ -27,7 +27,21 @@ def _valid_report() -> dict:
             "other_database_entities_unchanged": True,
             "write_count_in_trace": 1,
             "tool_return_value_used_for_decision": False,
-            "tamper_probe": {"mutated_field": "status", "detected": True},
+            "tamper_probe": {
+                "mutated_fields": [
+                    "recorded_before.status",
+                    "recorded_after.status",
+                    "recorded_after.exchange_items",
+                    "recorded_after.exchange_price_difference",
+                ],
+                "probe_results": {
+                    "recorded_before.status": True,
+                    "recorded_after.status": True,
+                    "recorded_after.exchange_items": True,
+                    "recorded_after.exchange_price_difference": True,
+                },
+                "detected": True,
+            },
         },
         "checks": checks,
         "summary": {
@@ -119,6 +133,35 @@ def test_manifest_rejects_tamper_probe_mismatch() -> None:
 
     with pytest.raises(ValueError, match="tamper probe metadata"):
         build_evidence_manifest(report)
+
+
+def test_manifest_rejects_false_per_field_probe_hidden_by_true_aggregate() -> None:
+    report = _valid_report()
+    report["database_evidence"]["tamper_probe"]["probe_results"]["recorded_after.status"] = False
+
+    with pytest.raises(ValueError, match="aggregate does not reconcile"):
+        build_evidence_manifest(report)
+
+
+def test_manifest_rejects_probe_field_list_mismatch() -> None:
+    report = _valid_report()
+    report["database_evidence"]["tamper_probe"]["mutated_fields"].remove("recorded_after.exchange_items")
+
+    with pytest.raises(ValueError, match="do not match per-field results"):
+        build_evidence_manifest(report)
+
+
+def test_manifest_accepts_legacy_single_probe_metadata() -> None:
+    report = _valid_report()
+    report["database_evidence"]["tamper_probe"] = {
+        "mutated_field": "status",
+        "detected": True,
+    }
+
+    manifest = build_evidence_manifest(report)
+
+    assert manifest["decision"] == "GO"
+    assert manifest["database_evidence"]["tamper_probe"]["mutated_field"] == "status"
 
 
 def test_manifest_omits_sensitive_fields_from_order_snapshots() -> None:
