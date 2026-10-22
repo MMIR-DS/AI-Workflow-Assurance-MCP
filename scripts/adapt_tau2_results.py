@@ -17,7 +17,17 @@ from typing import Any
 
 from ai_workflow_assurance_mcp.core import create_release_report, evaluate_suite
 from ai_workflow_assurance_mcp.tau2_constants import WRITE_TOOLS
-from ai_workflow_assurance_mcp.tau2_prewrite import _evaluate_exchange_confirmation_context
+from ai_workflow_assurance_mcp.tau2_prewrite import (
+    _confirmation_references_consistent,
+    _evaluate_exchange_confirmation_context,
+    _is_affirmative,
+    _latest_blocked_write_result_index,
+)
+from ai_workflow_assurance_mcp.tau2_prewrite_exchange import (
+    _customer_safe_exchange_disclosure_matches,
+    _payment_method_display_disclosed,
+    _semantic_exchange_disclosure_matches,
+)
 
 EXPECTED_ORDER_KEYS = {
     "order_id", "user_id", "address", "items", "status", "fulfillments",
@@ -441,7 +451,9 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     origins_present = bool(old_ids) and all(counts[item_id] >= n for item_id, n in requested_counts.items())
     catalog_ok, computed_delta, pair_evidence = _check_catalog(old_ids, new_ids, before, products)
 
-    # Use exactly the same disclosure/affirmation policy as the pre-write guard.
+    # Mirror the live pre-write guard, including its verified customer-safe
+    # payment descriptor path. Internal payment IDs are tool arguments, not
+    # customer-facing disclosure requirements.
     prior_messages = messages[:exchange_index]
     last_assistant_text_index = -1
     last_assistant_text = ""
@@ -470,11 +482,52 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         payment_id,
         float(computed_delta) if computed_delta is not None else None,
     )
+    owner_id = before.get("user_id") if isinstance(before, dict) else None
+    price_difference_disclosed = confirmation_context["price_difference_disclosed"]
+    semantic_disclosure_valid = _semantic_exchange_disclosure_matches(
+        last_assistant_text,
+        order_id,
+        old_ids,
+        new_ids,
+        payment_id,
+        float(computed_delta) if computed_delta is not None else None,
+        before_items,
+        products,
+    )
+    payment_display_disclosed = _payment_method_display_disclosed(
+        messages, owner_id, payment_id, last_assistant_text,
+    )
+    customer_safe_disclosure_valid = _customer_safe_exchange_disclosure_matches(
+        last_assistant_text,
+        order_id,
+        old_ids,
+        new_ids,
+        payment_display_disclosed,
+        price_difference_disclosed,
+    )
+    disclosure_valid = bool(
+        confirmation_context["disclosure_valid"]
+        or semantic_disclosure_valid
+        or customer_safe_disclosure_valid
+    )
+    latest_blocked_attempt_index = _latest_blocked_write_result_index(
+        prior_messages, order_id, "exchange_delivered_order_items",
+    )
+    reconfirmed_after_block = (
+        latest_blocked_attempt_index < 0
+        or last_assistant_text_index > latest_blocked_attempt_index
+    )
     confirmation = bool(
         last_assistant_text_index >= 0
         and last_user_index > last_assistant_text_index
         and last_user_index < exchange_index
-        and confirmation_context["confirmation_valid"]
+        and disclosure_valid
+        and price_difference_disclosed
+        and _is_affirmative(last_user_text)
+        and _confirmation_references_consistent(
+            last_user_text, order_id, old_ids, new_ids, payment_id,
+        )
+        and reconfirmed_after_block
     )
 
     original_payment_methods = {
@@ -735,7 +788,14 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
             "release_decision_uses_tau2_db_match": False,
             "release_decision_uses_tau2_action_checks": False,
             "post_state_is_an_independent_database_reread": False,
-            "live_payment_profile_was_queried": False,
+            "live_payment_profile_was_queried": any(
+                call["name"] == "get_user_details"
+                and isinstance(call.get("arguments"), dict)
+                and call["arguments"].get("user_id") == owner_id
+                and isinstance(result(call), dict)
+                and result(call).get("user_id") == owner_id
+                for call in calls
+            ),
         },
         "tau2_oracle_for_comparison_only": {
             "reward": reward_info.get("reward"),
