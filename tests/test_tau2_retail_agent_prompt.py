@@ -32,6 +32,13 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "single permitted exchange write" in patched
     assert "exact old item ID and replacement item ID" in patched
     assert "verified customer-safe payment descriptor" in patched
+    assert "never expose internal payment identifiers" in patched
+    assert "credit_card_9513926" not in patched
+    assert "<EXACT_PAYMENT_METHOD_ID>" not in patched
+    assert "refund to <VERIFIED_CARD_DESCRIPTOR>" in patched
+    assert "MUST contain no tool calls" in patched
+    assert "wait for a separate user message" in patched
+    assert "Never combine the confirmation question and exchange_delivered_order_items" in patched
     assert "never expose internal IDs" in patched
     assert "returned status is \"exchange requested\"" in patched
     assert "Do not say \"exchange completed\"" in patched
