@@ -45,6 +45,7 @@ def test_cloudflare_prompt_makes_prewrite_no_go_a_terminal_stop() -> None:
     assert "Do not bypass, reset, or work around the guard" in prompt_patch
     assert prompt_patch.index(hard_stop) < prompt_patch.index("CRITICAL EXCHANGE GATE")
 
+
 def test_cloudflare_runner_requires_credentials_and_stays_bounded() -> None:
     script = (
         ROOT / "scripts" / "run_tau2_retail_smoke_cloudflare.sh"
