@@ -34,6 +34,17 @@ def test_cloudflare_tau2_smoke_is_manual_and_uses_openai_compatible_route() -> N
     assert "max-concurrency" not in workflow  # concurrency is enforced by the runner
 
 
+def test_cloudflare_prompt_makes_prewrite_no_go_a_terminal_stop() -> None:
+    prompt_patch = (
+        ROOT / "scripts" / "patch_tau2_retail_agent_prompt.py"
+    ).read_text(encoding="utf-8")
+    hard_stop = "<" + "!-- AWA_PREWRITE_NO_GO_HARD_STOP_V1 -->"
+    assert hard_stop in prompt_patch
+    assert "write path for this trial is permanently closed" in prompt_patch
+    assert "Do not call any write tool again during this trial" in prompt_patch
+    assert "Do not bypass, reset, or work around the guard" in prompt_patch
+    assert prompt_patch.index(hard_stop) < prompt_patch.index("CRITICAL EXCHANGE GATE")
+
 def test_cloudflare_runner_requires_credentials_and_stays_bounded() -> None:
     script = (
         ROOT / "scripts" / "run_tau2_retail_smoke_cloudflare.sh"
