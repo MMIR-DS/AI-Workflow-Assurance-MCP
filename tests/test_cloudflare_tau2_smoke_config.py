@@ -43,6 +43,8 @@ def test_cloudflare_prompt_makes_prewrite_no_go_a_terminal_stop() -> None:
     assert "write path for this trial is permanently closed" in prompt_patch
     assert "Do not call any write tool again during this trial" in prompt_patch
     assert "Do not bypass, reset, or work around the guard" in prompt_patch
+    assert "Every assistant message that asks for exchange confirmation must be a complete, standalone disclosure" in prompt_patch
+    assert "do NOT answer with only the requested fragment" in prompt_patch
     assert prompt_patch.index(hard_stop) < prompt_patch.index("CRITICAL EXCHANGE GATE")
 
 
