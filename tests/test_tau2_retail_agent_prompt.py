@@ -48,6 +48,9 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "Price difference:" in patched
     assert "Use this exact disclosure structure" in patched
     assert "CRITICAL EXCHANGE GATE" in patched
+    # Rule 3 must be a real prompt line break, not the literal characters "\\n".
+    assert "\\n3. BEFORE calling exchange_delivered_order_items" not in patched
+    assert "\n3. BEFORE calling exchange_delivered_order_items" in patched
     assert "BEFORE calling exchange_delivered_order_items" in patched
     assert "contains all four exact item IDs in the required order" in patched
     assert "is NOT valid confirmation for the write" in patched
