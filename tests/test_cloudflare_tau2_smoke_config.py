@@ -48,6 +48,9 @@ def test_cloudflare_prompt_makes_prewrite_no_go_a_terminal_stop() -> None:
     assert "FINAL RESPONSE SAFETY RULE" in prompt_patch
     assert '"Your exchange has been successfully processed"' in prompt_patch
     assert '"Status: exchange requested."' in prompt_patch
+    assert "Use this minimal final-response template" in prompt_patch
+    assert "Do not add a refund-processing deadline" in prompt_patch
+    assert "Do not claim that an email was already sent" in prompt_patch
     assert prompt_patch.index(hard_stop) < prompt_patch.index("CRITICAL EXCHANGE GATE")
 
 
