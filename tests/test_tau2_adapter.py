@@ -370,6 +370,36 @@ def test_exchange_request_rejects_indirect_on_the_way_shipping_commitment() -> N
     assert release["decision"] == "NO_GO"
 
 
+def test_exchange_request_rejects_unverified_new_items_arrival_promise() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    last_assistant_message = next(
+        message
+        for message in reversed(messages[exchange_index + 1 :])
+        if message.get("role") == "assistant" and message.get("content")
+    )
+    # Observed live wording: a future receipt claim without a delivery date.
+    last_assistant_message["content"] = (
+        "You're very welcome. You should receive your new items soon. Have a great day!"
+    )
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["notification_claim_matches_contract"] is False
+    assert case["actual"]["policy_violation_count"] == 1
+    assert report["summary"]["failed_checks"] >= 1
+    assert release["decision"] == "NO_GO"
+
+
 def test_confirmation_fails_closed_when_assistant_did_not_disclose_all_new_items() -> None:
     results, spec = _load_inputs()
     _set_complete_confirmation(results)
