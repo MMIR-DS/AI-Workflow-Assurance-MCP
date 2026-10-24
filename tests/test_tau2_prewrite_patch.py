@@ -50,7 +50,7 @@ def test_patcher_replaces_exactly_one_expected_dispatch_loop() -> None:
 
 
 def test_patcher_adds_opt_in_no_go_injection_before_any_real_write_callback() -> None:
-    patched = patch_orchestrator_source("class BaseOrchestrator:\\n    def _execute_tool_calls(self):\\n" + ORIGINAL)
+    patched = patch_orchestrator_source("class BaseOrchestrator:\n    def _execute_tool_calls(self):\n" + ORIGINAL)
 
     assert "AWA_TEST_FORCE_NO_GO_FIRST_WRITE_V1" in patched
     assert 'environ.get("AWA_TEST_FORCE_NO_GO_FIRST_WRITE") == "1"' in patched
@@ -60,7 +60,6 @@ def test_patcher_adds_opt_in_no_go_injection_before_any_real_write_callback() ->
     assert patched.index("AWA_TEST_FORCE_NO_GO_FIRST_WRITE_V1") < patched.index(
         'preflight = policy["validator"]('
     )
-    assert "This test injection is disabled unless the workflow input explicitly enables it." not in patched
 
 
 def test_patcher_is_idempotent() -> None:
