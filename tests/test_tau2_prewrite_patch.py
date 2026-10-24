@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from scripts.install_tau2_prewrite_guard import (
-    ORIGINAL,
-    PATCH_MARKER,
-    REPLACEMENT,
     AGENT_EMPTY_RESPONSE_PATCH_MARKER,
     AGENT_GENERATE_ORIGINAL,
     AGENT_GENERATE_REPLACEMENT,
+    ORIGINAL,
+    PATCH_MARKER,
+    REPLACEMENT,
     patch_agent_empty_response_source,
     patch_orchestrator_source,
 )
