@@ -38,11 +38,13 @@ def test_cloudflare_prompt_makes_prewrite_no_go_a_terminal_stop() -> None:
     prompt_patch = (
         ROOT / "scripts" / "patch_tau2_retail_agent_prompt.py"
     ).read_text(encoding="utf-8")
-    hard_stop = "<" + "!-- AWA_PREWRITE_NO_GO_HARD_STOP_V1 -->"
+    hard_stop = "<" + "!-- AWA_PREWRITE_NO_GO_HARD_STOP_V2 -->"
     assert hard_stop in prompt_patch
     assert "write path for this trial is permanently closed" in prompt_patch
     assert "Do not call any write tool again during this trial" in prompt_patch
     assert "Do not bypass, reset, or work around the guard" in prompt_patch
+    assert "The very next assistant turn MUST be a text-only customer message" in prompt_patch
+    assert "Do not rely on the transfer tool's automatic" in prompt_patch
     assert "Every assistant message that asks for exchange confirmation must be a complete, standalone disclosure" in prompt_patch
     assert "do NOT answer with only the requested fragment" in prompt_patch
     assert "FINAL RESPONSE SAFETY RULE" in prompt_patch
