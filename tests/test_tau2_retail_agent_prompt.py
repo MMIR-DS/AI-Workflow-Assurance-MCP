@@ -64,6 +64,9 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "AWA_PREWRITE_NO_GO_HARD_STOP_V2" in patched
     assert "The very next assistant turn MUST be a text-only customer message" in patched
     assert "Do not rely on the transfer tool's automatic" in patched
+    assert "the assistant content must be empty and the only action is the transfer tool call" in patched
+    assert "Never put customer-facing prose and a tool call in the same assistant message" in patched
+    assert "after the successful tool result" in patched
     assert "Old Item ID: <OLD_ITEM_1>" in patched
     assert "Please confirm both old-to-new item pairs" in patched
     assert "Do not include product IDs or other 8+-digit identifiers" in patched
