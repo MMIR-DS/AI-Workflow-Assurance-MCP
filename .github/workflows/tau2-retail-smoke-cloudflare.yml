@@ -9,6 +9,12 @@ on:
         default: "20"
         type: choice
         options: ["20", "40", "60"]
+      test_mode:
+        description: "Use controlled_no_go to intercept the first exchange write before the environment callback"
+        required: true
+        default: "standard"
+        type: choice
+        options: ["standard", "controlled_no_go"]
 
 permissions:
   contents: read
@@ -89,19 +95,40 @@ jobs:
       - name: Run one retail task and one trial (bounded; Cloudflare Workers AI)
         working-directory: tau2-bench
         shell: bash
+        env:
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ inputs.test_mode == 'controlled_no_go' && '1' || '0' }}
         run: bash ../scripts/run_tau2_retail_smoke_cloudflare.sh
-      - name: Generate AWA case, evaluation, and release reports
-        if: success()
+      - name: Generate AWA reports and verify controlled NO_GO mode
+        if: ${{ success() || inputs.test_mode == 'controlled_no_go' }}
         env:
           AWA_TAU2_PROMPT_MODE: ${{ steps.patch_tau2_prompt.outputs.prompt_mode }}
           AWA_TAU2_PROMPT_MARKER: ${{ steps.patch_tau2_prompt.outputs.prompt_marker }}
           AWA_TAU2_USER_PROMPT_MODE: ${{ steps.patch_tau2_user_completion.outputs.prompt_mode }}
           AWA_TAU2_USER_PROMPT_MARKER: ${{ steps.patch_tau2_user_completion.outputs.prompt_marker }}
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ inputs.test_mode == 'controlled_no_go' && '1' || '0' }}
+        shell: bash
         run: |
+          set +e
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
             --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
             --spec examples/tau2_retail_workflow.json \
             --output-dir awa-adapter-output
+          adapter_status=$?
+          set -e
+
+          if [[ "$AWA_TEST_FORCE_NO_GO_FIRST_WRITE" == "1" ]]; then
+            if [[ "$adapter_status" -ne 2 ]]; then
+              echo "::error::Controlled NO_GO mode expected the AWA adapter to return exit code 2; got $adapter_status."
+              exit 1
+            fi
+            PYTHONPATH=.:src python scripts/assert_tau2_controlled_no_go.py \
+              --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
+              --release-report awa-adapter-output/awa_release_report.json \
+              --metadata awa-adapter-output/adapter_metadata.json \
+              --output awa-adapter-output/controlled_no_go_report.json
+          else
+            exit "$adapter_status"
+          fi
       - name: Preserve trace, result, and logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
