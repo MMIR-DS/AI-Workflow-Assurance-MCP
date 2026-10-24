@@ -33,6 +33,11 @@ AGENT_GENERATE_REPLACEMENT = """            # AWA_AGENT_EMPTY_RESPONSE_RETRY_V1:
                 )
                 response_content = candidate_msg.content
                 has_text = isinstance(response_content, str) and bool(response_content.strip())
+                # Some OpenAI-compatible responses encode a normal text reply as
+                # tool_calls=[] instead of omitting tool_calls. Tau2 checks
+                # "is not None" and then wraps zero tool results, causing IndexError.
+                if has_text and candidate_msg.tool_calls == []:
+                    candidate_msg.tool_calls = None
                 has_tool_calls = bool(candidate_msg.tool_calls)
                 if has_text or has_tool_calls:
                     agent_msg, self.agent_state = candidate_msg, candidate_state
