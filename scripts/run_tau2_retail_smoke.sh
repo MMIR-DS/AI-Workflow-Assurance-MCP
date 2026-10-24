@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}"
+: "${GEMINI_API_KEY:?GEMINI_API_KEY is required}"
 : "${MODEL:?MODEL is required}"
 : "${MAX_STEPS:?MAX_STEPS is required}"
 
