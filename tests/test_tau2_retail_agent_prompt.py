@@ -44,6 +44,8 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "Do not say \"exchange completed\"" in patched
     assert "Do not promise a refund deadline" in patched
     assert "Do not promise a refund deadline, a specific shipment sequence or date" in patched
+    assert "AFTER THE OUTCOME IS GIVEN" in patched
+    assert "Do not infer operational steps from common retail practice" in patched
     assert "Do not infer the \"5 to 7 business days\" timing" in patched
     assert "Price difference:" in patched
     assert "Use this exact disclosure structure" in patched
