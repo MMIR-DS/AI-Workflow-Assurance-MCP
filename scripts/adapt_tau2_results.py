@@ -329,6 +329,12 @@ def _claims_unverified_exchange_commitments(text: str) -> bool:
             r"(?:shipped|sent|dispatched|delivered)\b"
         ),
         re.compile(
+            r"\b(?:your\s+)?(?:new|replacement)\s+[^.!?\n]{1,160}?"
+            r"\b(?:will|shall|should|are\s+going\s+to)\s+"
+            r"(?:be\s+)?(?:on\s+(?:their|the)\s+way|"
+            r"shipped|sent|dispatched|delivered)\b"
+        ),
+        re.compile(
             r"\b(?:email|message|notification)\b.{0,50}"
             r"\b(?:shortly|soon|within\s+\d+\s*(?:business\s+)?days?)\b"
         ),
