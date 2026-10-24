@@ -18,6 +18,35 @@ USER_GENERATE_ORIGINAL = """        assistant_message = generate(
             **self.llm_args,
         )"""
 
+AGENT_EMPTY_RESPONSE_PATCH_MARKER = "AWA_AGENT_EMPTY_RESPONSE_RETRY_V1"
+AGENT_GENERATE_ORIGINAL = """            agent_msg, self.agent_state = self.agent.generate_next_message(
+                self.message, self.agent_state
+            )
+            agent_msg.validate()"""
+AGENT_GENERATE_REPLACEMENT = """            # AWA_AGENT_EMPTY_RESPONSE_RETRY_V1: providers can return an empty
+            # assistant response with tool_calls=[]; Tau2 treats [] as a tool call
+            # and later crashes while wrapping an empty tool-result list. Retry once.
+            agent_msg = None
+            for attempt in range(2):
+                candidate_msg, candidate_state = self.agent.generate_next_message(
+                    self.message, self.agent_state
+                )
+                response_content = candidate_msg.content
+                has_text = isinstance(response_content, str) and bool(response_content.strip())
+                has_tool_calls = bool(candidate_msg.tool_calls)
+                if has_text or has_tool_calls:
+                    agent_msg, self.agent_state = candidate_msg, candidate_state
+                    break
+                if attempt == 0:
+                    logger.warning(
+                        "Agent returned an empty response with no tool calls; retrying once."
+                    )
+            if agent_msg is None:
+                raise ValueError(
+                    "Agent returned an empty response with no tool calls after one retry."
+                )
+            agent_msg.validate()"""
+
 USER_GENERATE_REPLACEMENT = """        # AWA_USER_EMPTY_RESPONSE_RETRY_V1: do not turn an empty provider reply
         # into an invalid UserMessage. Retry once; never synthesize user content.
         assistant_message = None
@@ -432,6 +461,27 @@ def patch_user_empty_response_source(source: str) -> str:
     return source.replace(USER_GENERATE_ORIGINAL, USER_GENERATE_REPLACEMENT, 1)
 
 
+
+def patch_agent_empty_response_source(source: str) -> str:
+    """Retry one empty agent response before Tau2 enters its empty-tool-result path."""
+    if AGENT_EMPTY_RESPONSE_PATCH_MARKER in source:
+        if (
+            source.count(AGENT_EMPTY_RESPONSE_PATCH_MARKER) != 1
+            or source.count(AGENT_GENERATE_REPLACEMENT) != 1
+            or AGENT_GENERATE_ORIGINAL in source
+        ):
+            raise ValueError(
+                "Found the agent empty-response marker, but the complete reviewed "
+                "replacement is not intact. Refusing to trust a partial patch."
+            )
+        return source
+    if source.count(AGENT_GENERATE_ORIGINAL) != 1:
+        raise ValueError(
+            "Expected exactly one unmodified Tau2 agent-generation block; "
+            "the upstream source may have changed. Refusing to patch."
+        )
+    return source.replace(AGENT_GENERATE_ORIGINAL, AGENT_GENERATE_REPLACEMENT, 1)
+
 def install(tau2_root: Path) -> Path:
     """Verify the pinned checkout and install the guard into its orchestrator."""
     revision = subprocess.run(
@@ -454,7 +504,9 @@ def install(tau2_root: Path) -> Path:
     user_source = user_target.read_text(encoding="utf-8")
 
     # Validate all upstream source blocks before writing any file.
-    patched_source = patch_orchestrator_source(original_source)
+    patched_source = patch_agent_empty_response_source(
+        patch_orchestrator_source(original_source)
+    )
     patched_replay_source = patch_environment_replay_source(replay_source)
     patched_user_source = patch_user_empty_response_source(user_source)
 
@@ -465,6 +517,7 @@ def install(tau2_root: Path) -> Path:
     if patched_user_source != user_source:
         user_target.write_text(patched_user_source, encoding="utf-8")
     print(f"Installed {PATCH_MARKER} in {target}")
+    print(f"Installed {AGENT_EMPTY_RESPONSE_PATCH_MARKER} in {target}")
     print(f"Installed {REPLAY_PATCH_MARKER} in {replay_target}")
     print(f"Installed {USER_EMPTY_RESPONSE_PATCH_MARKER} in {user_target}")
     return target
