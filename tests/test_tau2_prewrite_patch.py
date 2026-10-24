@@ -5,7 +5,6 @@ import pytest
 from scripts.install_tau2_prewrite_guard import (
     AGENT_EMPTY_RESPONSE_PATCH_MARKER,
     AGENT_GENERATE_ORIGINAL,
-    AGENT_GENERATE_REPLACEMENT,
     ORIGINAL,
     PATCH_MARKER,
     REPLACEMENT,
