@@ -100,15 +100,15 @@ def patch_no_go_handoff_runtime(source: str) -> str:
             raise ValueError("NO_GO handoff runtime marker must appear exactly once.")
         return source
 
-    anchor = \"\"\"        assistant_message = generate(
+    anchor = """        assistant_message = generate(
             model=self.llm,
             tools=self.tools,
             messages=messages,
             call_name="agent_response",
             **self.llm_args,
         )
-        return assistant_message\"\"\"
-    replacement = \"\"\"        assistant_message = generate(
+        return assistant_message"""
+    replacement = """        assistant_message = generate(
             model=self.llm,
             tools=self.tools,
             messages=messages,
@@ -160,7 +160,7 @@ def patch_no_go_handoff_runtime(source: str) -> str:
                 "to preserve the half-duplex message/tool boundary."
             )
             assistant_message.content = ""
-        return assistant_message\"\"\"
+        return assistant_message"""
     if source.count(anchor) != 1:
         raise ValueError(
             "Expected exactly one pinned Tau2 LLMAgent response block; "
