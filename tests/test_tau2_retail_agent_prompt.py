@@ -127,11 +127,15 @@ RUNTIME_BASELINE = '''class LLMAgent:
 '''
 
 
-def test_no_go_runtime_patch_clears_prose_from_transfer_call() -> None:
+def test_no_go_runtime_patch_inserts_no_change_reply_before_handoff() -> None:
     patched = patch_no_go_handoff_runtime(RUNTIME_BASELINE)
 
     assert RUNTIME_PATCH_MARKER in patched
     assert '"AWA_PREWRITE_NO_GO:"' in patched
+    assert '"no changes were made"' in patched
+    assert "no_change_reply_present" in patched
+    assert "assistant_message.tool_calls = []" in patched
+    assert "I couldn't complete the requested change. No changes were made." in patched
     assert 'getattr(call, "name", None) == "transfer_to_human_agents"' in patched
     assert 'assistant_message.content = ""' in patched
     assert "preserve the half-duplex message/tool boundary" in patched

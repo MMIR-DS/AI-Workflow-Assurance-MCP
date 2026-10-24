@@ -53,7 +53,7 @@ def test_cloudflare_prompt_makes_prewrite_no_go_a_terminal_stop() -> None:
     assert "Use this minimal final-response template" in prompt_patch
     assert "Do not add a refund-processing deadline" in prompt_patch
     assert "Do not claim that an email was already sent" in prompt_patch
-    assert "RUNTIME_PATCH_MARKER = \"AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V1\"" in prompt_patch
+    assert "RUNTIME_PATCH_MARKER = \"AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V2\"" in prompt_patch
     assert "def patch_no_go_handoff_runtime(source: str) -> str:" in prompt_patch
     assert 'assistant_message.content = ""' in prompt_patch
     assert prompt_patch.index(hard_stop) < prompt_patch.index("CRITICAL EXCHANGE GATE")

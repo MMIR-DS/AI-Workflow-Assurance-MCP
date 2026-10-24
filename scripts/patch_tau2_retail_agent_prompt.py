@@ -13,7 +13,7 @@ from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
 PROMPT_MARKER = "AWA_RETAIL_LOOKUP_GUIDANCE_V1"
-RUNTIME_PATCH_MARKER = "AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V1"
+RUNTIME_PATCH_MARKER = "AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V2"
 AGENT_FILE = Path("src/tau2/agent/llm_agent.py")
 
 PROMPT_PATTERN = re.compile(
@@ -88,49 +88,71 @@ def patch_agent_source(source: str) -> str:
 
 
 def patch_no_go_handoff_runtime(source: str) -> str:
-    """Enforce a tool-only transfer after a pre-write NO_GO at the agent boundary.
+    """Enforce an explicit no-change reply before a post-NO_GO handoff.
 
-    Prompt instructions alone have not prevented the model from mixing customer
-    prose with the transfer tool call. Preserve the preceding text-only no-change
-    response, but clear content on the later transfer turn so the half-duplex
-    protocol is enforced even when the model emits both fields.
+    Prompt instructions alone have not reliably produced both required turns.
+    At the agent boundary, make the first post-denial response a text-only
+    no-change message. On a later turn, allow a single transfer call and clear
+    any prose attached to that call.
     """
     if RUNTIME_PATCH_MARKER in source:
         if source.count(RUNTIME_PATCH_MARKER) != 1:
             raise ValueError("NO_GO handoff runtime marker must appear exactly once.")
         return source
 
-    anchor = """        assistant_message = generate(
+    anchor = \"\"\"        assistant_message = generate(
             model=self.llm,
             tools=self.tools,
             messages=messages,
             call_name="agent_response",
             **self.llm_args,
         )
-        return assistant_message"""
-    replacement = """        assistant_message = generate(
+        return assistant_message\"\"\"
+    replacement = \"\"\"        assistant_message = generate(
             model=self.llm,
             tools=self.tools,
             messages=messages,
             call_name="agent_response",
             **self.llm_args,
         )
-        # AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V1
-        denied_write_is_in_history = any(
-            str(getattr(history_message, "role", "")) == "tool"
+        # AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V2
+        denied_write_indices = [
+            index
+            for index, history_message in enumerate(state.messages)
+            if str(getattr(history_message, "role", "")) == "tool"
             and str(getattr(history_message, "content", "") or "").startswith(
                 "AWA_PREWRITE_NO_GO:"
             )
-            for history_message in state.messages
+        ]
+        denied_write_index = max(denied_write_indices, default=-1)
+        no_change_reply_present = any(
+            index > denied_write_index
+            and str(getattr(history_message, "role", "")) == "assistant"
+            and not (getattr(history_message, "tool_calls", None) or [])
+            and "no changes were made"
+            in str(getattr(history_message, "content", "") or "").casefold()
+            for index, history_message in enumerate(state.messages)
         )
+        tool_calls = list(getattr(assistant_message, "tool_calls", None) or [])
         transfer_calls = [
             call
-            for call in (getattr(assistant_message, "tool_calls", None) or [])
+            for call in tool_calls
             if getattr(call, "name", None) == "transfer_to_human_agents"
         ]
+        if denied_write_index >= 0 and not no_change_reply_present:
+            logger.warning(
+                "AWA replaced the first post-NO_GO response with a text-only "
+                "no-change message before any handoff."
+            )
+            assistant_message.content = (
+                "I couldn't complete the requested change. No changes were made."
+            )
+            assistant_message.tool_calls = []
+            return assistant_message
         if (
-            denied_write_is_in_history
+            denied_write_index >= 0
             and transfer_calls
+            and len(tool_calls) == 1
             and str(getattr(assistant_message, "content", "") or "").strip()
         ):
             logger.warning(
@@ -138,7 +160,7 @@ def patch_no_go_handoff_runtime(source: str) -> str:
                 "to preserve the half-duplex message/tool boundary."
             )
             assistant_message.content = ""
-        return assistant_message"""
+        return assistant_message\"\"\"
     if source.count(anchor) != 1:
         raise ValueError(
             "Expected exactly one pinned Tau2 LLMAgent response block; "
