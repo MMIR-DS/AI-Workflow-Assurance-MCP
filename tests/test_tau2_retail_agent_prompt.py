@@ -67,6 +67,9 @@ def test_patch_adds_retail_lookup_guidance_without_removing_base_policy() -> Non
     assert "the assistant content must be empty and the only action is the transfer tool call" in patched
     assert "Never put customer-facing prose and a tool call in the same assistant message" in patched
     assert "after the successful tool result" in patched
+    assert "the entire assistant message that asks for exchange confirmation must contain only the exact disclosure in rule 2" in patched
+    assert 'Do not prepend a "Here are the options" list, a separate price summary, or explanatory text' in patched
+    assert "each of the four old/new item IDs exactly once in the prescribed order" in patched
     assert "Old Item ID: <OLD_ITEM_1>" in patched
     assert "Please confirm both old-to-new item pairs" in patched
     assert "Do not include product IDs or other 8+-digit identifiers" in patched
