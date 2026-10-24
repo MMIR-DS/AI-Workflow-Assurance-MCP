@@ -5,22 +5,32 @@ on:
     paths:
       - ".github/workflows/tau2-prewrite-guard.yml"
       - ".github/workflows/tau2-retail-smoke.yml"
+      - ".github/workflows/tau2-retail-smoke-cloudflare.yml"
       - "scripts/install_tau2_prewrite_guard.py"
+      - "scripts/patch_tau2_retail_agent_prompt.py"
+      - "tests/test_tau2_retail_agent_prompt.py"
       - "scripts/smoke_test_tau2_prewrite_guard.py"
+      - "scripts/assert_tau2_controlled_no_go.py"
       - "src/ai_workflow_assurance_mcp/prewrite_guard.py"
       - "src/ai_workflow_assurance_mcp/tau2_prewrite.py"
       - "tests/test_tau2_prewrite.py"
+      - "tests/test_tau2_controlled_no_go.py"
       - "tests/test_tau2_prewrite_patch.py"
   push:
     branches: [main]
     paths:
       - ".github/workflows/tau2-prewrite-guard.yml"
       - ".github/workflows/tau2-retail-smoke.yml"
+      - ".github/workflows/tau2-retail-smoke-cloudflare.yml"
       - "scripts/install_tau2_prewrite_guard.py"
+      - "scripts/patch_tau2_retail_agent_prompt.py"
+      - "tests/test_tau2_retail_agent_prompt.py"
       - "scripts/smoke_test_tau2_prewrite_guard.py"
+      - "scripts/assert_tau2_controlled_no_go.py"
       - "src/ai_workflow_assurance_mcp/prewrite_guard.py"
       - "src/ai_workflow_assurance_mcp/tau2_prewrite.py"
       - "tests/test_tau2_prewrite.py"
+      - "tests/test_tau2_controlled_no_go.py"
       - "tests/test_tau2_prewrite_patch.py"
 
 permissions:
