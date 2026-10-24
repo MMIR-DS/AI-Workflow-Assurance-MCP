@@ -154,6 +154,9 @@ def assess_controlled_no_go_trace(
     transfer_call_indices = [call["message_index"] for call in transfer_calls]
     transfer_tool_only = bool(transfer_calls) and all(
         not str(messages[call["message_index"]].get("content") or "").strip()
+        and len(messages[call["message_index"]].get("tool_calls") or []) == 1
+        and str((messages[call["message_index"]].get("tool_calls") or [{}])[0].get("name", ""))
+        == "transfer_to_human_agents"
         for call in transfer_calls
     )
     transfer_results = [tool_results.get(call["id"]) for call in transfer_calls]

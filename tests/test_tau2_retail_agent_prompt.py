@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from scripts.patch_tau2_retail_agent_prompt import (
     PROMPT_MARKER,
+    RUNTIME_PATCH_MARKER,
     _write_github_outputs,
     patch_agent_source,
+    patch_no_go_handoff_runtime,
 )
 
 BASELINE = '''from typing import Optional
@@ -103,9 +105,50 @@ def test_patch_writes_prompt_provenance_to_github_step_outputs(tmp_path) -> None
     assert output_path.read_text(encoding="utf-8").splitlines() == [
         "prompt_mode=patched",
         f"prompt_marker={PROMPT_MARKER}",
+        f"handoff_runtime_marker={RUNTIME_PATCH_MARKER}",
     ]
 
 
 def test_prompt_output_helper_is_optional_outside_github_actions(tmp_path) -> None:
     _write_github_outputs(None)
     assert list(tmp_path.iterdir()) == []
+
+
+RUNTIME_BASELINE = '''class LLMAgent:
+    def _generate_next_message(self, message, state):
+        assistant_message = generate(
+            model=self.llm,
+            tools=self.tools,
+            messages=messages,
+            call_name="agent_response",
+            **self.llm_args,
+        )
+        return assistant_message
+'''
+
+
+def test_no_go_runtime_patch_clears_prose_from_transfer_call() -> None:
+    patched = patch_no_go_handoff_runtime(RUNTIME_BASELINE)
+
+    assert RUNTIME_PATCH_MARKER in patched
+    assert '"AWA_PREWRITE_NO_GO:"' in patched
+    assert 'getattr(call, "name", None) == "transfer_to_human_agents"' in patched
+    assert 'assistant_message.content = ""' in patched
+    assert "preserve the half-duplex message/tool boundary" in patched
+
+
+def test_no_go_runtime_patch_is_idempotent() -> None:
+    once = patch_no_go_handoff_runtime(RUNTIME_BASELINE)
+    twice = patch_no_go_handoff_runtime(once)
+
+    assert twice == once
+    assert twice.count(RUNTIME_PATCH_MARKER) == 1
+
+
+def test_no_go_runtime_patch_rejects_unknown_llm_agent_shape() -> None:
+    try:
+        patch_no_go_handoff_runtime("class LLMAgent: pass")
+    except ValueError as exc:
+        assert "LLMAgent response block" in str(exc)
+    else:
+        raise AssertionError("Unexpected pinned agent structure must be rejected.")

@@ -13,6 +13,7 @@ from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
 PROMPT_MARKER = "AWA_RETAIL_LOOKUP_GUIDANCE_V1"
+RUNTIME_PATCH_MARKER = "AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V1"
 AGENT_FILE = Path("src/tau2/agent/llm_agent.py")
 
 PROMPT_PATTERN = re.compile(
@@ -86,6 +87,65 @@ def patch_agent_source(source: str) -> str:
     return source[: matches[0].start()] + REPLACEMENT + source[matches[0].end() :]
 
 
+def patch_no_go_handoff_runtime(source: str) -> str:
+    """Enforce a tool-only transfer after a pre-write NO_GO at the agent boundary.
+
+    Prompt instructions alone have not prevented the model from mixing customer
+    prose with the transfer tool call. Preserve the preceding text-only no-change
+    response, but clear content on the later transfer turn so the half-duplex
+    protocol is enforced even when the model emits both fields.
+    """
+    if RUNTIME_PATCH_MARKER in source:
+        if source.count(RUNTIME_PATCH_MARKER) != 1:
+            raise ValueError("NO_GO handoff runtime marker must appear exactly once.")
+        return source
+
+    anchor = """        assistant_message = generate(
+            model=self.llm,
+            tools=self.tools,
+            messages=messages,
+            call_name="agent_response",
+            **self.llm_args,
+        )
+        return assistant_message"""
+    replacement = """        assistant_message = generate(
+            model=self.llm,
+            tools=self.tools,
+            messages=messages,
+            call_name="agent_response",
+            **self.llm_args,
+        )
+        # AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V1
+        denied_write_is_in_history = any(
+            str(getattr(history_message, "role", "")) == "tool"
+            and str(getattr(history_message, "content", "") or "").startswith(
+                "AWA_PREWRITE_NO_GO:"
+            )
+            for history_message in state.messages
+        )
+        transfer_calls = [
+            call
+            for call in (getattr(assistant_message, "tool_calls", None) or [])
+            if getattr(call, "name", None) == "transfer_to_human_agents"
+        ]
+        if (
+            denied_write_is_in_history
+            and transfer_calls
+            and str(getattr(assistant_message, "content", "") or "").strip()
+        ):
+            logger.warning(
+                "AWA cleared assistant prose attached to a post-NO_GO transfer call "
+                "to preserve the half-duplex message/tool boundary."
+            )
+            assistant_message.content = ""
+        return assistant_message"""
+    if source.count(anchor) != 1:
+        raise ValueError(
+            "Expected exactly one pinned Tau2 LLMAgent response block; "
+            f"found {source.count(anchor)}."
+        )
+    return source.replace(anchor, replacement, 1)
+
 def _write_github_outputs(output_path: str | None) -> None:
     """Expose prompt provenance to subsequent workflow steps without requiring CI."""
     if not output_path:
@@ -93,6 +153,7 @@ def _write_github_outputs(output_path: str | None) -> None:
     with Path(output_path).open("a", encoding="utf-8") as stream:
         stream.write("prompt_mode=patched\n")
         stream.write(f"prompt_marker={PROMPT_MARKER}\n")
+        stream.write(f"handoff_runtime_marker={RUNTIME_PATCH_MARKER}\n")
 
 
 def main() -> int:
@@ -118,11 +179,12 @@ def main() -> int:
     path = root / AGENT_FILE
     original = path.read_text(encoding="utf-8")
     patched = patch_agent_source(original)
+    patched = patch_no_go_handoff_runtime(patched)
     if patched != original:
         path.write_text(patched, encoding="utf-8")
-        print(f"Applied {PROMPT_MARKER} to {path}")
+        print(f"Applied {PROMPT_MARKER} and {RUNTIME_PATCH_MARKER} to {path}")
     else:
-        print(f"{PROMPT_MARKER} already present in {path}")
+        print(f"{PROMPT_MARKER} and {RUNTIME_PATCH_MARKER} already present in {path}")
     _write_github_outputs(os.environ.get("GITHUB_OUTPUT"))
     return 0
 

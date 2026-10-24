@@ -164,3 +164,27 @@ def test_controlled_no_go_rejects_prose_combined_with_transfer_tool_call() -> No
     assert report["status"] == "FAIL"
     assert report["checks"]["handoff_tool_call_is_tool_only"] is False
     assert report["checks"]["model_made_no_further_write_attempt_after_no_go"] is True
+
+
+
+def test_controlled_no_go_rejects_transfer_combined_with_another_tool() -> None:
+    results, release, metadata = _sample()
+    messages = results["simulations"][0]["messages"]
+    transfer_message = next(
+        message for message in messages
+        if any(
+            call.get("name") == "transfer_to_human_agents"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    transfer_message["tool_calls"].append({
+        "id": "extra-read",
+        "name": "get_order_details",
+        "arguments": {"order_id": "#W2378156"},
+    })
+
+    report = assess_controlled_no_go_trace(results, release, metadata)
+
+    assert report["status"] == "FAIL"
+    assert report["checks"]["handoff_tool_call_is_tool_only"] is False
+    assert report["checks"]["model_made_no_further_write_attempt_after_no_go"] is True
