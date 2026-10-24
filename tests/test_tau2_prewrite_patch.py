@@ -73,6 +73,8 @@ def test_agent_empty_response_patcher_retries_once_and_fails_closed() -> None:
     assert AGENT_EMPTY_RESPONSE_PATCH_MARKER in patched
     assert "for attempt in range(2)" in patched
     assert "has_tool_calls = bool(candidate_msg.tool_calls)" in patched
+    assert "if has_text and candidate_msg.tool_calls == []:" in patched
+    assert "candidate_msg.tool_calls = None" in patched
     assert "after one retry" in patched
     assert AGENT_GENERATE_ORIGINAL not in patched
     assert patch_agent_empty_response_source(patched) == patched
