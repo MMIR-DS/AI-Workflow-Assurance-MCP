@@ -116,6 +116,7 @@ def patch_no_go_handoff_runtime(source: str) -> str:
             **self.llm_args,
         )
         # AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V3
+        # AWA_EXCHANGE_CONFIRMATION_TURN_GUARD_V1
         # A text turn that asks the customer to confirm is not authorization to
         # execute a write in that same assistant turn. If the model combines the
         # canonical disclosure/question with an exchange tool call, show the
