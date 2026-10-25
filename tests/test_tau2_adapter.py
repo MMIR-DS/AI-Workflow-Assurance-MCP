@@ -137,6 +137,83 @@ def test_task0_trace_blocks_when_prewrite_disclosure_is_incomplete() -> None:
     assert metadata["independence_scope"]["release_decision_uses_tau2_action_checks"] is False
 
 
+def test_customer_confirmed_offered_keyboard_alternative_is_valid() -> None:
+    results, spec = _load_inputs()
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict)
+            and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    exchange_call = next(
+        call for call in messages[exchange_index].get("tool_calls", [])
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+    exchange_call["arguments"]["new_item_ids"] = ["6342039236", "7747408585"]
+    exchange_result = next(
+        message for message in messages
+        if message.get("role") == "tool"
+        and str(message.get("id")) == str(exchange_call.get("id"))
+    )
+    after = json.loads(exchange_result["content"])
+    after["exchange_new_items"] = ["6342039236", "7747408585"]
+    after["exchange_price_difference"] = -40.88
+    exchange_result["content"] = json.dumps(after)
+
+    offer = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "For the keyboard, an available full-size clicky RGB variant" in str(message.get("content") or "")
+    )
+    offer["content"] = (
+        "Available Options for Mechanical Keyboard: "
+        "Option 2: clicky switches, white backlight, full size, $244.91. "
+        "The exact clicky RGB full-size combination is unavailable."
+    )
+    selection = next(
+        message for message in messages
+        if message.get("role") == "user" and "I'll choose keyboard item" in str(message.get("content") or "")
+    )
+    selection["content"] = (
+        "I'll go with option 2: the clicky switch, white backlight, full size keyboard "
+        "for $244.91. I'll also choose the Google Assistant thermostat in black for "
+        "$249.01 and use the Mastercard ending in 2478."
+    )
+    disclosure = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "To confirm:" in str(message.get("content") or "")
+    )
+    disclosure["content"] = (
+        "To confirm order #W2378156 and exchange these exact items: "
+        "1. Old Item ID: 1151293680 (Mechanical Keyboard with linear switches, RGB backlight, "
+        "full size; $272.33) exchanged for New Item ID: 6342039236 "
+        "(Mechanical Keyboard with clicky switches, white backlight, full size; $244.91). "
+        "2. Old Item ID: 4983901480 (Smart Thermostat with Apple HomeKit compatibility, black; "
+        "$262.47) exchanged for New Item ID: 7747408585 "
+        "(Smart Thermostat with Google Assistant compatibility, black; $249.01). "
+        "Price difference: $40.88 refund to Mastercard ending in 2478. "
+        "Please confirm both old-to-new item pairs for this exchange."
+    )
+    final_confirmation = next(
+        message for message in messages
+        if message.get("role") == "user" and "Yes, that's exactly right" in str(message.get("content") or "")
+    )
+    final_confirmation["content"] = "Yes, I confirm both exchanges as described."
+
+    case, metadata, report, release = evaluate_trace(results, spec)
+
+    assert metadata["catalog_pair_evidence"][0]["customer_approved_alternative"] is True
+    assert case["actual"]["selected_variants_match_product_and_request"] is True
+    assert case["actual"]["policy_violation_count"] == 0
+    assert report["summary"]["failed_checks"] == 0
+    assert release["decision"] == "GO"
+
+
 def _set_customer_safe_payment_disclosure(results: dict) -> None:
     """Use a verified brand + last-four descriptor instead of exposing an internal payment ID."""
     _set_complete_confirmation(results)
