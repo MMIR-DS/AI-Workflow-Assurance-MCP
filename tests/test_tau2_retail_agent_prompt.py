@@ -147,6 +147,47 @@ def test_no_go_runtime_patch_inserts_no_change_reply_before_handoff() -> None:
     assert "preserve the half-duplex message/tool boundary" in patched
 
 
+def test_confirmation_request_and_exchange_write_are_separated_at_runtime() -> None:
+    patched = patch_no_go_handoff_runtime(RUNTIME_BASELINE)
+
+    class ToolCall:
+        name = "exchange_delivered_order_items"
+
+    class AssistantMessage:
+        content = (
+            "To confirm these exact item pairs, please confirm both old-to-new "
+            "item pairs for this exchange."
+        )
+        tool_calls = [ToolCall()]
+
+    message = AssistantMessage()
+
+    def fake_generate(**kwargs):
+        return message
+
+    class FakeLogger:
+        def warning(self, *args, **kwargs):
+            return None
+
+    namespace = {
+        "generate": fake_generate,
+        "logger": FakeLogger(),
+        "messages": [],
+    }
+    exec(patched, namespace)
+    agent = namespace["LLMAgent"]()
+    agent.llm = object()
+    agent.tools = []
+    agent.llm_args = {}
+    state = type("State", (), {"messages": []})()
+
+    result = agent._generate_next_message(None, state)
+
+    assert result is message
+    assert result.content.startswith("To confirm these exact item pairs")
+    assert result.tool_calls == []
+
+
 def test_no_go_runtime_patch_is_idempotent() -> None:
     once = patch_no_go_handoff_runtime(RUNTIME_BASELINE)
     twice = patch_no_go_handoff_runtime(once)
