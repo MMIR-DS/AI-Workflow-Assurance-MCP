@@ -382,7 +382,7 @@ def _customer_approved_keyboard_alternative(
     if switch != "clicky" or backlight != "white" or size != "full size" or price is None:
         return False
 
-    price_text = f"\${price:,.2f}"
+    price_text = f"${price:,.2f}"
     attrs = ("clicky", "white", "full size")
     history = messages[:before_write_index]
     offered_indices: list[int] = []
