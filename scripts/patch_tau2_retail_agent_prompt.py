@@ -13,7 +13,7 @@ from pathlib import Path
 
 EXPECTED_TAU2_COMMIT = "4ce7c0397c1eb65c9bbe59aeacfe1ca44a1cd699"
 PROMPT_MARKER = "AWA_RETAIL_LOOKUP_GUIDANCE_V1"
-RUNTIME_PATCH_MARKER = "AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V2"
+RUNTIME_PATCH_MARKER = "AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V3"
 AGENT_FILE = Path("src/tau2/agent/llm_agent.py")
 
 PROMPT_PATTERN = re.compile(
@@ -115,7 +115,37 @@ def patch_no_go_handoff_runtime(source: str) -> str:
             call_name="agent_response",
             **self.llm_args,
         )
-        # AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V2
+        # AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V3
+        # A text turn that asks the customer to confirm is not authorization to
+        # execute a write in that same assistant turn. If the model combines the
+        # canonical disclosure/question with an exchange tool call, show the
+        # disclosure only and wait for a separate customer response.
+        generated_content = str(getattr(assistant_message, "content", "") or "")
+        generated_tool_calls = list(getattr(assistant_message, "tool_calls", None) or [])
+        confirmation_text = generated_content.casefold()
+        asks_for_exchange_confirmation = any(
+            phrase in confirmation_text
+            for phrase in (
+                "please confirm",
+                "can you confirm",
+                "do you want to proceed",
+                "are you okay with",
+                "are you happy with",
+            )
+        )
+        contains_exchange_write = any(
+            getattr(call, "name", None) == "exchange_delivered_order_items"
+            for call in generated_tool_calls
+        )
+        if asks_for_exchange_confirmation and contains_exchange_write:
+            logger.warning(
+                "AWA removed an exchange write call from an assistant turn that "
+                "asks the customer for confirmation. The customer must reply in a "
+                "separate turn before a write can be evaluated."
+            )
+            assistant_message.tool_calls = []
+            return assistant_message
+
         denied_write_indices = [
             index
             for index, history_message in enumerate(state.messages)
