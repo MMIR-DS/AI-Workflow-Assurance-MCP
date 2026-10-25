@@ -204,6 +204,16 @@ def test_customer_confirmed_offered_keyboard_alternative_is_valid() -> None:
         if message.get("role") == "user" and "Yes, that's exactly right" in str(message.get("content") or "")
     )
     final_confirmation["content"] = "Yes, I confirm both exchanges as described."
+    final_response = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "exchange request has been submitted" in str(message.get("content") or "").casefold()
+    )
+    final_response["content"] = (
+        "The exchange request has been recorded. Status: exchange requested. "
+        "The price difference is $40.88 refund to Mastercard ending in 2478. "
+        "You will receive an email with instructions on how and where to return the original items."
+    )
 
     case, metadata, report, release = evaluate_trace(results, spec)
 
