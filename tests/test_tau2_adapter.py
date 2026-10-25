@@ -183,6 +183,8 @@ def test_customer_confirmed_offered_keyboard_alternative_is_valid() -> None:
         "for $244.91. I'll also choose the Google Assistant thermostat in black for "
         "$249.01 and use the Mastercard ending in 2478."
     )
+    _set_customer_safe_payment_disclosure(results)
+
     disclosure = next(
         message for message in messages
         if message.get("role") == "assistant"
