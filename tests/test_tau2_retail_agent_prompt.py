@@ -131,6 +131,12 @@ def test_no_go_runtime_patch_inserts_no_change_reply_before_handoff() -> None:
     patched = patch_no_go_handoff_runtime(RUNTIME_BASELINE)
 
     assert RUNTIME_PATCH_MARKER in patched
+    assert "AWA_PREWRITE_NO_GO_HANDOFF_RUNTIME_V3" in patched
+    assert "AWA_EXCHANGE_CONFIRMATION_TURN_GUARD_V1" in patched
+    assert "asks_for_exchange_confirmation" in patched
+    assert "contains_exchange_write" in patched
+    assert "customer must reply in a" in patched
+    assert "assistant_message.tool_calls = []" in patched
     assert '"AWA_PREWRITE_NO_GO:"' in patched
     assert '"no changes were made"' in patched
     assert "no_change_reply_present" in patched
