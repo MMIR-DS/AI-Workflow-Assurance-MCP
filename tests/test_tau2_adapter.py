@@ -219,7 +219,7 @@ def test_customer_confirmed_offered_keyboard_alternative_is_valid() -> None:
 
     assert metadata["catalog_pair_evidence"][0]["customer_approved_alternative"] is True
     assert case["actual"]["selected_variants_match_product_and_request"] is True
-    assert case["actual"]["policy_violation_count"] == 0
+    assert case["actual"]["policy_violation_count"] == 0, case["actual"]
     assert report["summary"]["failed_checks"] == 0
     assert release["decision"] == "GO"
 
