@@ -10,7 +10,11 @@ def test_cloudflare_tau2_smoke_is_manual_and_uses_openai_compatible_route() -> N
         ROOT / ".github" / "workflows" / "tau2-retail-smoke-cloudflare.yml"
     ).read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow
-    assert "MODEL: openai/@cf/zai-org/glm-4.7-flash" in workflow
+    assert 'default: "gpt-oss-120b"' in workflow
+    assert 'options: ["gpt-oss-120b", "glm-4.7-flash"]' in workflow
+    assert "openai/@cf/openai/gpt-oss-120b" in workflow
+    assert "openai/@cf/zai-org/glm-4.7-flash" in workflow
+    assert "inputs.model || 'gpt-oss-120b'" in workflow
     assert "OPENAI_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY || secrets.CLOUDFLARE_API }}" in workflow
     cloudflare_base = (
         "https://api.cloudflare.com/client/v4/accounts/"
