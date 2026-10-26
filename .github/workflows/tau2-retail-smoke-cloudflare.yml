@@ -10,11 +10,11 @@ on:
         type: choice
         options: ["20", "40", "60"]
       test_mode:
-        description: "Use controlled_no_go to intercept the first exchange write before the environment callback"
+        description: "Default to controlled_no_go; select standard only to test a normal model exchange attempt"
         required: true
-        default: "standard"
+        default: "controlled_no_go"
         type: choice
-        options: ["standard", "controlled_no_go"]
+        options: ["controlled_no_go", "standard"]
 
 permissions:
   contents: read
@@ -92,11 +92,23 @@ jobs:
       - name: Validate benchmark data
         working-directory: tau2-bench
         run: uv run tau2 check-data
+      - name: Confirm selected test mode before model execution
+        shell: bash
+        env:
+          AWA_SELECTED_TEST_MODE: ${{ inputs.test_mode || 'controlled_no_go' }}
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ (inputs.test_mode || 'controlled_no_go') == 'controlled_no_go' && '1' || '0' }}
+        run: |
+          echo "Selected test_mode: $AWA_SELECTED_TEST_MODE"
+          echo "Forced first-write denial enabled: $AWA_TEST_FORCE_NO_GO_FIRST_WRITE"
+          if [[ "$AWA_SELECTED_TEST_MODE" == "controlled_no_go" && "$AWA_TEST_FORCE_NO_GO_FIRST_WRITE" != "1" ]]; then
+            echo "::error::controlled_no_go was selected but forced first-write denial is not enabled."
+            exit 1
+          fi
       - name: Run one retail task and one trial (bounded; Cloudflare Workers AI)
         working-directory: tau2-bench
         shell: bash
         env:
-          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ inputs.test_mode == 'controlled_no_go' && '1' || '0' }}
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ (inputs.test_mode || 'controlled_no_go') == 'controlled_no_go' && '1' || '0' }}
         run: bash ../scripts/run_tau2_retail_smoke_cloudflare.sh
       - name: Generate AWA reports and verify controlled NO_GO mode
         if: ${{ success() || inputs.test_mode == 'controlled_no_go' }}
@@ -105,7 +117,7 @@ jobs:
           AWA_TAU2_PROMPT_MARKER: ${{ steps.patch_tau2_prompt.outputs.prompt_marker }}
           AWA_TAU2_USER_PROMPT_MODE: ${{ steps.patch_tau2_user_completion.outputs.prompt_mode }}
           AWA_TAU2_USER_PROMPT_MARKER: ${{ steps.patch_tau2_user_completion.outputs.prompt_marker }}
-          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ inputs.test_mode == 'controlled_no_go' && '1' || '0' }}
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ (inputs.test_mode || 'controlled_no_go') == 'controlled_no_go' && '1' || '0' }}
         shell: bash
         run: |
           set +e
