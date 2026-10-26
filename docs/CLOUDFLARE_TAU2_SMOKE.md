@@ -15,7 +15,9 @@ Official setup: https://developers.cloudflare.com/workers-ai/get-started/rest-ap
 
 ## Endpoint and model
 
-The workflow pins `openai/@cf/zai-org/glm-4.7-flash` in LiteLLM and points the OpenAI-compatible client at:
+The workflow points the OpenAI-compatible client at the endpoint below and is currently pinned to `openai/@cf/zai-org/glm-4.7-flash`. The model choice is deliberate: run 41 completed a real model-driven conversation with GLM, but the model grouped all old items separately from all replacement items. The AWA guard correctly rejected that disclosure before mutation. The prompt has since been reinforced to require the exact interleaved old-item-1 → replacement-1 → old-item-2 → replacement-2 format.
+
+GPT-OSS 120B is temporarily disabled in the manual workflow. In run 42, the model call reached Cloudflare but received HTTP 400 because the endpoint rejected the multi-turn message shape supplied by Tau2/LiteLLM (content-part arrays and an assistant tool-call turn without ordinary string content). Tau2 recorded one infrastructure error and zero evaluated tasks; this was not an AWA policy failure and no exchange was executed. Although Cloudflare documents GPT-OSS Chat Completions support, the exact agent/tool-call payload used by this workflow has not yet passed a live compatibility check. Do not re-enable it in this workflow until that test passes.
 
 `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1`
 
@@ -24,13 +26,14 @@ This calls Cloudflare's OpenAI-compatible Chat Completions endpoint and delibera
 References:
 - Cloudflare OpenAI-compatible endpoint: https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/
 - LiteLLM Cloudflare adapter issue: https://github.com/BerriAI/litellm/issues/25999
-- Model: https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/
+- Active model (`glm-4.7-flash`): https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/
+- GPT-OSS 120B reference (temporarily disabled for this workflow pending payload compatibility): https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/
 - Pricing: https://developers.cloudflare.com/workers-ai/platform/pricing/
 - Function calling: https://developers.cloudflare.com/workers-ai/features/function-calling/
 
 ## Cost and bounded execution
 
-The Workers Free plan has a daily 10,000-Neuron allocation, but usage is not unlimited: the allocation resets at 00:00 UTC, requests can fail at the cap, and usage beyond it requires a paid plan. Verify the current model-specific price and account eligibility before running; do not assume every model is free.
+The Workers Free plan has a daily 10,000-Neuron allocation, but usage is not unlimited: the allocation resets at 00:00 UTC, requests can fail at the cap, and usage beyond it requires a paid plan. Verify current model-specific pricing and account eligibility before running; do not assume every model is free. Cloudflare lists different unit rates for GPT-OSS 120B and GLM-4.7-Flash; those published rates are not a reliable estimate of the bill for a particular trace. Check Workers AI usage in the Cloudflare dashboard.
 
 Open **Actions → tau2 retail + AWA assurance prototype (Cloudflare Workers AI) → Run workflow**. Start with `max_steps=20`. The workflow is limited to task 0, one trial, one seed, concurrency 1, and no Tau2 retries. It applies the reviewed prompt patch and installs the AWA pre-write guard before any model call.
 

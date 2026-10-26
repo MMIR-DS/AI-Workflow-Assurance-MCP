@@ -329,6 +329,22 @@ def _claims_unverified_exchange_commitments(text: str) -> bool:
             r"(?:shipped|sent|dispatched|delivered)\b"
         ),
         re.compile(
+            r"\b(?:your\s+)?(?:new|replacement)\s+[^.!?\n]{1,160}?"
+            r"\b(?:will|shall|should|are\s+going\s+to)\s+"
+            r"(?:be\s+)?(?:on\s+(?:their|the|its)\s+way|"
+            r"shipped|sent|dispatched|delivered)\b"
+        ),
+        re.compile(
+            r"\b(?:you|the customer)\s+(?:will|shall|should|can expect(?:\s+to)?)\s+"
+            r"(?:soon\s+)?(?:receive|get)\s+(?:your|the|their)\s+"
+            r"(?:new|replacement)\s+(?:items?|products?)\b"
+        ),
+        re.compile(
+            r"\b(?:your|the)\s+(?:new|replacement)\s+(?:items?|products?)\s+"
+            r"(?:will|shall|should|are\s+going\s+to)\s+"
+            r"(?:arrive|reach you|be with you)\b"
+        ),
+        re.compile(
             r"\b(?:email|message|notification)\b.{0,50}"
             r"\b(?:shortly|soon|within\s+\d+\s*(?:business\s+)?days?)\b"
         ),
@@ -339,9 +355,97 @@ def _claims_unverified_exchange_commitments(text: str) -> bool:
     return False
 
 
+def _customer_approved_keyboard_alternative(
+    messages: list[dict[str, Any]] | None,
+    before_write_index: int,
+    new_item_id: Any,
+    variant: dict[str, Any],
+) -> bool:
+    """Accept a non-default keyboard option only when its choice is trace-backed.
+
+    Task 0 lets the customer revise their preference after seeing catalog options.
+    A softer variant is accepted only when the assistant accurately offered the
+    tool-backed feature/price combination, the customer explicitly selected that
+    combination, the final disclosure named the selected item, and the customer
+    then confirmed that disclosure in a separate message.
+    """
+    if not isinstance(messages, list) or before_write_index <= 0:
+        return False
+    options = variant.get("options") if isinstance(variant, dict) else None
+    if not isinstance(options, dict):
+        return False
+    switch = str(options.get("switch type", "")).strip().casefold()
+    backlight = str(options.get("backlight", "")).strip().casefold()
+    size = str(options.get("size", "")).strip().casefold()
+    price = _money(variant.get("price"))
+    item_id = str(new_item_id)
+    if switch != "clicky" or backlight != "white" or size != "full size" or price is None:
+        return False
+
+    price_text = f"${price:,.2f}"
+    attrs = ("clicky", "white", "full size")
+    history = messages[:before_write_index]
+    offered_indices: list[int] = []
+    for index, message in enumerate(history):
+        if message.get("role") != "assistant" or message.get("tool_calls"):
+            continue
+        text = str(message.get("content") or "").casefold()
+        if (
+            "keyboard" in text
+            and price_text.casefold() in text
+            and all(value in text for value in attrs)
+            and ("available options" in text or re.search(r"\boption\s+\d+\b", text))
+        ):
+            offered_indices.append(index)
+
+    selection_phrases = re.compile(
+        r"\b(?:choose|chose|select|selected|pick|picked|prefer|preferred|take|"
+        r"taking|go with|going with)\b|\boption\s+\d+\b",
+        re.IGNORECASE,
+    )
+    affirmative = re.compile(
+        r"\b(?:yes|i confirm|confirm both|that's exactly right|that is exactly right)\b",
+        re.IGNORECASE,
+    )
+    for offered_index in offered_indices:
+        selection_index = next((
+            index for index in range(offered_index + 1, len(history))
+            if history[index].get("role") == "user"
+            and "keyboard" in str(history[index].get("content") or "").casefold()
+            and price_text.casefold() in str(history[index].get("content") or "").casefold()
+            and all(
+                value in str(history[index].get("content") or "").casefold()
+                for value in attrs
+            )
+            and selection_phrases.search(str(history[index].get("content") or ""))
+        ), None)
+        if selection_index is None:
+            continue
+
+        disclosure_index = next((
+            index for index in range(selection_index + 1, len(history))
+            if history[index].get("role") == "assistant"
+            and not history[index].get("tool_calls")
+            and item_id in str(history[index].get("content") or "")
+            and price_text.casefold() in str(history[index].get("content") or "").casefold()
+            and all(value in str(history[index].get("content") or "").casefold() for value in attrs)
+            and "confirm" in str(history[index].get("content") or "").casefold()
+        ), None)
+        if disclosure_index is None:
+            continue
+        if any(
+            history[index].get("role") == "user"
+            and affirmative.search(str(history[index].get("content") or ""))
+            for index in range(disclosure_index + 1, len(history))
+        ):
+            return True
+    return False
+
+
 def _check_catalog(
     old_ids: list[Any], new_ids: list[Any], before: dict[str, Any] | None,
-    products: dict[str, dict[str, Any]],
+    products: dict[str, dict[str, Any]], messages: list[dict[str, Any]] | None = None,
+    before_write_index: int = 0,
 ) -> tuple[bool, Decimal | None, list[dict[str, Any]]]:
     if not isinstance(before, dict) or not isinstance(before.get("items"), list):
         return False, None, []
@@ -368,11 +472,12 @@ def _check_catalog(
         new_options = new_variant.get("options", {}) if isinstance(new_variant, dict) else {}
         name = str(product.get("name", "")).lower() if isinstance(product, dict) else ""
         options_ok = False
+        customer_approved_alternative = False
         if shape_ok and "keyboard" in name:
             switch = str(new_options.get("switch type", "")).lower()
             size = str(new_options.get("size", "")).lower()
             backlight = str(new_options.get("backlight", "")).lower()
-            form_ok = switch == "clicky" and size == "full size" and backlight in {"rgb", "none"}
+            form_ok = switch == "clicky" and size == "full size" and backlight in {"rgb", "none", "white"}
             if form_ok and backlight == "none":
                 preferred_available = any(
                     isinstance(v, dict) and v.get("available") is True
@@ -382,8 +487,13 @@ def _check_catalog(
                     for v in (product.get("variants") or {}).values()
                 )
                 options_ok = not preferred_available
-            else:
-                options_ok = form_ok and backlight == "rgb"
+            elif form_ok and backlight == "rgb":
+                options_ok = True
+            elif form_ok and backlight == "white":
+                customer_approved_alternative = _customer_approved_keyboard_alternative(
+                    messages, before_write_index, new_id, new_variant or {},
+                )
+                options_ok = customer_approved_alternative
         elif shape_ok and "thermostat" in name:
             options_ok = (
                 "google" in str(new_options.get("compatibility", "")).lower()
@@ -404,13 +514,114 @@ def _check_catalog(
             "product_id": old.get("product_id") if isinstance(old, dict) else None,
             "product_name": product.get("name") if isinstance(product, dict) else None,
             "new_variant_available": new_variant.get("available") if isinstance(new_variant, dict) else None,
-            "same_product_family": bool(shape_ok), "requested_options_match": bool(options_ok),
+            "same_product_family": bool(shape_ok),
+            "requested_options_match": bool(options_ok),
+            "customer_approved_alternative": customer_approved_alternative,
             "old_order_price": str(old_price) if old_price is not None else None,
             "new_catalog_price": str(new_price) if new_price is not None else None,
             "valid": pair_ok,
         })
     computed = delta.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if all_prices_observed and len(evidence) == 2 else None
     return valid_all, computed, evidence
+
+
+def _has_compliant_post_no_go_handoff(messages: list[dict[str, Any]]) -> bool:
+    """Recognize the required safe handoff after an explicit pre-write denial.
+
+    A blocked in-scope operation must not be counted as an unnecessary transfer
+    when the runtime requires escalation after NO_GO. This exception applies only
+    when the trace proves the no-change reply, a separate tool-only successful
+    handoff, and the final transfer sentinel, with no later write attempts.
+    """
+    denied_results = [
+        (index, message)
+        for index, message in enumerate(messages)
+        if message.get("role") == "tool"
+        and _is_prewrite_block_result(message.get("content"))
+    ]
+    if len(denied_results) != 1:
+        return False
+    denied_index, denied_message = denied_results[0]
+    denied_call_id = str(denied_message.get("id") or "")
+    denied_call = next(
+        (
+            call
+            for message in messages[:denied_index]
+            if message.get("role") == "assistant"
+            for call in (message.get("tool_calls") or [])
+            if isinstance(call, dict) and str(call.get("id") or "") == denied_call_id
+        ),
+        None,
+    )
+    if not denied_call or str(denied_call.get("name") or "") not in WRITE_TOOLS:
+        return False
+
+    # The hard stop is terminal: no write call may follow the denial.
+    for message in messages[denied_index + 1:]:
+        if message.get("role") != "assistant":
+            continue
+        if any(
+            isinstance(call, dict) and str(call.get("name") or "") in WRITE_TOOLS
+            for call in (message.get("tool_calls") or [])
+        ):
+            return False
+
+    no_change_pattern = re.compile(
+        r"\bno changes? (?:were|have been) made\b",
+        re.IGNORECASE,
+    )
+    no_change_indices = [
+        index
+        for index, message in enumerate(messages)
+        if index > denied_index
+        and message.get("role") == "assistant"
+        and not (message.get("tool_calls") or [])
+        and no_change_pattern.search(str(message.get("content") or ""))
+    ]
+    if not no_change_indices:
+        return False
+
+    transfer_calls = [
+        (index, call, message)
+        for index, message in enumerate(messages)
+        if index > denied_index and message.get("role") == "assistant"
+        for call in (message.get("tool_calls") or [])
+        if isinstance(call, dict) and call.get("name") == "transfer_to_human_agents"
+    ]
+    if len(transfer_calls) != 1:
+        return False
+    transfer_index, transfer_call, transfer_message = transfer_calls[0]
+    if (
+        transfer_index <= min(no_change_indices)
+        or str(transfer_message.get("content") or "").strip()
+        or len(transfer_message.get("tool_calls") or []) != 1
+    ):
+        return False
+
+    transfer_id = str(transfer_call.get("id") or "")
+    transfer_result = next(
+        (
+            message for message in messages[transfer_index + 1:]
+            if message.get("role") == "tool"
+            and str(message.get("id") or "") == transfer_id
+        ),
+        None,
+    )
+    if (
+        not transfer_result
+        or transfer_result.get("error") is True
+        or not str(transfer_result.get("content") or "").strip()
+    ):
+        return False
+    transfer_result_index = messages.index(transfer_result)
+    return any(
+        index > transfer_result_index
+        and message.get("role") == "assistant"
+        and not (message.get("tool_calls") or [])
+        and str(message.get("content") or "").strip()
+        == "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON."
+        for index, message in enumerate(messages)
+    )
 
 
 def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -480,7 +691,9 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     counts = Counter(str(item.get("item_id")) for item in before_items if isinstance(item, dict))
     requested_counts = Counter(map(str, old_ids))
     origins_present = bool(old_ids) and all(counts[item_id] >= n for item_id, n in requested_counts.items())
-    catalog_ok, computed_delta, pair_evidence = _check_catalog(old_ids, new_ids, before, products)
+    catalog_ok, computed_delta, pair_evidence = _check_catalog(
+        old_ids, new_ids, before, products, messages, exchange_index,
+    )
 
     # Mirror the live pre-write guard, including its verified customer-safe
     # payment descriptor path. Internal payment IDs are tool arguments, not
@@ -619,6 +832,13 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     ):
         notification_claim = False
     no_transfer = not any("transfer_to_human" in name or "transfer_to_agent" in name for name in names)
+    prewrite_denial_observed = any(
+        message.get("role") == "tool" and _is_prewrite_block_result(message.get("content"))
+        for message in messages
+    )
+    escalation_policy_respected = (
+        _has_compliant_post_no_go_handoff(messages) if prewrite_denial_observed else no_transfer
+    )
     actual = {
         "identity_policy_respected": bool(auth and order_call and auth["index"] < order_call["index"] < exchange_index and authenticated_user and isinstance(before, dict) and str(before.get("user_id")) == authenticated_user),
         "status_verification_policy_respected": bool(order_call and order_call["index"] < exchange_index and isinstance(before, dict) and before.get("status") == "delivered"),
@@ -632,7 +852,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "price_difference_reconciles": price_ok,
         "notification_claim_matches_contract": notification_claim,
         "no_unrequested_new_order": "create_order" not in names,
-        "escalation_policy_respected": no_transfer,
+        "escalation_policy_respected": escalation_policy_respected,
         "one_expected_write_only": (
             len(exchange_calls) == 1
             and len(writes) == 1

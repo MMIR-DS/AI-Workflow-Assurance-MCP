@@ -3,9 +3,12 @@ from __future__ import annotations
 import pytest
 
 from scripts.install_tau2_prewrite_guard import (
+    AGENT_EMPTY_RESPONSE_PATCH_MARKER,
+    AGENT_GENERATE_ORIGINAL,
     ORIGINAL,
     PATCH_MARKER,
     REPLACEMENT,
+    patch_agent_empty_response_source,
     patch_orchestrator_source,
 )
 
@@ -47,6 +50,39 @@ def test_patcher_replaces_exactly_one_expected_dispatch_loop() -> None:
     assert "cancel_pending_order" in patched
     assert patched != source
 
+
+
+def test_patcher_adds_opt_in_no_go_injection_before_any_real_write_callback() -> None:
+    patched = patch_orchestrator_source("class BaseOrchestrator:\n    def _execute_tool_calls(self):\n" + ORIGINAL)
+
+    assert "AWA_TEST_FORCE_NO_GO_FIRST_WRITE_V1" in patched
+    assert 'environ.get("AWA_TEST_FORCE_NO_GO_FIRST_WRITE") == "1"' in patched
+    assert "self._awa_test_forced_no_go_once = True" in patched
+    assert "controlled test denial" in patched
+    assert "no mutation was executed" in patched
+    assert patched.index("AWA_TEST_FORCE_NO_GO_FIRST_WRITE_V1") < patched.index(
+        'preflight = policy["validator"]('
+    )
+
+
+
+def test_agent_empty_response_patcher_retries_once_and_fails_closed() -> None:
+    source = "class Orchestrator:\n    def step(self):\n" + AGENT_GENERATE_ORIGINAL + "\n"
+    patched = patch_agent_empty_response_source(source)
+
+    assert AGENT_EMPTY_RESPONSE_PATCH_MARKER in patched
+    assert "for attempt in range(2)" in patched
+    assert "has_tool_calls = bool(candidate_msg.tool_calls)" in patched
+    assert "if has_text and candidate_msg.tool_calls == []:" in patched
+    assert "candidate_msg.tool_calls = None" in patched
+    assert "after one retry" in patched
+    assert AGENT_GENERATE_ORIGINAL not in patched
+    assert patch_agent_empty_response_source(patched) == patched
+
+
+def test_agent_empty_response_patcher_refuses_unrecognized_source() -> None:
+    with pytest.raises(ValueError, match="Expected exactly one unmodified Tau2 agent-generation block"):
+        patch_agent_empty_response_source("def step(self):\n    return None\n")
 
 def test_patcher_is_idempotent() -> None:
     source = "class BaseOrchestrator:\n" + ORIGINAL

@@ -275,6 +275,23 @@ def test_tau2_prewrite_rejects_card_alias_with_wrong_last_four() -> None:
     assert "complete_customer_facing_exchange_disclosure" in result["blocking_checks"]
 
 
+def test_tau2_prewrite_rejects_duplicate_item_ids_in_confirmation_message() -> None:
+    trajectory, call = _customer_safe_card_disclosure_trajectory()
+    trajectory[18]["content"] = (
+        "Available options: clicky keyboard item ID 7706410293; Google Assistant "
+        "thermostat item ID 7747408585. Price Summary: total price difference "
+        "$16.63 refund. "
+        + trajectory[18]["content"]
+    )
+
+    result = evaluate_tau2_prewrite(trajectory, call)
+
+    assert result["decision"] == "NO_GO"
+    assert result["allowed"] is False
+    assert result["checked"]["customer_disclosed_item_pairs_match_requested_exchange"] is False
+    assert "customer_disclosed_item_pairs_match_requested_exchange" in result["blocking_checks"]
+
+
 def test_tau2_adapter_ignores_following_bullet_note_when_checking_variant_claims() -> None:
     trajectory, call = _fully_disclosed_exchange_trajectory_and_call()
     # A common retail response lists the selected variant, then explains on the

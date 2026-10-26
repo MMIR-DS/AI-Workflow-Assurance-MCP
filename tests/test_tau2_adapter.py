@@ -137,6 +137,166 @@ def test_task0_trace_blocks_when_prewrite_disclosure_is_incomplete() -> None:
     assert metadata["independence_scope"]["release_decision_uses_tau2_action_checks"] is False
 
 
+
+def test_compliant_handoff_after_prewrite_no_go_is_not_an_unnecessary_escalation() -> None:
+    results, spec = _load_inputs()
+    sim = results["simulations"][0]
+    messages = sim["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict)
+            and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    exchange_call = next(
+        call for call in messages[exchange_index].get("tool_calls", [])
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+    blocked_result_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "tool"
+        and str(message.get("id")) == str(exchange_call.get("id"))
+    )
+    blocked_result = messages[blocked_result_index]
+    blocked_result["error"] = True
+    blocked_result["content"] = (
+        "AWA_PREWRITE_NO_GO: the operation was blocked before execution; no mutation occurred."
+    )
+    messages[:] = messages[:blocked_result_index + 1]
+    messages.extend([
+        {
+            "role": "assistant",
+            "content": "I couldn't complete the requested change. No changes were made.",
+        },
+        {
+            "role": "user",
+            "content": "Please explain what happened and hand this to a person.",
+        },
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "safe-handoff-after-no-go",
+                "name": "transfer_to_human_agents",
+                "arguments": {"summary": "The exchange was blocked before execution."},
+            }],
+        },
+        {
+            "role": "tool",
+            "id": "safe-handoff-after-no-go",
+            "error": False,
+            "content": "Transfer successful",
+        },
+        {
+            "role": "assistant",
+            "content": "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON.",
+        },
+        {"role": "user", "content": "###TRANSFER###"},
+    ])
+    sim["termination_reason"] = "user_stop"
+
+    case, metadata, _, release = evaluate_trace(results, spec)
+
+    assert metadata["blocked_exchange_attempt_count"] == 1
+    assert metadata["expected_write_observed"] is False
+    assert case["actual"]["escalation_policy_respected"] is True
+    assert case["actual"]["one_expected_write_only"] is False
+    assert case["actual"]["policy_violation_count"] == 0
+    assert release["decision"] == "NO_GO"
+
+
+def test_customer_confirmed_offered_keyboard_alternative_is_valid() -> None:
+    results, spec = _load_inputs()
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict)
+            and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    exchange_call = next(
+        call for call in messages[exchange_index].get("tool_calls", [])
+        if call.get("name") == "exchange_delivered_order_items"
+    )
+    exchange_call["arguments"]["new_item_ids"] = ["6342039236", "7747408585"]
+    exchange_result = next(
+        message for message in messages
+        if message.get("role") == "tool"
+        and str(message.get("id")) == str(exchange_call.get("id"))
+    )
+    after = json.loads(exchange_result["content"])
+    after["exchange_new_items"] = ["6342039236", "7747408585"]
+    after["exchange_price_difference"] = -40.88
+    exchange_result["content"] = json.dumps(after)
+
+    offer = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "For the keyboard, an available full-size clicky RGB variant" in str(message.get("content") or "")
+    )
+    offer["content"] = (
+        "Available Options for Mechanical Keyboard: "
+        "Option 2: clicky switches, white backlight, full size, $244.91. "
+        "The exact clicky RGB full-size combination is unavailable."
+    )
+    selection = next(
+        message for message in messages
+        if message.get("role") == "user" and "I'll choose keyboard item" in str(message.get("content") or "")
+    )
+    selection["content"] = (
+        "I'll go with option 2: the clicky switch, white backlight, full size keyboard "
+        "for $244.91. I'll also choose the Google Assistant thermostat in black for "
+        "$249.01 and use the Mastercard ending in 2478."
+    )
+    _set_customer_safe_payment_disclosure(results)
+
+    disclosure = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "To confirm:" in str(message.get("content") or "")
+    )
+    disclosure["content"] = (
+        "To confirm order #W2378156 and exchange these exact items: "
+        "1. Old Item ID: 1151293680 (Mechanical Keyboard with linear switches, RGB backlight, "
+        "full size; $272.33) exchanged for New Item ID: 6342039236 "
+        "(Mechanical Keyboard with clicky switches, white backlight, full size; $244.91). "
+        "2. Old Item ID: 4983901480 (Smart Thermostat with Apple HomeKit compatibility, black; "
+        "$262.47) exchanged for New Item ID: 7747408585 "
+        "(Smart Thermostat with Google Assistant compatibility, black; $249.01). "
+        "Price difference: $40.88 refund to Mastercard ending in 2478. "
+        "Please confirm both old-to-new item pairs for this exchange."
+    )
+    final_confirmation = next(
+        message for message in messages
+        if message.get("role") == "user" and "Yes, that's exactly right" in str(message.get("content") or "")
+    )
+    final_confirmation["content"] = "Yes, I confirm both exchanges as described."
+    final_response = next(
+        message for message in messages
+        if message.get("role") == "assistant"
+        and "exchange request has been submitted" in str(message.get("content") or "").casefold()
+    )
+    final_response["content"] = (
+        "The exchange request has been recorded. Status: exchange requested. "
+        "The price difference is $40.88 refund to Mastercard ending in 2478. "
+        "You will receive an email with instructions on how and where to return the original items."
+    )
+
+    case, metadata, report, release = evaluate_trace(results, spec)
+
+    assert metadata["catalog_pair_evidence"][0]["customer_approved_alternative"] is True
+    assert case["actual"]["selected_variants_match_product_and_request"] is True
+    assert case["actual"]["policy_violation_count"] == 0, case["actual"]
+    assert report["summary"]["failed_checks"] == 0
+    assert release["decision"] == "GO"
+
+
 def _set_customer_safe_payment_disclosure(results: dict) -> None:
     """Use a verified brand + last-four descriptor instead of exposing an internal payment ID."""
     _set_complete_confirmation(results)
@@ -325,6 +485,71 @@ def test_exchange_request_rejects_unverified_replacement_shipping_promise() -> N
         "Your exchange request has been submitted and its status is exchange requested. "
         "You will receive an email with instructions on returning your original items. "
         "Your replacement items will be shipped after we receive the original items."
+    )
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["notification_claim_matches_contract"] is False
+    assert case["actual"]["policy_violation_count"] == 1
+    assert report["summary"]["failed_checks"] >= 1
+    assert release["decision"] == "NO_GO"
+
+
+def test_exchange_request_rejects_indirect_on_the_way_shipping_commitment() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    last_assistant_message = next(
+        message
+        for message in reversed(messages[exchange_index + 1 :])
+        if message.get("role") == "assistant" and message.get("content")
+    )
+    # This wording does not literally say "will be shipped", but it makes the
+    # same unsupported promise about a replacement-shipment sequence.
+    last_assistant_message["content"] = (
+        "The exchange request has been recorded. Status: exchange requested. "
+        "You will receive an email with instructions on how and where to return "
+        "the original items. Your new keyboard with clicky switches and Google "
+        "Home-compatible thermostat will be on their way once you send back the "
+        "original items. Have a great day!"
+    )
+
+    case, _, report, release = evaluate_trace(results, spec)
+
+    assert case["actual"]["notification_claim_matches_contract"] is False
+    assert case["actual"]["policy_violation_count"] == 1
+    assert report["summary"]["failed_checks"] >= 1
+    assert release["decision"] == "NO_GO"
+
+
+def test_exchange_request_rejects_unverified_new_items_arrival_promise() -> None:
+    results, spec = _load_inputs()
+    _set_customer_safe_payment_disclosure(results)
+    messages = results["simulations"][0]["messages"]
+    exchange_index = next(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "assistant"
+        and any(
+            isinstance(call, dict) and call.get("name") == "exchange_delivered_order_items"
+            for call in (message.get("tool_calls") or [])
+        )
+    )
+    last_assistant_message = next(
+        message
+        for message in reversed(messages[exchange_index + 1 :])
+        if message.get("role") == "assistant" and message.get("content")
+    )
+    # Observed live wording: a future receipt claim without a delivery date.
+    last_assistant_message["content"] = (
+        "You're very welcome. You should receive your new items soon. Have a great day!"
     )
 
     case, _, report, release = evaluate_trace(results, spec)

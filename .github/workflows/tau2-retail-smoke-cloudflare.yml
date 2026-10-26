@@ -9,6 +9,12 @@ on:
         default: "20"
         type: choice
         options: ["20", "40", "60"]
+      test_mode:
+        description: "Default to controlled_no_go; select standard only to test a normal model exchange attempt"
+        required: true
+        default: "controlled_no_go"
+        type: choice
+        options: ["controlled_no_go", "standard"]
 
 permissions:
   contents: read
@@ -24,6 +30,8 @@ jobs:
     env:
       # Route via Cloudflare's OpenAI-compatible endpoint. LiteLLM's native
       # Cloudflare adapter currently assumes a legacy result.response payload.
+      # GPT-OSS currently rejects Tau2's multi-turn content-part/tool-call payload
+      # on this endpoint (HTTP 400); use the proven GLM route until compatibility is verified.
       MODEL: openai/@cf/zai-org/glm-4.7-flash
       MAX_STEPS: ${{ inputs.max_steps || '20' }}
       CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY || secrets.CLOUDFLARE_API }}
@@ -86,22 +94,56 @@ jobs:
       - name: Validate benchmark data
         working-directory: tau2-bench
         run: uv run tau2 check-data
+      - name: Confirm selected test mode before model execution
+        shell: bash
+        env:
+          AWA_SELECTED_TEST_MODE: ${{ inputs.test_mode || 'controlled_no_go' }}
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ (inputs.test_mode || 'controlled_no_go') == 'controlled_no_go' && '1' || '0' }}
+        run: |
+          echo "Selected model: $MODEL"
+          echo "Selected test_mode: $AWA_SELECTED_TEST_MODE"
+          echo "Forced first-write denial enabled: $AWA_TEST_FORCE_NO_GO_FIRST_WRITE"
+          if [[ "$AWA_SELECTED_TEST_MODE" == "controlled_no_go" && "$AWA_TEST_FORCE_NO_GO_FIRST_WRITE" != "1" ]]; then
+            echo "::error::controlled_no_go was selected but forced first-write denial is not enabled."
+            exit 1
+          fi
       - name: Run one retail task and one trial (bounded; Cloudflare Workers AI)
         working-directory: tau2-bench
         shell: bash
+        env:
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ (inputs.test_mode || 'controlled_no_go') == 'controlled_no_go' && '1' || '0' }}
         run: bash ../scripts/run_tau2_retail_smoke_cloudflare.sh
-      - name: Generate AWA case, evaluation, and release reports
-        if: success()
+      - name: Generate AWA reports and verify controlled NO_GO mode
+        if: ${{ success() || inputs.test_mode == 'controlled_no_go' }}
         env:
           AWA_TAU2_PROMPT_MODE: ${{ steps.patch_tau2_prompt.outputs.prompt_mode }}
           AWA_TAU2_PROMPT_MARKER: ${{ steps.patch_tau2_prompt.outputs.prompt_marker }}
           AWA_TAU2_USER_PROMPT_MODE: ${{ steps.patch_tau2_user_completion.outputs.prompt_mode }}
           AWA_TAU2_USER_PROMPT_MARKER: ${{ steps.patch_tau2_user_completion.outputs.prompt_marker }}
+          AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ (inputs.test_mode || 'controlled_no_go') == 'controlled_no_go' && '1' || '0' }}
+        shell: bash
         run: |
+          set +e
           PYTHONPATH=src python scripts/adapt_tau2_results.py \
             --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
             --spec examples/tau2_retail_workflow.json \
             --output-dir awa-adapter-output
+          adapter_status=$?
+          set -e
+
+          if [[ "$AWA_TEST_FORCE_NO_GO_FIRST_WRITE" == "1" ]]; then
+            if [[ "$adapter_status" -ne 2 ]]; then
+              echo "::error::Controlled NO_GO mode expected the AWA adapter to return exit code 2; got $adapter_status."
+              exit 1
+            fi
+            PYTHONPATH=.:src python scripts/assert_tau2_controlled_no_go.py \
+              --results tau2-bench/data/simulations/tau2-standalone-retail-task0/results.json \
+              --release-report awa-adapter-output/awa_release_report.json \
+              --metadata awa-adapter-output/adapter_metadata.json \
+              --output awa-adapter-output/controlled_no_go_report.json
+          else
+            exit "$adapter_status"
+          fi
       - name: Preserve trace, result, and logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
