@@ -525,6 +525,105 @@ def _check_catalog(
     return valid_all, computed, evidence
 
 
+def _has_compliant_post_no_go_handoff(messages: list[dict[str, Any]]) -> bool:
+    """Recognize the required safe handoff after an explicit pre-write denial.
+
+    A blocked in-scope operation must not be counted as an unnecessary transfer
+    when the runtime requires escalation after NO_GO. This exception applies only
+    when the trace proves the no-change reply, a separate tool-only successful
+    handoff, and the final transfer sentinel, with no later write attempts.
+    """
+    denied_results = [
+        (index, message)
+        for index, message in enumerate(messages)
+        if message.get("role") == "tool"
+        and _is_prewrite_block_result(message.get("content"))
+    ]
+    if len(denied_results) != 1:
+        return False
+    denied_index, denied_message = denied_results[0]
+    denied_call_id = str(denied_message.get("id") or "")
+    denied_call = next(
+        (
+            call
+            for message in messages[:denied_index]
+            if message.get("role") == "assistant"
+            for call in (message.get("tool_calls") or [])
+            if isinstance(call, dict) and str(call.get("id") or "") == denied_call_id
+        ),
+        None,
+    )
+    if not denied_call or str(denied_call.get("name") or "") not in WRITE_TOOLS:
+        return False
+
+    # The hard stop is terminal: no write call may follow the denial.
+    for message in messages[denied_index + 1:]:
+        if message.get("role") != "assistant":
+            continue
+        if any(
+            isinstance(call, dict) and str(call.get("name") or "") in WRITE_TOOLS
+            for call in (message.get("tool_calls") or [])
+        ):
+            return False
+
+    no_change_pattern = re.compile(
+        r"\bno changes? (?:were|have been) made\b",
+        re.IGNORECASE,
+    )
+    no_change_indices = [
+        index
+        for index, message in enumerate(messages)
+        if index > denied_index
+        and message.get("role") == "assistant"
+        and not (message.get("tool_calls") or [])
+        and no_change_pattern.search(str(message.get("content") or ""))
+    ]
+    if not no_change_indices:
+        return False
+
+    transfer_calls = [
+        (index, call, message)
+        for index, message in enumerate(messages)
+        if index > denied_index and message.get("role") == "assistant"
+        for call in (message.get("tool_calls") or [])
+        if isinstance(call, dict) and call.get("name") == "transfer_to_human_agents"
+    ]
+    if len(transfer_calls) != 1:
+        return False
+    transfer_index, transfer_call, transfer_message = transfer_calls[0]
+    if (
+        transfer_index <= min(no_change_indices)
+        or str(transfer_message.get("content") or "").strip()
+        or len(transfer_message.get("tool_calls") or []) != 1
+    ):
+        return False
+
+    transfer_id = str(transfer_call.get("id") or "")
+    transfer_result = next(
+        (
+            message for message in messages[transfer_index + 1:]
+            if message.get("role") == "tool"
+            and str(message.get("id") or "") == transfer_id
+        ),
+        None,
+    )
+    if (
+        not transfer_result
+        or transfer_result.get("error") is True
+        or not str(transfer_result.get("content") or "").strip()
+    ):
+        return False
+    transfer_result_index = messages.index(transfer_result)
+    return any(
+        index > transfer_result_index
+        and message.get("role") == "assistant"
+        and not (message.get("tool_calls") or [])
+        and str(message.get("content") or "").strip()
+        == "YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON."
+        for index, message in enumerate(messages)
+    )
+
+
 def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     messages = [m for m in sim.get("messages", []) if isinstance(m, dict)]
     tool_results = {
@@ -733,6 +832,13 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
     ):
         notification_claim = False
     no_transfer = not any("transfer_to_human" in name or "transfer_to_agent" in name for name in names)
+    prewrite_denial_observed = any(
+        message.get("role") == "tool" and _is_prewrite_block_result(message.get("content"))
+        for message in messages
+    )
+    escalation_policy_respected = (
+        _has_compliant_post_no_go_handoff(messages) if prewrite_denial_observed else no_transfer
+    )
     actual = {
         "identity_policy_respected": bool(auth and order_call and auth["index"] < order_call["index"] < exchange_index and authenticated_user and isinstance(before, dict) and str(before.get("user_id")) == authenticated_user),
         "status_verification_policy_respected": bool(order_call and order_call["index"] < exchange_index and isinstance(before, dict) and before.get("status") == "delivered"),
@@ -746,7 +852,7 @@ def normalize_simulation(results: dict[str, Any], sim: dict[str, Any]) -> tuple[
         "price_difference_reconciles": price_ok,
         "notification_claim_matches_contract": notification_claim,
         "no_unrequested_new_order": "create_order" not in names,
-        "escalation_policy_respected": no_transfer,
+        "escalation_policy_respected": escalation_policy_respected,
         "one_expected_write_only": (
             len(exchange_calls) == 1
             and len(writes) == 1
