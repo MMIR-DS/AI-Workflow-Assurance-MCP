@@ -15,7 +15,7 @@ Official setup: https://developers.cloudflare.com/workers-ai/get-started/rest-ap
 
 ## Endpoint and model
 
-The workflow pins `openai/@cf/zai-org/glm-4.7-flash` in LiteLLM and points the OpenAI-compatible client at:
+The workflow points the OpenAI-compatible client at the following endpoint and defaults to `openai/@cf/openai/gpt-oss-120b`, a higher-reasoning model with function-calling support. The manual `model` input also permits `glm-4.7-flash` for comparison. Run 41 showed that GLM-4.7-Flash returned a readable but non-canonical exchange disclosure (all old items grouped first, then all new items), which the guard correctly rejected before mutation. The workflow now defaults to the stronger reasoning model and the prompt explicitly forbids that sectioned-list format.
 
 `https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1`
 
@@ -24,13 +24,14 @@ This calls Cloudflare's OpenAI-compatible Chat Completions endpoint and delibera
 References:
 - Cloudflare OpenAI-compatible endpoint: https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/
 - LiteLLM Cloudflare adapter issue: https://github.com/BerriAI/litellm/issues/25999
-- Model: https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/
+- Default model (`gpt-oss-120b`): https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/
+- Alternative model (`glm-4.7-flash`): https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/
 - Pricing: https://developers.cloudflare.com/workers-ai/platform/pricing/
 - Function calling: https://developers.cloudflare.com/workers-ai/features/function-calling/
 
 ## Cost and bounded execution
 
-The Workers Free plan has a daily 10,000-Neuron allocation, but usage is not unlimited: the allocation resets at 00:00 UTC, requests can fail at the cap, and usage beyond it requires a paid plan. Verify the current model-specific price and account eligibility before running; do not assume every model is free.
+The Workers Free plan has a daily 10,000-Neuron allocation, but usage is not unlimited: the allocation resets at 00:00 UTC, requests can fail at the cap, and usage beyond it requires a paid plan. Verify the current model-specific price and account eligibility before running; do not assume every model is free. Cloudflare currently lists `gpt-oss-120b` at $0.35 per million input tokens and $0.75 per million output tokens, versus $0.0605 / $0.40 for `glm-4.7-flash`. These are model unit rates, not a reliable estimate of your bill for this trace; check Workers AI usage in the Cloudflare dashboard.
 
 Open **Actions → tau2 retail + AWA assurance prototype (Cloudflare Workers AI) → Run workflow**. Start with `max_steps=20`. The workflow is limited to task 0, one trial, one seed, concurrency 1, and no Tau2 retries. It applies the reviewed prompt patch and installs the AWA pre-write guard before any model call.
 
