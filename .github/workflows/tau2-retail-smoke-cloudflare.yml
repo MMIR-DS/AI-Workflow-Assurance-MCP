@@ -3,6 +3,12 @@ name: tau2 retail + AWA assurance prototype (Cloudflare Workers AI)
 on:
   workflow_dispatch:
     inputs:
+      model:
+        description: "Model for the bounded smoke; gpt-oss-120b is the default for strict exchange disclosure"
+        required: true
+        default: "gpt-oss-120b"
+        type: choice
+        options: ["gpt-oss-120b", "glm-4.7-flash"]
       max_steps:
         description: "Maximum agent turns; keeps the trial bounded"
         required: true
@@ -30,7 +36,8 @@ jobs:
     env:
       # Route via Cloudflare's OpenAI-compatible endpoint. LiteLLM's native
       # Cloudflare adapter currently assumes a legacy result.response payload.
-      MODEL: openai/@cf/zai-org/glm-4.7-flash
+      # gpt-oss-120b is the default after GLM used a non-canonical disclosure format.
+      MODEL: ${{ (inputs.model || 'gpt-oss-120b') == 'glm-4.7-flash' && 'openai/@cf/zai-org/glm-4.7-flash' || 'openai/@cf/openai/gpt-oss-120b' }}
       MAX_STEPS: ${{ inputs.max_steps || '20' }}
       CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY || secrets.CLOUDFLARE_API }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -98,6 +105,7 @@ jobs:
           AWA_SELECTED_TEST_MODE: ${{ inputs.test_mode || 'controlled_no_go' }}
           AWA_TEST_FORCE_NO_GO_FIRST_WRITE: ${{ (inputs.test_mode || 'controlled_no_go') == 'controlled_no_go' && '1' || '0' }}
         run: |
+          echo "Selected model: $MODEL"
           echo "Selected test_mode: $AWA_SELECTED_TEST_MODE"
           echo "Forced first-write denial enabled: $AWA_TEST_FORCE_NO_GO_FIRST_WRITE"
           if [[ "$AWA_SELECTED_TEST_MODE" == "controlled_no_go" && "$AWA_TEST_FORCE_NO_GO_FIRST_WRITE" != "1" ]]; then
